@@ -432,3 +432,107 @@ public struct MetadataRow: View {
         }
     }
 }
+
+// MARK: - Flow layout
+
+/// Minimal flow layout — SwiftUI has no built-in wrapping HStack.
+public struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    public init(spacing: CGFloat = 8) {
+        self.spacing = spacing
+    }
+
+    public func sizeThatFits(
+        proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var rowWidth: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var totalHeight: CGFloat = 0
+        var totalWidth: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if rowWidth > 0, rowWidth + spacing + size.width > maxWidth {
+                totalHeight += rowHeight + spacing
+                totalWidth = max(totalWidth, rowWidth)
+                rowWidth = size.width
+                rowHeight = size.height
+            } else {
+                rowWidth += rowWidth > 0 ? spacing + size.width : size.width
+                rowHeight = max(rowHeight, size.height)
+            }
+        }
+        totalHeight += rowHeight
+        totalWidth = max(totalWidth, rowWidth)
+        return CGSize(width: min(totalWidth, maxWidth), height: totalHeight)
+    }
+
+    public func placeSubviews(
+        in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.maxX {
+                x = bounds.minX
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            subview.place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: .unspecified)
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+    }
+}
+
+// MARK: - Metadata strip
+
+/// A few short facts on one line — `Added 2026-08-06   Email marie@example.com`.
+///
+/// Sized to its content and wrapping when it runs out of room, unlike ``Card``, which
+/// stretches to the full pane and turns two short values into a conspicuous box. Use this
+/// in the detail pane, where the metadata should sit quietly under the title; ``Card`` is
+/// for surfaces that genuinely need to read as a panel.
+public struct MetadataStrip: View {
+    /// One label/value pair. `isMonospaced` is for ids and emails.
+    public struct Item: Identifiable {
+        let label: String
+        let value: String
+        let isMonospaced: Bool
+
+        public var id: String { label }
+
+        public init(_ label: String, value: String, isMonospaced: Bool = false) {
+            self.label = label
+            self.value = value
+            self.isMonospaced = isMonospaced
+        }
+    }
+
+    private let items: [Item]
+
+    public init(_ items: [Item]) {
+        self.items = items
+    }
+
+    public var body: some View {
+        FlowLayout(spacing: Theme.Spacing.large) {
+            ForEach(items) { item in
+                HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.xs) {
+                    Text(item.label)
+                        .font(Theme.Font.caption)
+                        .foregroundStyle(Theme.textFaint)
+                    Text(item.value)
+                        .font(item.isMonospaced ? Theme.Font.mono : Theme.Font.body)
+                        .foregroundStyle(Theme.textMuted)
+                        .textSelection(.enabled)
+                }
+            }
+        }
+    }
+}

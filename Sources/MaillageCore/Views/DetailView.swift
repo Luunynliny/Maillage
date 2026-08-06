@@ -119,15 +119,8 @@ private struct PersonDetailBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.large) {
-            if person.email != nil || person.created != nil {
-                Card {
-                    if let email = person.email {
-                        MetadataRow("Email", value: email, isMonospaced: true)
-                    }
-                    if let created = person.created {
-                        MetadataRow("Added", value: created.description)
-                    }
-                }
+            if !metadata.isEmpty {
+                MetadataStrip(metadata)
             }
 
             membershipSection
@@ -191,6 +184,17 @@ private struct PersonDetailBody: View {
 
             BacklinksSection(entityID: person.id, selection: $selection)
         }
+    }
+
+    private var metadata: [MetadataStrip.Item] {
+        var items: [MetadataStrip.Item] = []
+        if let email = person.email {
+            items.append(.init("Email", value: email, isMonospaced: true))
+        }
+        if let created = person.created {
+            items.append(.init("Added", value: created.description))
+        }
+        return items
     }
 
     private func targetColor(_ id: EntityID) -> Color {
@@ -281,15 +285,8 @@ private struct OrganizationDetailBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.large) {
-            if organization.domain != nil || organization.created != nil {
-                Card {
-                    if let domain = organization.domain {
-                        MetadataRow("Domain", value: domain, isMonospaced: true)
-                    }
-                    if let created = organization.created {
-                        MetadataRow("Added", value: created.description)
-                    }
-                }
+            if !metadata.isEmpty {
+                MetadataStrip(metadata)
             }
 
             let members = store.members(ofOrganization: organization.id)
@@ -317,6 +314,17 @@ private struct OrganizationDetailBody: View {
             }
         }
     }
+
+    private var metadata: [MetadataStrip.Item] {
+        var items: [MetadataStrip.Item] = []
+        if let domain = organization.domain {
+            items.append(.init("Domain", value: domain, isMonospaced: true))
+        }
+        if let created = organization.created {
+            items.append(.init("Added", value: created.description))
+        }
+        return items
+    }
 }
 
 // MARK: - Project
@@ -328,12 +336,7 @@ private struct ProjectDetailBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.large) {
-            Card {
-                MetadataRow("Status", value: project.status.displayName)
-                if let created = project.created {
-                    MetadataRow("Added", value: created.description)
-                }
-            }
+            MetadataStrip(metadata)
 
             if !project.organizations.isEmpty {
                 VStack(alignment: .leading, spacing: Theme.Spacing.small) {
@@ -359,6 +362,17 @@ private struct ProjectDetailBody: View {
                 }
             }
         }
+    }
+
+    /// Status is always present, so this strip never collapses to nothing.
+    private var metadata: [MetadataStrip.Item] {
+        var items: [MetadataStrip.Item] = [
+            .init("Status", value: project.status.displayName)
+        ]
+        if let created = project.created {
+            items.append(.init("Added", value: created.description))
+        }
+        return items
     }
 }
 
@@ -391,55 +405,6 @@ private struct PillCloud: View {
                     selection = item.id
                 }
             }
-        }
-    }
-}
-
-/// Minimal flow layout — SwiftUI has no built-in wrapping HStack.
-struct FlowLayout: Layout {
-    var spacing: CGFloat = 8
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        var rowWidth: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        var totalHeight: CGFloat = 0
-        var totalWidth: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if rowWidth > 0, rowWidth + spacing + size.width > maxWidth {
-                totalHeight += rowHeight + spacing
-                totalWidth = max(totalWidth, rowWidth)
-                rowWidth = size.width
-                rowHeight = size.height
-            } else {
-                rowWidth += rowWidth > 0 ? spacing + size.width : size.width
-                rowHeight = max(rowHeight, size.height)
-            }
-        }
-        totalHeight += rowHeight
-        totalWidth = max(totalWidth, rowWidth)
-        return CGSize(width: min(totalWidth, maxWidth), height: totalHeight)
-    }
-
-    func placeSubviews(
-        in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
-    ) {
-        var x = bounds.minX
-        var y = bounds.minY
-        var rowHeight: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > bounds.minX, x + size.width > bounds.maxX {
-                x = bounds.minX
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            subview.place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: .unspecified)
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
         }
     }
 }
