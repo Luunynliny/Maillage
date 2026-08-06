@@ -39,6 +39,19 @@ extension Entity {
     public var wikilink: Wikilink { Wikilink(id) }
 }
 
+extension EntityKind {
+    /// What the markdown body is called for this kind.
+    ///
+    /// Same storage everywhere, different meaning: prose about a person or organization
+    /// is a note you keep, while a project's prose describes the work itself.
+    public var bodyTitle: String {
+        switch self {
+        case .person, .organization: "Notes"
+        case .project: "Description"
+        }
+    }
+}
+
 /// Type-erased entity, used by the sidebar, command palette and graph so they can
 /// treat all three kinds uniformly.
 public enum AnyEntity: Identifiable, Hashable, Sendable {
@@ -77,6 +90,8 @@ public enum AnyEntity: Identifiable, Hashable, Sendable {
         case .project(let p): p.body
         }
     }
+
+    public var bodyTitle: String { kind.bodyTitle }
 
     public var asPerson: Person? {
         if case .person(let p) = self { return p }

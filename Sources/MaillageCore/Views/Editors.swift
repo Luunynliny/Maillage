@@ -325,7 +325,7 @@ struct ProjectEditor: View {
                     color: Theme.organizationColor,
                     prompt: "Search organizations")
 
-                NotesField(text: $notes)
+                NotesField(text: $notes, title: "Description")
             }
         }
         .onAppear {
@@ -615,12 +615,16 @@ struct MultiSelectField: View {
     }
 }
 
+/// The markdown body below the frontmatter. Titled per entity kind: what you write
+/// about a person is a private note, while a project's prose describes the work itself,
+/// so the same field is labelled "Description" there.
 struct NotesField: View {
     @Binding var text: String
+    var title: String = "Notes"
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text("Notes")
+            Text(title)
                 .font(Theme.Font.caption)
                 .foregroundStyle(Theme.textMuted)
             TextEditor(text: $text)

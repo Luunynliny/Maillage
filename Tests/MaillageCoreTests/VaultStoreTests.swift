@@ -131,6 +131,13 @@ struct VaultStoreTests {
         #expect(store.usedRelationLabels == ["manager of"])
     }
 
+    @Test("A project's body is titled Description, everyone else's is Notes")
+    func bodyTitlePerKind() throws {
+        #expect(EntityKind.project.bodyTitle == "Description")
+        #expect(EntityKind.person.bodyTitle == "Notes")
+        #expect(EntityKind.organization.bodyTitle == "Notes")
+    }
+
     @Test("Reloading from disk reproduces the same state")
     func reloadsFromDisk() throws {
         let (store, root) = try makeStore()

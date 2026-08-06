@@ -42,7 +42,7 @@ public struct DetailView: View {
 
                 if !entity.body.isEmpty {
                     VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-                        SectionHeader("Notes")
+                        SectionHeader(entity.bodyTitle)
                         Text(entity.body)
                             .font(Theme.Font.body)
                             .foregroundStyle(Theme.textNormal)
