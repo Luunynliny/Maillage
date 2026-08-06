@@ -11,6 +11,9 @@ public struct Person: Entity, Codable {
     public var firstname: String?
     public var lastname: String?
     public var email: String?
+    /// What this person does, in their own words — `Head of Engineering`, `Freelance
+    /// designer`. Free text: it is a note to yourself, not a field to report on.
+    public var role: String?
 
     /// True while this person has no confirmed name.
     public var placeholder: Bool
@@ -34,6 +37,7 @@ public struct Person: Entity, Codable {
         firstname: String? = nil,
         lastname: String? = nil,
         email: String? = nil,
+        role: String? = nil,
         placeholder: Bool = false,
         descriptor: String? = nil,
         organizations: [Wikilink] = [],
@@ -46,6 +50,7 @@ public struct Person: Entity, Codable {
         self.firstname = firstname
         self.lastname = lastname
         self.email = email
+        self.role = role
         self.placeholder = placeholder
         self.descriptor = descriptor
         self.organizations = organizations
@@ -70,7 +75,7 @@ public struct Person: Entity, Codable {
     /// `body` is not part of the frontmatter — ``FrontmatterCodec`` supplies it
     /// separately from the markdown below the closing `---`.
     private enum CodingKeys: String, CodingKey {
-        case id, type, firstname, lastname, email, placeholder, descriptor
+        case id, type, firstname, lastname, email, role, placeholder, descriptor
         case organizations, projects, relations, created
     }
 
@@ -80,6 +85,7 @@ public struct Person: Entity, Codable {
         self.firstname = try c.decodeIfPresent(String.self, forKey: .firstname)
         self.lastname = try c.decodeIfPresent(String.self, forKey: .lastname)
         self.email = try c.decodeIfPresent(String.self, forKey: .email)
+        self.role = try c.decodeIfPresent(String.self, forKey: .role)
         self.placeholder = try c.decodeIfPresent(Bool.self, forKey: .placeholder) ?? false
         self.descriptor = try c.decodeIfPresent(String.self, forKey: .descriptor)
         self.organizations = try c.decodeIfPresent([Wikilink].self, forKey: .organizations) ?? []
@@ -96,6 +102,7 @@ public struct Person: Entity, Codable {
         try c.encodeIfPresent(firstname, forKey: .firstname)
         try c.encodeIfPresent(lastname, forKey: .lastname)
         try c.encodeIfPresent(email, forKey: .email)
+        try c.encodeIfPresent(role, forKey: .role)
         try c.encode(placeholder, forKey: .placeholder)
         try c.encodeIfPresent(descriptor, forKey: .descriptor)
         if !organizations.isEmpty { try c.encode(organizations, forKey: .organizations) }

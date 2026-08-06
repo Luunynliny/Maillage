@@ -188,6 +188,9 @@ private struct PersonDetailBody: View {
 
     private var metadata: [MetadataStrip.Item] {
         var items: [MetadataStrip.Item] = []
+        if let role = person.role {
+            items.append(.init("Role", value: role))
+        }
         if let email = person.email {
             items.append(.init("Email", value: email, isMonospaced: true))
         }

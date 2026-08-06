@@ -151,9 +151,13 @@ struct CommandPalette: View {
 
         let candidates: [Item] = store.allEntities.compactMap { entity in
             let person = entity.asPerson
-            let subtitle = person?.email
-            // Search across the name, the id and the email so any of them get you there.
-            let haystacks = [entity.displayName, entity.id, subtitle ?? ""]
+            // The role is the more useful hint of the two — "Head of Engineering" tells you
+            // which Marie this is; the email usually just repeats the name.
+            let subtitle = person?.role ?? person?.email
+            // Search across the name, the id, the role and the email so any of them get you there.
+            let haystacks = [
+                entity.displayName, entity.id, person?.role ?? "", person?.email ?? "",
+            ]
 
             let score: Int?
             if needle.isEmpty {

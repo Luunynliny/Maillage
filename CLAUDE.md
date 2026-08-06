@@ -83,6 +83,7 @@ type: person
 firstname: Marie
 lastname: Dupont
 email: marie@example.com
+role: Head of Engineering
 placeholder: false
 organizations: ["[[acme-corp]]"]
 projects: ["[[maillage]]"]

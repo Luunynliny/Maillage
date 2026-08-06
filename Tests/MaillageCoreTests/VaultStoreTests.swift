@@ -247,6 +247,23 @@ struct VaultStoreTests {
         #expect(!file.contains("firstname"))
     }
 
+    /// The role is usually *why* you know an unnamed person exists, so it survives the
+    /// descriptor being replaced by a real name.
+    @Test("A placeholder keeps its role through resolution")
+    func placeholderKeepsRole() throws {
+        let (store, root) = try makeStore()
+        defer { cleanUp(root) }
+
+        let head = try #require(
+            store.createPerson(
+                role: "Head of AA", descriptor: "Head of AA", placeholder: true))
+        #expect(head.role == "Head of AA")
+
+        let resolved = try #require(
+            store.resolvePlaceholder(head.id, firstname: "Alice", lastname: "Bernard"))
+        #expect(resolved.role == "Head of AA")
+    }
+
     @Test("Resolving a placeholder renames the file and keeps inbound links intact")
     func resolvesPlaceholder() throws {
         let (store, root) = try makeStore()

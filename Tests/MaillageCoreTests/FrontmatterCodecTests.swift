@@ -44,6 +44,7 @@ struct FrontmatterCodecTests {
             firstname: "Marie",
             lastname: "Dupont",
             email: "marie@example.com",
+            role: "Head of Engineering",
             organizations: [Wikilink("acme-corp")],
             projects: [Wikilink("maillage")],
             relations: [
@@ -58,6 +59,7 @@ struct FrontmatterCodecTests {
 
         #expect(decoded.firstname == "Marie")
         #expect(decoded.email == "marie@example.com")
+        #expect(decoded.role == "Head of Engineering")
         #expect(decoded.organizations == [Wikilink("acme-corp")])
         #expect(decoded.relations.count == 2)
         #expect(decoded.relations.first?.label == "manager of")

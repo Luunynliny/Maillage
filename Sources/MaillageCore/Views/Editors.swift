@@ -115,6 +115,7 @@ struct PersonEditor: View {
     @State private var firstname = ""
     @State private var lastname = ""
     @State private var email = ""
+    @State private var role = ""
     @State private var descriptor = ""
     @State private var notes = ""
     @State private var organizations: Set<EntityID> = []
@@ -154,6 +155,10 @@ struct PersonEditor: View {
                     }
                     FormField("Email", placeholder: "marie@example.com", text: $email)
                 }
+
+                // Offered in both modes: what someone does is often the first thing you
+                // learn about them, and for a placeholder it's the one thing you know.
+                FormField("Role", placeholder: "Head of Engineering", text: $role)
 
                 MultiSelectField(
                     label: "Organizations",
@@ -199,6 +204,7 @@ struct PersonEditor: View {
         firstname = existing.firstname ?? ""
         lastname = existing.lastname ?? ""
         email = existing.email ?? ""
+        role = existing.role ?? ""
         descriptor = existing.descriptor ?? ""
         notes = existing.body
         organizations = Set(existing.organizations.map(\.id))
@@ -211,6 +217,7 @@ struct PersonEditor: View {
 
         if var person = existing {
             if isResolving {
+                person.role = role.nilIfBlank
                 person.organizations = orgLinks
                 person.projects = projectLinks
                 person.body = notes
@@ -228,6 +235,7 @@ struct PersonEditor: View {
                 person.firstname = firstname.nilIfBlank
                 person.lastname = lastname.nilIfBlank
                 person.email = email.nilIfBlank
+                person.role = role.nilIfBlank
                 person.descriptor = descriptor.nilIfBlank
                 person.organizations = orgLinks
                 person.projects = projectLinks
@@ -240,6 +248,7 @@ struct PersonEditor: View {
             firstname: isBlank ? nil : firstname,
             lastname: isBlank ? nil : lastname,
             email: isBlank ? nil : email,
+            role: role,
             descriptor: isBlank ? descriptor : nil,
             placeholder: isBlank,
             organizations: orgLinks,
