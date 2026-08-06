@@ -1,0 +1,24 @@
+{
+  "originHash" : "80866fb3f74f265471fdb92ac42eb27bd734e43fb3c96eddb06b831e5fcedd32",
+  "pins" : [
+    {
+      "identity" : "grape",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftgraphs/Grape",
+      "state" : {
+        "revision" : "48eb7d8ab4ce549c6cdde106b5f7fa317421364c",
+        "version" : "1.1.0"
+      }
+    },
+    {
+      "identity" : "yams",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/jpsim/Yams",
+      "state" : {
+        "revision" : "3d6871d5b4a5cd519adf233fbb576e0a2af71c17",
+        "version" : "5.4.0"
+      }
+    }
+  ],
+  "version" : 3
+}

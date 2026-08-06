@@ -9,7 +9,7 @@ as a force-directed graph.
 | Piece | Choice |
 |---|---|
 | Language | Swift 6 (`.swiftLanguageMode(.v5)`), SwiftUI, macOS 14+ |
-| Build | Swift Package Manager (`swift build`, `swift test`) |
+| Build | Two paths — SwiftPM for tests, `maillage.xcodeproj` for running (see Building) |
 | State | `@Observable` + `@MainActor` `VaultStore`, injected via `.environment(store)` |
 | Tests | Swift Testing (`@Test`, `@Suite`, `#expect`, `#require`) — **not** XCTest |
 | Graph | [Grape](https://github.com/swiftgraphs/Grape) (MIT) |
@@ -21,16 +21,41 @@ taps, which has no cross-platform equivalent.
 **Open source first.** Every dependency added must be OSS with a permissive license, noted in
 the table above with its license.
 
-`xcodebuild`/`swift` need Xcode's toolchain, not Command Line Tools:
+## Building
 
-```bash
-export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-rtk swift build && rtk swift test
-```
+Two build systems describe the same sources, deliberately. Pick by what you're doing:
+
+| Task | Use | Why |
+|---|---|---|
+| Tests, quick compile check | `rtk swift test` | ~0.1s. Xcode's runner takes ~80s for the same 25 tests |
+| Running, debugging, breakpoints | `open maillage.xcodeproj` → scheme **Maillage** → ⌘R | Only path that produces a real `.app` |
+
+`maillage.xcodeproj` has two targets mirroring the package: `MaillageCore.framework` and
+`Maillage.app`, which embeds it. Both use **buildable folders** (`PBXFileSystemSynchronizedRootGroup`)
+pointed at `Sources/`, so a new `.swift` file joins its target with no project edit.
+
+Watch out for:
+
+- **`SWIFT_VERSION` must stay `5.0`** in the project, matching `.swiftLanguageMode(.v5)` in
+  `Package.swift`. Swift 6 language mode surfaces strict-concurrency errors throughout code that
+  was never written for it.
+- **Dependency versions are declared twice** — `Package.swift` and `project.pbxproj`. Bump both
+  together or the two build paths compile against different code.
+- Signing is manual and ad-hoc (`CODE_SIGN_IDENTITY = "-"`), because this machine has no
+  Developer ID. The App Sandbox is **off**, so the vault stays a plain readable folder; there is
+  no entitlements file yet. The audio phase will need one (`App/Maillage.entitlements`, referenced
+  by `CODE_SIGN_ENTITLEMENTS`) alongside the `NSAudioCaptureUsageDescription` already in
+  `App/Info.plist`.
+
+Both tools need Xcode's toolchain rather than Command Line Tools. `xcode-select` is already
+pointed at Xcode; if a fresh machine errors out, run
+`sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`.
 
 ## Layout
 
 ```
+App/Info.plist                       bundle id, version, NSAudioCaptureUsageDescription
+maillage.xcodeproj/                  committed; shared Maillage scheme
 Sources/Maillage/MaillageApp.swift   @main, WindowGroup, menu commands (⌘N, ⌘K, ⌘R)
 Sources/MaillageCore/
 ├── Design/     Theme.swift (tokens), Components.swift (Card, Pill, SidebarRow, …)

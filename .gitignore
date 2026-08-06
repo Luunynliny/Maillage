@@ -3,11 +3,14 @@
 # gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
 
 ## User settings
+#
+# The project and shared schemes are committed; per-user state is not.
 xcuserdata/
 *.xcuserstate
 
 ## Build products
 DerivedData/
+build/
 
 ## Obj-C/Swift specific
 *.hmap
