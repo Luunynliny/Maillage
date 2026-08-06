@@ -380,30 +380,7 @@ struct RelationEditor: View {
             onCancel: { dismiss() }
         ) {
             VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    Text("Label")
-                        .font(Theme.Font.caption)
-                        .foregroundStyle(Theme.textMuted)
-                    TextField("manager of", text: $label)
-                        .textFieldStyle(.plain)
-                        .font(Theme.Font.body)
-                        .foregroundStyle(Theme.textNormal)
-                        .padding(.horizontal, Theme.Spacing.small)
-                        .padding(.vertical, 6)
-                        .background(Theme.bgPrimary)
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Theme.Radius.medium)
-                                .stroke(Theme.border, lineWidth: Theme.hairline)
-                        )
-
-                    // Suggestions keep common labels spelled consistently; free text still works.
-                    FlowLayout(spacing: Theme.Spacing.xs) {
-                        ForEach(RelationLabel.suggestions, id: \.self) { suggestion in
-                            Pill(suggestion, color: Theme.textMuted) { label = suggestion }
-                        }
-                    }
-                }
+                LabelField(label: $label, known: store.usedRelationLabels)
 
                 Divider().overlay(Theme.border)
 
@@ -497,6 +474,68 @@ struct RelationEditor: View {
 }
 
 // MARK: - Shared fields
+
+/// Names a relation by reusing a label already in the vault, or typing a new one.
+///
+/// There is no preset vocabulary: the list is whatever the person has used before, so it
+/// starts empty and grows as they name relationships. Typing filters it, and anything
+/// typed is a valid label even if it matches nothing — the field is free text with
+/// suggestions, not a picker.
+struct LabelField: View {
+    @Binding var label: String
+    /// Labels already used in the vault, most-used first.
+    let known: [String]
+
+    @State private var isFocused = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Text("Label")
+                .font(Theme.Font.caption)
+                .foregroundStyle(Theme.textMuted)
+
+            SearchField(
+                known.isEmpty ? "e.g. manager of" : "Type or reuse a label",
+                text: $label,
+                isFocused: $isFocused)
+
+            // Only worth the vertical space once there is something to reuse, and only
+            // while the field is live — the chosen label already shows in the box.
+            if !matches.isEmpty, isFocused {
+                ScrollView {
+                    VStack(spacing: 1) {
+                        ForEach(matches, id: \.self) { suggestion in
+                            SidebarRow(
+                                title: suggestion,
+                                dotColor: Theme.accent,
+                                isSelected: suggestion == label
+                            ) {
+                                label = suggestion
+                            }
+                        }
+                    }
+                    .padding(Theme.Spacing.xs)
+                }
+                .frame(maxHeight: 108)
+                .background(Theme.bgPrimary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.Radius.medium)
+                        .stroke(Theme.border, lineWidth: Theme.hairline)
+                )
+            }
+        }
+    }
+
+    /// Known labels matching what's typed. An exact match is dropped: offering back the
+    /// label already in the box would just be a row that does nothing.
+    private var matches: [String] {
+        known.filter {
+            $0.localizedCaseInsensitiveCompare(label) != .orderedSame
+                && (label.isEmpty || $0.localizedCaseInsensitiveContains(label))
+        }
+    }
+}
 
 /// Picks any number of entities, used for org and project membership.
 ///

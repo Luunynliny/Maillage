@@ -35,24 +35,3 @@ public struct Backlink: Hashable, Sendable, Identifiable {
         self.label = label
     }
 }
-
-/// Suggested relation labels offered in the editor. Free text is always allowed —
-/// this list only exists to keep common labels spelled consistently.
-public enum RelationLabel {
-    public static let suggestions: [String] = [
-        "friend of",
-        "manager of",
-        "reports to",
-        "colleague of",
-        "mentor of",
-        "mentored by",
-        "introduced me to",
-        "introduced by",
-        "partner of",
-        "family of",
-        "client of",
-        "vendor to",
-        "collaborator of",
-        "knows",
-    ]
-}

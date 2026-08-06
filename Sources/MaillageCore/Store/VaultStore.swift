@@ -122,6 +122,27 @@ public final class VaultStore {
         allProjects.filter { $0.organizations.contains(Wikilink(organizationID)) }
     }
 
+    /// Every relation label already in use, most-used first.
+    ///
+    /// Derived rather than stored: the vocabulary *is* whatever is on disk, so labels
+    /// need no separate config file and pruning a relation prunes its label with it.
+    /// Most-used first because the labels someone reaches for repeatedly are the ones
+    /// worth offering back to them.
+    public var usedRelationLabels: [String] {
+        var counts: [String: Int] = [:]
+        for person in snapshot.people.values {
+            for relation in person.relations {
+                counts[relation.label, default: 0] += 1
+            }
+        }
+        return counts.sorted {
+            $0.value != $1.value
+                ? $0.value > $1.value
+                : $0.key.localizedStandardCompare($1.key) == .orderedAscending
+        }
+        .map(\.key)
+    }
+
     // MARK: Creating
 
     /// Creates a named person. Pass `placeholder: true` with a `descriptor` for

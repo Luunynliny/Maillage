@@ -106,6 +106,31 @@ struct VaultStoreTests {
         #expect(store.backlinks(for: jean.id).isEmpty)
     }
 
+    @Test("Relation labels are derived from use, most-used first")
+    func derivesRelationLabels() throws {
+        let (store, root) = try makeStore()
+        defer { cleanUp(root) }
+
+        // Nothing to offer until the user has named a relationship themselves.
+        #expect(store.usedRelationLabels.isEmpty)
+
+        let marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
+        let jean = try #require(store.createPerson(firstname: "Jean", lastname: "Martin"))
+        let alice = try #require(store.createPerson(firstname: "Alice", lastname: "Roy"))
+
+        #expect(store.addRelation(from: marie.id, to: jean.id, label: "climbs with"))
+        #expect(store.addRelation(from: marie.id, to: alice.id, label: "manager of"))
+        #expect(store.addRelation(from: jean.id, to: alice.id, label: "manager of"))
+
+        #expect(store.usedRelationLabels == ["manager of", "climbs with"])
+
+        // Dropping the last use of a label drops the label with it.
+        let relation = try #require(
+            store.snapshot.people[marie.id]?.relations.first { $0.label == "climbs with" })
+        #expect(store.removeRelation(from: marie.id, relation: relation))
+        #expect(store.usedRelationLabels == ["manager of"])
+    }
+
     @Test("Reloading from disk reproduces the same state")
     func reloadsFromDisk() throws {
         let (store, root) = try makeStore()
