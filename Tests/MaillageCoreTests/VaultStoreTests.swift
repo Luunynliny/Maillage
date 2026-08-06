@@ -223,6 +223,30 @@ struct VaultStoreTests {
                 atPath: root.appendingPathComponent("people/_head-of-aa.md").path))
     }
 
+    /// The editor's "No name yet" toggle can be flipped after a name has been typed, so it
+    /// drops those fields — a placeholder carrying a name would show the name everywhere
+    /// while still sorting and rendering as unnamed.
+    @Test("A placeholder keeps no name, only a descriptor")
+    func placeholderHasNoName() throws {
+        let (store, root) = try makeStore()
+        defer { cleanUp(root) }
+
+        let head = try #require(
+            store.createPerson(
+                firstname: nil, lastname: nil, email: nil, descriptor: "Head of AA",
+                placeholder: true))
+
+        #expect(head.firstname == nil)
+        #expect(head.lastname == nil)
+        #expect(head.email == nil)
+        #expect(head.descriptor == "Head of AA")
+        #expect(head.displayName == "Head of AA")
+
+        let file = try String(
+            contentsOf: root.appendingPathComponent("people/_head-of-aa.md"), encoding: .utf8)
+        #expect(!file.contains("firstname"))
+    }
+
     @Test("Resolving a placeholder renames the file and keeps inbound links intact")
     func resolvesPlaceholder() throws {
         let (store, root) = try makeStore()

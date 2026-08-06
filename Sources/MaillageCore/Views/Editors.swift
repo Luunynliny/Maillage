@@ -104,7 +104,9 @@ struct PersonEditor: View {
 
     /// `nil` when creating.
     let existing: Person?
-    /// True when creating an unnamed placeholder.
+    /// Whether the sheet opens in placeholder mode. Only the starting position of the
+    /// toggle: ⌘⇧N opens with it on, the sidebar's "+" with it off, and either can be
+    /// flipped without closing the sheet.
     let isPlaceholder: Bool
     /// True when filling in the name of an existing placeholder.
     let isResolving: Bool
@@ -117,6 +119,8 @@ struct PersonEditor: View {
     @State private var notes = ""
     @State private var organizations: Set<EntityID> = []
     @State private var projects: Set<EntityID> = []
+    /// Live placeholder state, seeded from ``isPlaceholder`` on appear.
+    @State private var isBlank = false
 
     var body: some View {
         EditorSheet(
@@ -128,7 +132,17 @@ struct PersonEditor: View {
             onCancel: { dismiss() }
         ) {
             VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-                if isPlaceholder {
+                // Only offered while creating. Flipping it on an existing person would mean
+                // discarding a name, which is `renameEntity`'s job, not this sheet's.
+                if existing == nil {
+                    ToggleField(
+                        "No name yet",
+                        caption:
+                            "For someone you've heard about but can't name — \"the head of AA\". You can fill the name in later.",
+                        isOn: $isBlank)
+                }
+
+                if isBlank {
                     FormField(
                         "Description",
                         placeholder: "e.g. Head of AA",
@@ -164,27 +178,23 @@ struct PersonEditor: View {
     private var title: String {
         if isResolving { return "Add a name" }
         if let existing { return "Edit \(existing.displayName)" }
-        return isPlaceholder ? "New unnamed person" : "New person"
+        return "New person"
     }
 
+    /// Only the resolving case needs one — the toggle carries its own explanation.
     private var subtitle: String? {
-        if isResolving {
-            return
-                "Filling in the name renames the file and updates every link pointing at this person."
-        }
-        if isPlaceholder {
-            return
-                "For someone you've heard about but can't name yet. You can add the real name later."
-        }
-        return nil
+        isResolving
+            ? "Filling in the name renames the file and updates every link pointing at this person."
+            : nil
     }
 
     private var isValid: Bool {
-        if isPlaceholder { return descriptor.nilIfBlank != nil }
+        if isBlank { return descriptor.nilIfBlank != nil }
         return firstname.nilIfBlank != nil || lastname.nilIfBlank != nil
     }
 
     private func populate() {
+        isBlank = isPlaceholder
         guard let existing else { return }
         firstname = existing.firstname ?? ""
         lastname = existing.lastname ?? ""
@@ -225,11 +235,13 @@ struct PersonEditor: View {
                 if store.update(person) { onSaved(person.id) }
             }
         } else if let created = store.createPerson(
-            firstname: firstname,
-            lastname: lastname,
-            email: email,
-            descriptor: descriptor,
-            placeholder: isPlaceholder,
+            // Only the fields the current mode shows: text typed before the toggle was
+            // flipped is still in state, and a placeholder with a name is a contradiction.
+            firstname: isBlank ? nil : firstname,
+            lastname: isBlank ? nil : lastname,
+            email: isBlank ? nil : email,
+            descriptor: isBlank ? descriptor : nil,
+            placeholder: isBlank,
             organizations: orgLinks,
             projects: projectLinks,
             body: notes)
