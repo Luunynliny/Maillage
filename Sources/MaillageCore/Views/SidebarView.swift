@@ -69,33 +69,7 @@ public struct SidebarView: View {
                 createMenu
             }
 
-            HStack(spacing: Theme.Spacing.xs) {
-                Image(systemName: "magnifyingglass")
-                    .font(Theme.Font.caption)
-                    .foregroundStyle(Theme.textFaint)
-                TextField("Filter", text: $filter)
-                    .textFieldStyle(.plain)
-                    .font(Theme.Font.body)
-                    .foregroundStyle(Theme.textNormal)
-                if !filter.isEmpty {
-                    Button {
-                        filter = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(Theme.Font.caption)
-                            .foregroundStyle(Theme.textFaint)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, Theme.Spacing.small)
-            .padding(.vertical, 5)
-            .background(Theme.bgPrimary)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.Radius.medium)
-                    .stroke(Theme.border, lineWidth: Theme.hairline)
-            )
+            SearchField("Filter", text: $filter)
         }
         .padding(Theme.Spacing.medium)
         .overlay(alignment: .bottom) {

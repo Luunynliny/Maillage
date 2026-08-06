@@ -135,13 +135,15 @@ struct PersonEditor: View {
                     label: "Organizations",
                     options: store.allOrganizations.map { ($0.id, $0.displayName) },
                     selected: $organizations,
-                    color: Theme.organizationColor)
+                    color: Theme.organizationColor,
+                    prompt: "Search organizations")
 
                 MultiSelectField(
                     label: "Projects",
                     options: store.allProjects.map { ($0.id, $0.displayName) },
                     selected: $projects,
-                    color: Theme.projectColor)
+                    color: Theme.projectColor,
+                    prompt: "Search projects")
 
                 NotesField(text: $notes)
             }
@@ -320,7 +322,8 @@ struct ProjectEditor: View {
                     label: "Organizations",
                     options: store.allOrganizations.map { ($0.id, $0.displayName) },
                     selected: $organizations,
-                    color: Theme.organizationColor)
+                    color: Theme.organizationColor,
+                    prompt: "Search organizations")
 
                 NotesField(text: $notes)
             }
@@ -424,18 +427,11 @@ struct RelationEditor: View {
                             .font(Theme.Font.caption)
                             .foregroundStyle(Theme.textMuted)
 
-                        TextField("Search people", text: $search)
-                            .textFieldStyle(.plain)
-                            .font(Theme.Font.body)
-                            .foregroundStyle(Theme.textNormal)
-                            .padding(.horizontal, Theme.Spacing.small)
-                            .padding(.vertical, 6)
-                            .background(Theme.bgPrimary)
-                            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: Theme.Radius.medium)
-                                    .stroke(Theme.border, lineWidth: Theme.hairline)
-                            )
+                        // A relation points at exactly one person, so this stays
+                        // single-select — the search is the same one the pickers use.
+                        SearchField("Search people", text: $search) {
+                            targetID = candidates.first?.id ?? targetID
+                        }
 
                         ScrollView {
                             VStack(spacing: 0) {
@@ -502,12 +498,21 @@ struct RelationEditor: View {
 
 // MARK: - Shared fields
 
-/// Toggleable list of entity pills, used for org and project membership.
+/// Picks any number of entities, used for org and project membership.
+///
+/// Laying every option out as a pill stops scaling once a vault holds hundreds of
+/// organizations, so this is search-first: what you've picked stays pinned as removable
+/// pills, and the options list below only appears once you type or focus the field.
 struct MultiSelectField: View {
     let label: String
     let options: [(id: EntityID, title: String)]
     @Binding var selected: Set<EntityID>
     let color: Color
+    /// Shown under the search field when nothing is typed yet.
+    var prompt: String = "Search to add"
+
+    @State private var search = ""
+    @State private var isSearchFocused = false
 
     var body: some View {
         if !options.isEmpty {
@@ -515,24 +520,84 @@ struct MultiSelectField: View {
                 Text(label)
                     .font(Theme.Font.caption)
                     .foregroundStyle(Theme.textMuted)
-                FlowLayout(spacing: Theme.Spacing.xs) {
-                    ForEach(options, id: \.id) { option in
-                        let isOn = selected.contains(option.id)
-                        Pill(
-                            option.title,
-                            color: isOn ? color : Theme.textFaint,
-                            icon: isOn ? "checkmark" : nil
-                        ) {
-                            if isOn {
+
+                if !selectedOptions.isEmpty {
+                    FlowLayout(spacing: Theme.Spacing.xs) {
+                        ForEach(selectedOptions, id: \.id) { option in
+                            Pill(option.title, color: color, icon: "xmark") {
                                 selected.remove(option.id)
-                            } else {
-                                selected.insert(option.id)
                             }
                         }
                     }
                 }
+
+                SearchField(
+                    prompt,
+                    text: $search,
+                    isFocused: $isSearchFocused,
+                    onSubmit: addFirstMatch)
+
+                // Kept out of the way until asked for: an always-open list would push the
+                // rest of the form down and make short vaults feel heavier than they are.
+                if isSearchFocused || !search.isEmpty {
+                    optionList
+                }
             }
         }
+    }
+
+    private var optionList: some View {
+        ScrollView {
+            VStack(spacing: 1) {
+                if matches.isEmpty {
+                    Text("No matches")
+                        .font(Theme.Font.caption)
+                        .foregroundStyle(Theme.textFaint)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, Theme.Spacing.small)
+                        .padding(.vertical, 5)
+                } else {
+                    ForEach(matches, id: \.id) { option in
+                        SidebarRow(
+                            title: option.title,
+                            dotColor: color,
+                            isSelected: false
+                        ) {
+                            selected.insert(option.id)
+                            search = ""
+                        }
+                    }
+                }
+            }
+            .padding(Theme.Spacing.xs)
+        }
+        .frame(maxHeight: 108)
+        .background(Theme.bgPrimary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.medium)
+                .stroke(Theme.border, lineWidth: Theme.hairline)
+        )
+    }
+
+    /// Selected first, in the order the caller gave, so the pills don't reshuffle.
+    private var selectedOptions: [(id: EntityID, title: String)] {
+        options.filter { selected.contains($0.id) }
+    }
+
+    /// Anything not already picked that matches what's typed.
+    private var matches: [(id: EntityID, title: String)] {
+        options.filter {
+            !selected.contains($0.id)
+                && (search.isEmpty || $0.title.localizedCaseInsensitiveContains(search))
+        }
+    }
+
+    /// Return adds the top match, so a whole list can be built without the mouse.
+    private func addFirstMatch() {
+        guard let first = matches.first else { return }
+        selected.insert(first.id)
+        search = ""
     }
 }
 
