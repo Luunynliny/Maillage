@@ -120,7 +120,7 @@ private struct PersonDetailBody: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.large) {
             if !metadata.isEmpty {
-                MetadataStrip(metadata)
+                MetadataList(metadata)
             }
 
             membershipSection
@@ -186,8 +186,8 @@ private struct PersonDetailBody: View {
         }
     }
 
-    private var metadata: [MetadataStrip.Item] {
-        var items: [MetadataStrip.Item] = []
+    private var metadata: [MetadataList.Item] {
+        var items: [MetadataList.Item] = []
         if let role = person.role {
             items.append(.init("Role", value: role))
         }
@@ -289,7 +289,7 @@ private struct OrganizationDetailBody: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.large) {
             if !metadata.isEmpty {
-                MetadataStrip(metadata)
+                MetadataList(metadata)
             }
 
             let members = store.members(ofOrganization: organization.id)
@@ -318,8 +318,8 @@ private struct OrganizationDetailBody: View {
         }
     }
 
-    private var metadata: [MetadataStrip.Item] {
-        var items: [MetadataStrip.Item] = []
+    private var metadata: [MetadataList.Item] {
+        var items: [MetadataList.Item] = []
         if let domain = organization.domain {
             items.append(.init("Domain", value: domain, isMonospaced: true))
         }
@@ -339,7 +339,7 @@ private struct ProjectDetailBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.large) {
-            MetadataStrip(metadata)
+            MetadataList(metadata)
 
             if !project.organizations.isEmpty {
                 VStack(alignment: .leading, spacing: Theme.Spacing.small) {
@@ -367,9 +367,9 @@ private struct ProjectDetailBody: View {
         }
     }
 
-    /// Status is always present, so this strip never collapses to nothing.
-    private var metadata: [MetadataStrip.Item] {
-        var items: [MetadataStrip.Item] = [
+    /// Status is always present, so this list never collapses to nothing.
+    private var metadata: [MetadataList.Item] {
+        var items: [MetadataList.Item] = [
             .init("Status", value: project.status.displayName)
         ]
         if let created = project.created {

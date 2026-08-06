@@ -516,7 +516,8 @@ public struct EmptyStateView: View {
 
 // MARK: - Key/value row
 
-/// One line of entity metadata, e.g. `Email  marie@example.com`.
+/// One line of entity metadata, e.g. `Email  marie@example.com`. The label sits in a
+/// fixed-width column so stacked rows align — see ``MetadataList``.
 public struct MetadataRow: View {
     private let label: String
     private let value: String
@@ -600,15 +601,25 @@ public struct FlowLayout: Layout {
     }
 }
 
-// MARK: - Metadata strip
+// MARK: - Metadata list
 
-/// A few short facts on one line — `Added 2026-08-06   Email marie@example.com`.
+/// An entity's short facts, one per line with the labels in a column:
 ///
-/// Sized to its content and wrapping when it runs out of room, unlike ``Card``, which
-/// stretches to the full pane and turns two short values into a conspicuous box. Use this
-/// in the detail pane, where the metadata should sit quietly under the title; ``Card`` is
-/// for surfaces that genuinely need to read as a panel.
-public struct MetadataStrip: View {
+/// ```
+/// Role    Head of Engineering
+/// Email   marie@example.com
+/// Added   2026-08-06
+/// ```
+///
+/// One fact per row rather than a wrapping single line: values are read by scanning down
+/// the label column, and a run-on line reflows unpredictably as the pane is resized, so
+/// `Added` lands in a different place for every entity. Rows are ``MetadataRow``, so this
+/// and the vault picker render key/value pairs identically.
+///
+/// Sized to its content, unlike ``Card``, which stretches to the full pane and turns two
+/// short values into a conspicuous box. Use this in the detail pane, where the metadata
+/// should sit quietly under the title; ``Card`` is for surfaces that need to read as a panel.
+public struct MetadataList: View {
     /// One label/value pair. `isMonospaced` is for ids and emails.
     public struct Item: Identifiable {
         let label: String
@@ -631,17 +642,9 @@ public struct MetadataStrip: View {
     }
 
     public var body: some View {
-        FlowLayout(spacing: Theme.Spacing.large) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             ForEach(items) { item in
-                HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.xs) {
-                    Text(item.label)
-                        .font(Theme.Font.caption)
-                        .foregroundStyle(Theme.textFaint)
-                    Text(item.value)
-                        .font(item.isMonospaced ? Theme.Font.mono : Theme.Font.body)
-                        .foregroundStyle(Theme.textMuted)
-                        .textSelection(.enabled)
-                }
+                MetadataRow(item.label, value: item.value, isMonospaced: item.isMonospaced)
             }
         }
     }
