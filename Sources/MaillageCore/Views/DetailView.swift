@@ -81,15 +81,9 @@ private struct EntityHeader: View {
                         editorRequest = .resolvePlaceholder(entity.id)
                     }
                 }
-                Button {
+                IconButton("pencil", help: "Edit \(entity.displayName)") {
                     editorRequest = .edit(entity.id)
-                } label: {
-                    Image(systemName: "pencil")
-                        .font(Theme.Font.body)
-                        .foregroundStyle(Theme.textMuted)
                 }
-                .buttonStyle(.plain)
-                .help("Edit \(entity.displayName)")
             }
 
             HStack(spacing: Theme.Spacing.small) {

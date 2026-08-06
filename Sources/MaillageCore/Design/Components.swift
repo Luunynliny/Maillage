@@ -263,6 +263,40 @@ public struct SecondaryButton: View {
     }
 }
 
+/// `SecondaryButton` with the label dropped: the same bordered box, squared off, so a
+/// lone icon still reads as something you can click. `help` supplies the missing word.
+public struct IconButton: View {
+    private let icon: String
+    private let help: String
+    private let action: () -> Void
+
+    @State private var isHovering = false
+
+    public init(_ icon: String, help: String, action: @escaping () -> Void) {
+        self.icon = icon
+        self.help = help
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(Theme.Font.body)
+                .foregroundStyle(isHovering ? Theme.textNormal : Theme.textMuted)
+                .frame(width: 22, height: 22)
+                .background(isHovering ? Theme.bgHover : Theme.bgSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.Radius.medium)
+                        .stroke(Theme.border, lineWidth: Theme.hairline)
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .help(help)
+    }
+}
+
 // MARK: - Empty state
 
 public struct EmptyStateView: View {
