@@ -24,6 +24,16 @@ public enum EditorRequest: Identifiable, Hashable {
         case .confirmDelete(let id): "delete-\(id)"
         }
     }
+
+    /// The create request for a kind, so callers that already have an ``EntityKind`` —
+    /// the sidebar's per-section buttons — need no switch of their own.
+    public static func new(_ kind: EntityKind) -> EditorRequest {
+        switch kind {
+        case .person: .newPerson
+        case .organization: .newOrganization
+        case .project: .newProject
+        }
+    }
 }
 
 // MARK: - Sheet chrome

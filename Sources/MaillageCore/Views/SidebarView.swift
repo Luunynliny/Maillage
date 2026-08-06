@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// Left pane: every entity grouped by kind.
+/// Left pane: every entity grouped by kind, each section headed by a "+" that creates one.
 ///
-/// Deliberately just the list — no filter box, no create menu. Narrowing the vault is the
-/// ⌘K palette's job and creating is the File menu's, so controls here only duplicated them
-/// and pushed the vault's contents further down the pane.
+/// No filter box: narrowing the vault is the ⌘K palette's job, and a search field here only
+/// duplicated it while pushing the vault's contents down the pane. The create buttons sit on
+/// the sections rather than in one menu, so the kind being made is implied by where you
+/// clicked. Unnamed people are rare enough to stay on ⌘⇧N alone.
 public struct SidebarView: View {
     @Environment(VaultStore.self) private var store
     @Binding var selection: EntityID?
@@ -86,8 +87,13 @@ public struct SidebarView: View {
     @ViewBuilder
     private func section(kind: EntityKind, rows: [Row]) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            SectionHeader(kind.displayName, trailing: rows.isEmpty ? nil : "\(rows.count)")
-                .padding(.horizontal, Theme.Spacing.small)
+            HStack(spacing: Theme.Spacing.xs) {
+                SectionHeader(kind.displayName, trailing: rows.isEmpty ? nil : "\(rows.count)")
+                AddButton(help: "New \(kind.rawValue)") {
+                    editorRequest = .new(kind)
+                }
+            }
+            .padding(.horizontal, Theme.Spacing.small)
 
             if rows.isEmpty {
                 Text("None yet")

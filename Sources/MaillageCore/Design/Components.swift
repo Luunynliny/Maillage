@@ -406,6 +406,35 @@ public struct IconButton: View {
     }
 }
 
+/// Bare "+" for creating something inside a section.
+///
+/// Unlike ``IconButton`` it draws no box: a section header is a quiet label, and a bordered
+/// button beside it would outweigh the heading it belongs to.
+public struct AddButton: View {
+    private let help: String
+    private let action: () -> Void
+
+    @State private var isHovering = false
+
+    public init(help: String, action: @escaping () -> Void) {
+        self.help = help
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            Image(systemName: "plus.circle")
+                .font(Theme.Font.body)
+                .foregroundStyle(isHovering ? Theme.textNormal : Theme.textMuted)
+                // The glyph alone is a small target, so take the whole frame.
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .help(help)
+    }
+}
+
 // MARK: - Empty state
 
 public struct EmptyStateView: View {
