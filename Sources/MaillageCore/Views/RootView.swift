@@ -9,7 +9,6 @@ public struct RootView: View {
 
     @State private var selection: EntityID?
     @State private var editorRequest: EditorRequest?
-    @State private var isGraphVisible = true
     @State private var isPaletteVisible = false
     @State private var isPickingVault = false
 
@@ -20,15 +19,8 @@ public struct RootView: View {
             SidebarView(selection: $selection, editorRequest: $editorRequest)
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 340)
         } content: {
-            if isGraphVisible {
-                GraphView(selection: $selection)
-                    .navigationSplitViewColumnWidth(min: 320, ideal: 520)
-            } else {
-                // Collapsing the graph leaves a two-pane layout; the content column
-                // still has to render something, so keep the background continuous.
-                Theme.bgPrimary
-                    .navigationSplitViewColumnWidth(0)
-            }
+            GraphView(selection: $selection)
+                .navigationSplitViewColumnWidth(min: 320, ideal: 520)
         } detail: {
             DetailView(selection: $selection, editorRequest: $editorRequest)
                 .navigationSplitViewColumnWidth(min: 300, ideal: 380, max: 560)
@@ -90,16 +82,6 @@ public struct RootView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .navigation) {
-            Button {
-                isGraphVisible.toggle()
-            } label: {
-                Image(systemName: "point.3.filled.connected.trianglepath.dotted")
-                    .foregroundStyle(isGraphVisible ? Theme.accent : Theme.textMuted)
-            }
-            .help(isGraphVisible ? "Hide the graph" : "Show the graph")
-        }
-
         ToolbarItem(placement: .primaryAction) {
             Button {
                 isPaletteVisible = true
