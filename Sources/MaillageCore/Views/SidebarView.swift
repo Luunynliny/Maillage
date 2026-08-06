@@ -1,12 +1,14 @@
 import SwiftUI
 
-/// Left pane: every entity grouped by kind, with a filter box and create menu.
+/// Left pane: every entity grouped by kind.
+///
+/// Deliberately just the list — no filter box, no create menu. Narrowing the vault is the
+/// ⌘K palette's job and creating is the File menu's, so controls here only duplicated them
+/// and pushed the vault's contents further down the pane.
 public struct SidebarView: View {
     @Environment(VaultStore.self) private var store
     @Binding var selection: EntityID?
     @Binding var editorRequest: EditorRequest?
-
-    @State private var filter = ""
 
     public init(selection: Binding<EntityID?>, editorRequest: Binding<EditorRequest?>) {
         self._selection = selection
@@ -21,7 +23,7 @@ public struct SidebarView: View {
                 LazyVStack(alignment: .leading, spacing: Theme.Spacing.large) {
                     section(
                         kind: .person,
-                        rows: filteredPeople.map {
+                        rows: store.allPeople.map {
                             Row(
                                 id: $0.id, title: $0.displayName,
                                 color: Theme.color(for: $0),
@@ -30,7 +32,7 @@ public struct SidebarView: View {
 
                     section(
                         kind: .organization,
-                        rows: filteredOrganizations.map {
+                        rows: store.allOrganizations.map {
                             Row(
                                 id: $0.id, title: $0.displayName,
                                 color: Theme.organizationColor,
@@ -39,7 +41,7 @@ public struct SidebarView: View {
 
                     section(
                         kind: .project,
-                        rows: filteredProjects.map {
+                        rows: store.allProjects.map {
                             Row(
                                 id: $0.id, title: $0.displayName,
                                 color: Theme.projectColor,
@@ -60,39 +62,16 @@ public struct SidebarView: View {
     // MARK: Header
 
     private var header: some View {
-        VStack(spacing: Theme.Spacing.small) {
-            HStack {
-                Text("maillage")
-                    .font(Theme.Font.heading)
-                    .foregroundStyle(Theme.textNormal)
-                Spacer()
-                createMenu
-            }
-
-            SearchField("Filter", text: $filter)
+        HStack {
+            Text("maillage")
+                .font(Theme.Font.heading)
+                .foregroundStyle(Theme.textNormal)
+            Spacer()
         }
         .padding(Theme.Spacing.medium)
         .overlay(alignment: .bottom) {
             Rectangle().fill(Theme.border).frame(height: Theme.hairline)
         }
-    }
-
-    private var createMenu: some View {
-        Menu {
-            Button("New Person…") { editorRequest = .newPerson }
-            Button("New Unnamed Person…") { editorRequest = .newPlaceholder }
-            Divider()
-            Button("New Organization…") { editorRequest = .newOrganization }
-            Button("New Project…") { editorRequest = .newProject }
-        } label: {
-            Image(systemName: "plus")
-                .font(Theme.Font.body.weight(.semibold))
-                .foregroundStyle(Theme.textMuted)
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("Create a new entry")
     }
 
     // MARK: Sections
@@ -111,7 +90,7 @@ public struct SidebarView: View {
                 .padding(.horizontal, Theme.Spacing.small)
 
             if rows.isEmpty {
-                Text(filter.isEmpty ? "None yet" : "No matches")
+                Text("None yet")
                     .font(Theme.Font.caption)
                     .foregroundStyle(Theme.textFaint)
                     .padding(.horizontal, Theme.Spacing.small)
@@ -159,23 +138,5 @@ public struct SidebarView: View {
         .overlay(alignment: .top) {
             Rectangle().fill(Theme.border).frame(height: Theme.hairline)
         }
-    }
-
-    // MARK: Filtering
-
-    private func matches(_ text: String) -> Bool {
-        filter.isEmpty || text.localizedCaseInsensitiveContains(filter)
-    }
-
-    private var filteredPeople: [Person] {
-        store.allPeople.filter { matches($0.displayName) || matches($0.email ?? "") }
-    }
-
-    private var filteredOrganizations: [Organization] {
-        store.allOrganizations.filter { matches($0.displayName) }
-    }
-
-    private var filteredProjects: [Project] {
-        store.allProjects.filter { matches($0.displayName) }
     }
 }

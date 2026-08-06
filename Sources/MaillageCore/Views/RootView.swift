@@ -26,7 +26,6 @@ public struct RootView: View {
                 .navigationSplitViewColumnWidth(min: 300, ideal: 380, max: 560)
         }
         .navigationTitle("")
-        .toolbar { toolbar }
         .toolbarBackground(Theme.bgSecondary, for: .windowToolbar)
         .background(Theme.bgPrimary)
         .sheet(item: $editorRequest) { request in
@@ -59,31 +58,6 @@ public struct RootView: View {
             store.load()
         } else {
             isPickingVault = true
-        }
-    }
-
-    // MARK: Toolbar
-
-    @ToolbarContentBuilder
-    private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .primaryAction) {
-            Button {
-                isPaletteVisible = true
-            } label: {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(Theme.textMuted)
-            }
-            .help("Jump to anything (⌘K)")
-        }
-
-        ToolbarItem(placement: .primaryAction) {
-            Button {
-                editorRequest = .newPerson
-            } label: {
-                Image(systemName: "person.badge.plus")
-                    .foregroundStyle(Theme.textMuted)
-            }
-            .help("New person (⌘N)")
         }
     }
 
