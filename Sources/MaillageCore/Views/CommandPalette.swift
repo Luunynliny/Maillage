@@ -35,10 +35,13 @@ struct CommandPalette: View {
         HStack(spacing: Theme.Spacing.small) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(Theme.textFaint)
-            TextField("Jump to a person, organization or project…", text: $query)
+            TextField("", text: $query)
                 .textFieldStyle(.plain)
-                .font(SwiftUI.Font.system(size: 16))
+                .font(Theme.Font.paletteQuery)
                 .foregroundStyle(Theme.textNormal)
+                .placeholder(
+                    "Jump to a person, organization or project…",
+                    isVisible: query.isEmpty, font: Theme.Font.paletteQuery)
                 .focused($isFieldFocused)
                 .onSubmit { activate(at: highlighted) }
                 // Arrow keys move the highlight; the text field keeps focus so typing

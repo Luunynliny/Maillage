@@ -621,6 +621,8 @@ struct MultiSelectField: View {
 struct NotesField: View {
     @Binding var text: String
     var title: String = "Notes"
+    /// Shown dimmed while the body is empty, so it matches the single-line fields above it.
+    var placeholder: String = "Anything worth remembering…"
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
@@ -631,6 +633,11 @@ struct NotesField: View {
                 .font(Theme.Font.body)
                 .foregroundStyle(Theme.textNormal)
                 .scrollContentBackground(.hidden)
+                // Inset matches the gap AppKit leaves between a text view's edge and its
+                // first glyph, so the placeholder sits exactly where the caret does.
+                .placeholder(
+                    placeholder, isVisible: text.isEmpty, alignment: .topLeading,
+                    inset: Theme.Spacing.xs)
                 .padding(Theme.Spacing.small)
                 .frame(height: 80)
                 .background(Theme.bgPrimary)

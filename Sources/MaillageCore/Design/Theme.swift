@@ -86,6 +86,8 @@ public enum Theme {
         public static let heading = SwiftUI.Font.system(size: 15, weight: .semibold)
         public static let body = SwiftUI.Font.system(size: 13)
         public static let caption = SwiftUI.Font.system(size: 11)
+        /// The command palette's query, larger than body text the way Obsidian's is.
+        public static let paletteQuery = SwiftUI.Font.system(size: 16)
         /// Section headers in the sidebar: small, uppercase, tracked out.
         public static let sectionHeader = SwiftUI.Font.system(size: 10, weight: .semibold)
         /// Ids and emails, where character disambiguation matters.
