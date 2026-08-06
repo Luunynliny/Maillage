@@ -35,14 +35,17 @@ public struct RootView: View {
         .sheet(isPresented: $isPickingVault) {
             VaultPicker(isPresented: $isPickingVault)
         }
+        // A sheet, not an overlay: as an overlay on the split view the palette's text
+        // field never became first responder, so it swallowed every keystroke.
+        .sheet(isPresented: $isPaletteVisible) {
+            CommandPalette(
+                isPresented: $isPaletteVisible,
+                selection: $selection,
+                editorRequest: $editorRequest)
+        }
         .onAppear(perform: start)
         .focusedSceneValue(\.editorRequest, $editorRequest)
         .focusedSceneValue(\.isPaletteVisible, $isPaletteVisible)
-        .overlay {
-            if isPaletteVisible {
-                paletteOverlay
-            }
-        }
         .overlay(alignment: .bottom) {
             if let error = store.lastError {
                 errorBanner(error)
@@ -57,25 +60,6 @@ public struct RootView: View {
         } else {
             isPickingVault = true
         }
-    }
-
-    // MARK: Command palette
-
-    private var paletteOverlay: some View {
-        ZStack(alignment: .top) {
-            // Click-off dismissal, dimming the app behind the palette.
-            Color.black.opacity(0.35)
-                .ignoresSafeArea()
-                .onTapGesture { isPaletteVisible = false }
-
-            CommandPalette(
-                isPresented: $isPaletteVisible,
-                selection: $selection,
-                editorRequest: $editorRequest
-            )
-            .padding(.top, 80)
-        }
-        .transition(.opacity)
     }
 
     // MARK: Toolbar
