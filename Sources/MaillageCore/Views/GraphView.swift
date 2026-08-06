@@ -12,7 +12,11 @@ public struct GraphView: View {
     @Environment(VaultStore.self) private var store
     @Binding var selection: EntityID?
 
-    @State private var graphState = ForceDirectedGraphState()
+    // A perpetually running simulation re-renders at 60 fps and starves text input
+    // everywhere in the app, so settle the layout once on appear and stay idle.
+    @State private var graphState = ForceDirectedGraphState(
+        initialIsRunning: false,
+        ticksOnAppear: .untilStable)
 
     public init(selection: Binding<EntityID?>) {
         self._selection = selection
@@ -96,7 +100,11 @@ public struct GraphView: View {
                 .withGraphTapGesture(proxy, of: EntityID.self) { id in
                     selection = id
                 }
-                .withGraphDragGesture(proxy, of: EntityID.self)
+                // Dragging only takes effect while the simulation ticks, so run it for
+                // the duration of the drag and settle again on release.
+                .withGraphDragGesture(proxy, of: EntityID.self) { dragState in
+                    graphState.isRunning = dragState != nil
+                }
                 .withGraphMagnifyGesture(proxy)
         }
     }
