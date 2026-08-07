@@ -209,7 +209,13 @@ public struct SidebarRow: View {
 
 // MARK: - Section header
 
-/// Small uppercase label that groups sidebar and detail sections.
+/// Small uppercase label that groups sidebar and detail sections, with an optional count.
+///
+/// Sizes to its content rather than filling the width it's given, so the count sits beside the
+/// word it counts. It used to hold a `Spacer`, which pushed the count to the far right of
+/// whatever container it landed in — across a full-width details pane that left "REFERENCED BY"
+/// and its "2" at opposite ends of the window, reading as two unrelated things. A caller that
+/// genuinely wants the label to span adds its own `Spacer`; the sidebar is the one that does.
 public struct SectionHeader: View {
     private let title: String
     private let trailing: String?
@@ -220,12 +226,11 @@ public struct SectionHeader: View {
     }
 
     public var body: some View {
-        HStack {
+        HStack(spacing: Theme.Spacing.small) {
             Text(title.uppercased())
                 .font(Theme.Font.sectionHeader)
                 .tracking(0.6)
                 .foregroundStyle(Theme.textFaint)
-            Spacer()
             if let trailing {
                 Text(trailing)
                     .font(Theme.Font.caption)

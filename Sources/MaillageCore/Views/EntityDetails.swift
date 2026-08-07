@@ -59,9 +59,11 @@ private struct PersonDetailBody: View {
 
             // Outgoing: stored on this person's own file.
             VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-                HStack {
+                // The "+" sits beside the word "Relations", not at the far edge of the pane:
+                // it adds a relation, and a button a windowful away from the only label
+                // saying so doesn't look like it belongs to it.
+                HStack(spacing: Theme.Spacing.small) {
                     SectionHeader("Relations")
-                    Spacer()
                     Button {
                         editorRequest = .addRelation(person.id)
                     } label: {
@@ -99,8 +101,9 @@ private struct PersonDetailBody: View {
                                 selection = relation.to.id
                             }
 
-                            Spacer()
-
+                            // Follows the pill it removes rather than sitting at the pane's
+                            // right edge, where a column of "−" glyphs was stranded far from
+                            // the relations they belonged to.
                             Button {
                                 store.removeRelation(from: person.id, relation: relation)
                             } label: {
@@ -111,6 +114,8 @@ private struct PersonDetailBody: View {
                             .buttonStyle(.plain)
                             .clickableCursor()
                             .help("Remove this relation")
+
+                            Spacer(minLength: 0)
                         }
                     }
                 }

@@ -109,6 +109,10 @@ public struct SidebarView: View {
                     SectionHeader(
                         kind.displayName,
                         trailing: rows.isEmpty ? nil : "\(rows.count)")
+                    // Claims the rest of the row so the whole width folds the section, not
+                    // just the words — the count travels with the title rather than being
+                    // pushed out to meet the "+".
+                    Spacer(minLength: Theme.Spacing.xs)
                 }
                 .contentShape(Rectangle())
                 .onTapGesture { toggle(kind) }
