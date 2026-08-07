@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		000000000000000000000121 /* Grape in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000113 /* Grape */; };
 		000000000000000000000122 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000114 /* Yams */; };
 		000000000000000000000123 /* MaillageCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000C1 /* MaillageCore.framework */; };
 		000000000000000000000124 /* MaillageCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000C1 /* MaillageCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -61,7 +60,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				000000000000000000000121 /* Grape in Frameworks */,
 				000000000000000000000122 /* Yams in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -143,7 +141,6 @@
 			);
 			name = MaillageCore;
 			packageProductDependencies = (
-				000000000000000000000113 /* Grape */,
 				000000000000000000000114 /* Yams */,
 			);
 			productName = MaillageCore;
@@ -201,7 +198,6 @@
 			mainGroup = 0000000000000000000000A2;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				000000000000000000000111 /* XCRemoteSwiftPackageReference "Grape" */,
 				000000000000000000000112 /* XCRemoteSwiftPackageReference "Yams" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -473,14 +469,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		000000000000000000000111 /* XCRemoteSwiftPackageReference "Grape" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/swiftgraphs/Grape";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.1.0;
-			};
-		};
 		000000000000000000000112 /* XCRemoteSwiftPackageReference "Yams" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/jpsim/Yams";
@@ -492,11 +480,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		000000000000000000000113 /* Grape */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 000000000000000000000111 /* XCRemoteSwiftPackageReference "Grape" */;
-			productName = Grape;
-		};
 		000000000000000000000114 /* Yams */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 000000000000000000000112 /* XCRemoteSwiftPackageReference "Yams" */;

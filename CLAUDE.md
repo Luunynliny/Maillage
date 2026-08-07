@@ -12,7 +12,6 @@ as a force-directed graph clustered by employer.
 | Build | Two paths — SwiftPM for tests, `maillage.xcodeproj` for running (see Building) |
 | State | `@Observable` + `@MainActor` `VaultStore`, injected via `.environment(store)` |
 | Tests | Swift Testing (`@Test`, `@Suite`, `#expect`, `#require`) — **not** XCTest |
-| Graph | [Grape](https://github.com/swiftgraphs/Grape) (MIT) |
 | YAML | [Yams](https://github.com/jpsim/Yams) (MIT) |
 
 Swift is a hard requirement: a later phase captures macOS system audio via Core Audio process
@@ -65,12 +64,17 @@ Sources/MaillageCore/
 └── Views/      RootView, SidebarView, CenterPane, DetailView, Editors, CommandPalette, VaultPicker
 ```
 
-The centre pane picks its representation from what's selected, since the three questions have
-different shapes: a **person** (or nothing) gets `PeopleGraphView`, the force graph, clustered by
-employer — irregular person↔person topology is the one thing a force layout is for. An
-**organization** gets `OrganizationBoardView`, and a **project** gets `ProjectRosterView`; both
-are containment hierarchies where every edge would mean "belongs to", so they are laid out
-deterministically instead of simulated.
+The centre pane picks its representation from what's selected, since each selection is a different
+question: **nothing** gets `OrganizationBubblesView` (one circle per employer, headcount inside,
+area ∝ headcount), an **organization** gets `OrganizationRingView` (its people in arcs by project,
+relations bundled through the centre), a **person** gets `EgoGraphView` (them centred, direct
+relations as labelled spokes), and a **project** gets `ProjectRosterView`.
+
+All four are **laid out from computed geometry, never simulated** — `Views/GraphGeometry.swift`
+holds the shared pieces and each view its own layout struct (`BubblePacking`, `RingLayout`,
+`EgoLayout`), all unit-tested without a window. That is why there is no graph library in the stack
+table: a force layout settles somewhere slightly different on every launch, and "Acme is the big
+one in the middle" has to stay true between launches to be worth reading.
 
 The app target is a thin `@main` shell; everything testable lives in `MaillageCore`.
 
