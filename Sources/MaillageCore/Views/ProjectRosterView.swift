@@ -4,13 +4,15 @@ import SwiftUI
 ///
 /// A table rather than a graph: the payload is one role string per participant, and a role
 /// read down an aligned column is legible in a way an 11pt label on a moving edge is not.
-/// Display-only — roles are typed in the project's detail pane, so there is one place to
-/// edit them.
+/// Display-only — the roster is staffed in the project's editor, so a partly filled roster
+/// never reaches the vault.
 struct ProjectRosterView: View {
     @Environment(VaultStore.self) private var store
 
     let project: Project
     @Binding var selection: EntityID?
+    /// So the empty state can open the editor, which is where staffing happens.
+    @Binding var editorRequest: EditorRequest?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,7 +26,9 @@ struct ProjectRosterView: View {
                     icon: "person.2",
                     title: "No participants yet",
                     message:
-                        "Add \(project.displayName) to someone's profile and they'll show up here with their role."
+                        "Edit \(project.displayName) to add people and say what each of them does on it.",
+                    actionTitle: "Add people…",
+                    action: { editorRequest = .edit(project.id) }
                 )
             } else {
                 roster

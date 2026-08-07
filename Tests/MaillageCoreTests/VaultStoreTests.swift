@@ -225,17 +225,16 @@ struct VaultStoreTests {
 
     /// A role belongs to the membership, so it is written to the person's file and the
     /// project file learns nothing about its roster.
-    @Test("Setting a project role writes only the person's file")
-    func setsProjectRole() throws {
+    @Test("A project role is written to the person's file, not the project's")
+    func storesRoleOnThePerson() throws {
         let (store, root) = try makeStore()
         defer { cleanUp(root) }
 
         let project = try #require(store.createProject(name: "Maillage"))
-        var marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
-        marie.projects = [ProjectMembership(to: project.id)]
-        #expect(store.update(marie))
+        let marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
 
-        #expect(store.setProjectRole(person: marie.id, project: project.id, role: "Lead"))
+        #expect(
+            store.setParticipants(ofProject: project.id, to: [(person: marie.id, role: "Lead")]))
 
         let participants = store.participants(ofProject: project.id)
         #expect(participants.map(\.person.id) == [marie.id])
@@ -250,7 +249,8 @@ struct VaultStoreTests {
         #expect(!projectFile.contains("Lead"))
     }
 
-    @Test("A blank role clears the stored one")
+    /// The editor hands over whatever is in the field, so blanks are the store's to reject.
+    @Test("A blank role clears the stored one but keeps the membership")
     func clearsProjectRole() throws {
         let (store, root) = try makeStore()
         defer { cleanUp(root) }
@@ -260,24 +260,106 @@ struct VaultStoreTests {
         marie.projects = [ProjectMembership(to: project.id, role: "Lead")]
         #expect(store.update(marie))
 
-        #expect(store.setProjectRole(person: marie.id, project: project.id, role: "   "))
+        #expect(
+            store.setParticipants(ofProject: project.id, to: [(person: marie.id, role: "   ")]))
         #expect(store.participants(ofProject: project.id).first?.role == nil)
-        // Still on the project — only the role went away.
         #expect(store.members(ofProject: project.id).map(\.id) == [marie.id])
     }
 
-    /// Nothing to hang a role on when there is no membership, so the write is refused
-    /// rather than silently inventing one.
-    @Test("Setting a role on a project someone isn't on fails")
-    func rejectsRoleWithoutMembership() throws {
+    /// What the project editor saves: it knows the intended roster, not which entries moved.
+    @Test("Setting a roster adds, updates and removes memberships to match")
+    func setsParticipants() throws {
         let (store, root) = try makeStore()
         defer { cleanUp(root) }
 
         let project = try #require(store.createProject(name: "Maillage"))
-        let marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
+        var marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
+        marie.projects = [ProjectMembership(to: project.id, role: "Reviewer")]
+        #expect(store.update(marie))
+        let jean = try #require(store.createPerson(firstname: "Jean", lastname: "Martin"))
+        var alice = try #require(store.createPerson(firstname: "Alice", lastname: "Roy"))
+        alice.projects = [ProjectMembership(to: project.id, role: "Lead")]
+        #expect(store.update(alice))
 
-        #expect(!store.setProjectRole(person: marie.id, project: project.id, role: "Lead"))
+        // Marie's role changes, Jean joins, Alice is dropped.
+        #expect(
+            store.setParticipants(
+                ofProject: project.id,
+                to: [(person: marie.id, role: "Lead"), (person: jean.id, role: nil)]))
+
+        let participants = store.participants(ofProject: project.id)
+        #expect(participants.map(\.person.id) == [jean.id, marie.id])
+        #expect(participants.first { $0.person.id == marie.id }?.role == "Lead")
+        #expect(participants.first { $0.person.id == jean.id }?.role == nil)
+        #expect(store.snapshot.people[alice.id]?.projects.isEmpty == true)
+
+        // Still nothing about the roster on the project's own file.
+        let projectFile = try String(
+            contentsOf: root.appendingPathComponent("projects/maillage.md"), encoding: .utf8)
+        #expect(!projectFile.contains("marie-dupont"))
+    }
+
+    /// Saving a project sets its whole roster, so an unchanged person must not have their
+    /// file rewritten just for being on it.
+    @Test("Setting an unchanged roster rewrites nobody")
+    func setParticipantsSkipsUnchanged() throws {
+        let (store, root) = try makeStore()
+        defer { cleanUp(root) }
+
+        let project = try #require(store.createProject(name: "Maillage"))
+        var marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
+        marie.projects = [ProjectMembership(to: project.id, role: "Lead")]
+        #expect(store.update(marie))
+
+        let file = root.appendingPathComponent("people/marie-dupont.md")
+        let before = try #require(
+            try FileManager.default.attributesOfItem(atPath: file.path)[.modificationDate] as? Date)
+
+        #expect(
+            store.setParticipants(ofProject: project.id, to: [(person: marie.id, role: "Lead")]))
+
+        let after = try #require(
+            try FileManager.default.attributesOfItem(atPath: file.path)[.modificationDate] as? Date)
+        #expect(before == after)
+    }
+
+    /// A project nobody is on: the roster still has to clear, or removing the last person
+    /// would silently leave them attached.
+    @Test("Setting an empty roster clears every membership")
+    func setParticipantsToEmpty() throws {
+        let (store, root) = try makeStore()
+        defer { cleanUp(root) }
+
+        let project = try #require(store.createProject(name: "Maillage"))
+        var marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
+        marie.projects = [ProjectMembership(to: project.id, role: "Lead")]
+        #expect(store.update(marie))
+
+        #expect(store.setParticipants(ofProject: project.id, to: []))
+        #expect(store.participants(ofProject: project.id).isEmpty)
         #expect(store.snapshot.people[marie.id]?.projects.isEmpty == true)
+    }
+
+    /// Someone on two projects must keep the other one when a roster is applied.
+    @Test("Setting a roster leaves other projects alone")
+    func setParticipantsLeavesOtherProjects() throws {
+        let (store, root) = try makeStore()
+        defer { cleanUp(root) }
+
+        let maillage = try #require(store.createProject(name: "Maillage"))
+        let atlas = try #require(store.createProject(name: "Atlas"))
+        var marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
+        marie.projects = [
+            ProjectMembership(to: maillage.id, role: "Lead"),
+            ProjectMembership(to: atlas.id, role: "Reviewer"),
+        ]
+        #expect(store.update(marie))
+
+        #expect(store.setParticipants(ofProject: maillage.id, to: []))
+
+        #expect(
+            store.snapshot.people[marie.id]?.projects
+                == [ProjectMembership(to: atlas.id, role: "Reviewer")])
     }
 
     @Test("Project roles are derived from use, most-used first")

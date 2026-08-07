@@ -19,7 +19,7 @@ public struct RootView: View {
             SidebarView(selection: $selection, editorRequest: $editorRequest)
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 340)
         } content: {
-            CenterPane(selection: $selection)
+            CenterPane(selection: $selection, editorRequest: $editorRequest)
                 .navigationSplitViewColumnWidth(min: 320, ideal: 520)
         } detail: {
             DetailView(selection: $selection, editorRequest: $editorRequest)

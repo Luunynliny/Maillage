@@ -296,23 +296,48 @@ public final class VaultStore {
         return persist(person)
     }
 
-    /// Sets what `personID` does on `projectID`, or clears it when `role` is blank.
+    /// Makes `projectID`'s roster exactly `participants`, adding, updating and removing
+    /// memberships to match.
     ///
-    /// Only the person's file is written — the project file stores nothing about its
-    /// roster. Does nothing if the person is not on the project: a role is a property of
-    /// the membership, so there is nothing to hang it on.
+    /// The mirror image of ``participants(ofProject:)``, and what the project editor saves:
+    /// that sheet knows the whole intended roster, not which individual entries moved.
+    /// Membership still lives on the person, so this writes people's files and never the
+    /// project's — only those whose entry actually changed, so saving a project without
+    /// touching its people rewrites nothing.
     @discardableResult
-    public func setProjectRole(
-        person personID: EntityID, project projectID: EntityID, role: String?
+    public func setParticipants(
+        ofProject projectID: EntityID, to participants: [(person: EntityID, role: String?)]
     ) -> Bool {
-        guard var person = snapshot.people[personID],
-            let index = person.projects.firstIndex(where: { $0.to.id == projectID })
-        else { return false }
+        let roster = Set(participants.map(\.person))
+        var roles: [EntityID: String] = [:]
+        for participant in participants {
+            if let role = participant.role?.nilIfBlank { roles[participant.person] = role }
+        }
 
-        let trimmed = role?.nilIfBlank
-        guard person.projects[index].role != trimmed else { return true }
-        person.projects[index].role = trimmed
-        return persist(person)
+        var succeeded = true
+        // Snapshotted first: `persist` mutates `snapshot.people` inside the loop.
+        for personID in Array(snapshot.people.keys) {
+            guard var person = snapshot.people[personID] else { continue }
+            let index = person.projects.firstIndex { $0.to.id == projectID }
+
+            if roster.contains(personID) {
+                if let index {
+                    guard person.projects[index].role != roles[personID] else { continue }
+                    person.projects[index].role = roles[personID]
+                } else {
+                    person.projects.append(
+                        ProjectMembership(to: projectID, role: roles[personID]))
+                }
+            } else {
+                guard index != nil else { continue }
+                // Drops the role with the membership — a role only means something as part
+                // of one.
+                person.projects.removeAll { $0.to.id == projectID }
+            }
+
+            if !persist(person) { succeeded = false }
+        }
+        return succeeded
     }
 
     /// Fills in a placeholder person's real name and renames their file, rewriting

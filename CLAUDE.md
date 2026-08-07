@@ -27,7 +27,7 @@ Two build systems describe the same sources, deliberately. Pick by what you're d
 
 | Task | Use | Why |
 |---|---|---|
-| Tests, quick compile check | `rtk swift test` | ~0.1s. Xcode's runner takes ~80s for the same 40 tests |
+| Tests, quick compile check | `rtk swift test` | ~0.1s. Xcode's runner takes ~80s for the same 43 tests |
 | Running, debugging, breakpoints | `open maillage.xcodeproj` → scheme **Maillage** → ⌘R | Only path that produces a real `.app` |
 
 `maillage.xcodeproj` has two targets mirroring the package: `MaillageCore.framework` and
@@ -126,6 +126,11 @@ These are invariants, not preferences — the tests enforce most of them.
   bare `"[[id]]"` until a role is set, then a `to:`/`role:` mapping — so adding a role rewrites
   one person's file and nothing else. Free text, and the vocabulary offered back is derived from
   use (`VaultStore.usedProjectRoles`), like relation labels.
+- **Membership is edited in the editor sheets, never inline in a pane.** Both ends offer it —
+  `ProjectEditor` staffs a project, `PersonEditor` picks a person's projects — and both apply on
+  save, so an abandoned sheet writes nothing. `VaultStore.setParticipants(ofProject:to:)` takes
+  the whole intended roster and writes only the people whose entry actually changed. Detail and
+  centre panes are display-only.
 - **The filename is the identity.** `id` is the filename slug and the only link target;
   frontmatter `id` disagreeing with the filename loses. Renaming therefore *must* go through
   `VaultWriter.rename`, which rewrites every inbound `[[id]]`.

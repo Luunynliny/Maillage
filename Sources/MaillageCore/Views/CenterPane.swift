@@ -17,6 +17,8 @@ import SwiftUI
 struct CenterPane: View {
     @Environment(VaultStore.self) private var store
     @Binding var selection: EntityID?
+    /// Passed down so an empty view can offer the editor that fills it.
+    @Binding var editorRequest: EditorRequest?
 
     var body: some View {
         ZStack {
@@ -26,7 +28,8 @@ struct CenterPane: View {
             case .organization(let organization):
                 OrganizationBoardView(organization: organization, selection: $selection)
             case .project(let project):
-                ProjectRosterView(project: project, selection: $selection)
+                ProjectRosterView(
+                    project: project, selection: $selection, editorRequest: $editorRequest)
             // A person, or nothing selected yet: the network is the sensible default,
             // since it's the only view that stands on its own without a subject.
             case .person, nil:

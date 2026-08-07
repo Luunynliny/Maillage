@@ -370,22 +370,30 @@ private struct ProjectDetailBody: View {
                 SectionHeader(
                     "People", trailing: participants.isEmpty ? nil : "\(participants.count)")
                 if participants.isEmpty {
-                    Text("Nobody is linked to this project yet.")
+                    Text("Nobody is linked to this project yet — add people by editing it.")
                         .font(Theme.Font.caption)
                         .foregroundStyle(Theme.textFaint)
                 } else {
-                    // The one place a role is typed. It is stored on the person, so this
-                    // writes their file, not the project's.
-                    ForEach(participants, id: \.person.id) { participant in
-                        ParticipantRoleRow(
-                            person: participant.person,
-                            role: participant.role,
-                            projectID: project.id,
-                            selection: $selection)
-                    }
+                    // Display only: staffing happens in the editor, so the detail pane has
+                    // no half-committed state to reconcile. The role rides in the pill.
+                    PillCloud(
+                        items: participants.map { participant in
+                            (
+                                participant.person.id,
+                                participantLabel(participant),
+                                Theme.color(for: participant.person)
+                            )
+                        },
+                        selection: $selection)
                 }
             }
         }
+    }
+
+    /// `Marie Dupont · Lead`, or just the name when no role is recorded.
+    private func participantLabel(_ participant: (person: Person, role: String?)) -> String {
+        guard let role = participant.role?.nilIfBlank else { return participant.person.displayName }
+        return "\(participant.person.displayName) · \(role)"
     }
 
     /// Status is always present, so this list never collapses to nothing.
@@ -397,90 +405,6 @@ private struct ProjectDetailBody: View {
             items.append(.init("Added", value: created.description))
         }
         return items
-    }
-}
-
-// MARK: - Participant role
-
-/// One project participant and what they do on it, with the role editable in place.
-///
-/// The role is stored on the *person's* project entry, so committing writes their file and
-/// leaves the project's untouched — the same one-way discipline relations follow. Editing
-/// happens here rather than in the centre roster so there is exactly one place to type it.
-private struct ParticipantRoleRow: View {
-    @Environment(VaultStore.self) private var store
-
-    let person: Person
-    let role: String?
-    let projectID: EntityID
-    @Binding var selection: EntityID?
-
-    /// Local while typing; committed on Return or when focus leaves, so a save doesn't
-    /// fire on every keystroke.
-    @State private var draft = ""
-    @FocusState private var isEditing: Bool
-
-    var body: some View {
-        HStack(spacing: Theme.Spacing.small) {
-            Pill(person.displayName, color: Theme.color(for: person)) {
-                selection = person.id
-            }
-
-            Spacer(minLength: 0)
-
-            TextField("", text: $draft)
-                .textFieldStyle(.plain)
-                .font(Theme.Font.body)
-                .foregroundStyle(Theme.textNormal)
-                .multilineTextAlignment(.trailing)
-                .placeholder(
-                    "Add a role", isVisible: draft.isEmpty && !isEditing,
-                    alignment: .trailing)
-                .focused($isEditing)
-                .onSubmit(commit)
-                .frame(maxWidth: 150)
-                .padding(.horizontal, Theme.Spacing.small)
-                .padding(.vertical, 4)
-                .background(isEditing ? Theme.bgPrimary : .clear)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.Radius.medium)
-                        .stroke(isEditing ? Theme.border : .clear, lineWidth: Theme.hairline)
-                )
-                .onChange(of: isEditing) { if !isEditing { commit() } }
-
-            if !suggestions.isEmpty, isEditing {
-                Menu {
-                    ForEach(suggestions, id: \.self) { suggestion in
-                        Button(suggestion) {
-                            draft = suggestion
-                            commit()
-                        }
-                    }
-                } label: {
-                    Image(systemName: "chevron.down")
-                        .font(Theme.Font.caption)
-                        .foregroundStyle(Theme.textFaint)
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .help("Roles you've used before")
-            }
-        }
-        // Seeded here rather than in `init` so an external change — a rename, a reload —
-        // is picked up instead of being overwritten by a stale draft.
-        .onAppear { draft = role ?? "" }
-        .onChange(of: role) { if !isEditing { draft = role ?? "" } }
-    }
-
-    /// Roles already used in the vault, minus the one already shown.
-    private var suggestions: [String] {
-        store.usedProjectRoles.filter { $0 != draft }
-    }
-
-    private func commit() {
-        store.setProjectRole(person: person.id, project: projectID, role: draft)
     }
 }
 

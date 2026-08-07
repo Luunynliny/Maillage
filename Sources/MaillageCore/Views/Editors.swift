@@ -173,12 +173,13 @@ struct PersonEditor: View {
                     prompt: "Search organizations",
                     limit: 1)
 
-                MultiSelectField(
-                    label: "Projects",
-                    options: store.allProjects.map { ($0.id, $0.displayName) },
+                // Carries a role per project, the same pairing the project editor shows from
+                // the other side — one membership, editable from either end.
+                ProjectMembershipsField(
+                    projects: store.allProjects,
                     selected: $projects,
-                    color: Theme.projectColor,
-                    prompt: "Search projects")
+                    roles: $projectRoles,
+                    known: store.usedProjectRoles)
 
                 NotesField(text: $notes)
             }
@@ -222,8 +223,9 @@ struct PersonEditor: View {
 
     private func save() {
         let orgLink = organizations.sorted().first.map(Wikilink.init)
+        // `nilIfBlank`, so a role cleared in the field is dropped rather than written as "".
         let memberships = projects.sorted().map {
-            ProjectMembership(to: $0, role: projectRoles[$0])
+            ProjectMembership(to: $0, role: projectRoles[$0]?.nilIfBlank)
         }
 
         if var person = existing {
@@ -335,6 +337,9 @@ struct ProjectEditor: View {
     @State private var status: ProjectStatus = .active
     @State private var organizations: Set<EntityID> = []
     @State private var notes = ""
+    /// The intended roster. Applied on save, so an abandoned sheet changes nobody's file.
+    @State private var participants: Set<EntityID> = []
+    @State private var roles: [EntityID: String] = [:]
 
     var body: some View {
         EditorSheet(
@@ -367,29 +372,53 @@ struct ProjectEditor: View {
                     color: Theme.organizationColor,
                     prompt: "Search organizations")
 
+                // Staffing the project is part of describing it, so it happens here rather
+                // than one person at a time from their profiles. Written to the people's
+                // files on save — the project file never lists its roster.
+                ParticipantsField(
+                    people: store.allPeople,
+                    selected: $participants,
+                    roles: $roles,
+                    known: store.usedProjectRoles)
+
                 NotesField(text: $notes, title: "Description")
             }
         }
-        .onAppear {
-            guard let existing else { return }
-            name = existing.name
-            status = existing.status
-            organizations = Set(existing.organizations.map(\.id))
-            notes = existing.body
+        .onAppear(perform: populate)
+    }
+
+    private func populate() {
+        guard let existing else { return }
+        name = existing.name
+        status = existing.status
+        organizations = Set(existing.organizations.map(\.id))
+        notes = existing.body
+
+        let roster = store.participants(ofProject: existing.id)
+        participants = Set(roster.map(\.person.id))
+        roles = roster.reduce(into: [:]) { roles, entry in
+            if let role = entry.role { roles[entry.person.id] = role }
         }
     }
 
     private func save() {
         let orgLinks = organizations.sorted().map(Wikilink.init)
+        // Sorted so the writes are deterministic, which keeps them diffable in git.
+        let roster = participants.sorted().map { (person: $0, role: roles[$0]?.nilIfBlank) }
+
         if var project = existing {
             project.name = name
             project.status = status
             project.organizations = orgLinks
             project.body = notes
-            if store.update(project) { onSaved(project.id) }
+            if store.update(project) {
+                store.setParticipants(ofProject: project.id, to: roster)
+                onSaved(project.id)
+            }
         } else if let created = store.createProject(
             name: name, status: status, organizations: orgLinks, body: notes)
         {
+            store.setParticipants(ofProject: created.id, to: roster)
             onSaved(created.id)
         }
         dismiss()
@@ -672,6 +701,223 @@ struct MultiSelectField: View {
         }
         selected.insert(id)
         search = ""
+    }
+}
+
+/// Picks entities and gives each a role, for the two ends of project membership.
+///
+/// Search-first like ``MultiSelectField``, but a pick becomes a row rather than a pill,
+/// because it carries a second field. Roles are held as a plain `[EntityID: String]` the
+/// caller owns, so nothing is written until the sheet is saved — a half-filled roster in an
+/// unsaved editor must not reach the vault.
+struct RoleAssignmentField: View {
+    /// Everything pickable, in display order.
+    let options: [(id: EntityID, title: String, color: Color, isPlaceholder: Bool)]
+    let label: String
+    let prompt: String
+    /// Shown in place of the control when there is nothing to pick.
+    let emptyMessage: String
+    @Binding var selected: Set<EntityID>
+    /// Role per entity. Entries for unselected ids are kept, so removing something and
+    /// adding it back keeps the role it had.
+    @Binding var roles: [EntityID: String]
+    /// Roles already used in the vault, offered as shortcuts.
+    let known: [String]
+
+    @State private var search = ""
+    @State private var isSearchFocused = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Text(label)
+                .font(Theme.Font.caption)
+                .foregroundStyle(Theme.textMuted)
+
+            if options.isEmpty {
+                Text(emptyMessage)
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.textFaint)
+            } else {
+                if !selectedOptions.isEmpty {
+                    VStack(spacing: Theme.Spacing.xs) {
+                        ForEach(selectedOptions, id: \.id) { option in
+                            row(option)
+                        }
+                    }
+                }
+
+                SearchField(
+                    prompt,
+                    text: $search,
+                    isFocused: $isSearchFocused,
+                    onSubmit: addFirstMatch)
+
+                if isSearchFocused || !search.isEmpty {
+                    optionList
+                }
+            }
+        }
+    }
+
+    /// One pick: what it is, the role on it, and a way off the list.
+    private func row(_ option: (id: EntityID, title: String, color: Color, isPlaceholder: Bool))
+        -> some View
+    {
+        HStack(spacing: Theme.Spacing.small) {
+            Pill(option.title, color: option.color, icon: "xmark") {
+                selected.remove(option.id)
+            }
+
+            Spacer(minLength: 0)
+
+            RoleField(
+                role: Binding(
+                    get: { roles[option.id] ?? "" },
+                    set: { roles[option.id] = $0 }),
+                known: known)
+        }
+    }
+
+    private var optionList: some View {
+        ScrollView {
+            VStack(spacing: 1) {
+                if matches.isEmpty {
+                    Text("No matches")
+                        .font(Theme.Font.caption)
+                        .foregroundStyle(Theme.textFaint)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, Theme.Spacing.small)
+                        .padding(.vertical, 5)
+                } else {
+                    ForEach(matches, id: \.id) { option in
+                        SidebarRow(
+                            title: option.title,
+                            dotColor: option.color,
+                            isSelected: false,
+                            isPlaceholder: option.isPlaceholder
+                        ) {
+                            selected.insert(option.id)
+                            search = ""
+                        }
+                    }
+                }
+            }
+            .padding(Theme.Spacing.xs)
+        }
+        .frame(maxHeight: 108)
+        .background(Theme.bgPrimary)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.medium)
+                .stroke(Theme.border, lineWidth: Theme.hairline)
+        )
+    }
+
+    /// In `options` order, so rows don't reshuffle as roles are typed.
+    private var selectedOptions: [(id: EntityID, title: String, color: Color, isPlaceholder: Bool)] {
+        options.filter { selected.contains($0.id) }
+    }
+
+    private var matches: [(id: EntityID, title: String, color: Color, isPlaceholder: Bool)] {
+        options.filter {
+            !selected.contains($0.id)
+                && (search.isEmpty || $0.title.localizedCaseInsensitiveContains(search))
+        }
+    }
+
+    private func addFirstMatch() {
+        guard let first = matches.first else { return }
+        selected.insert(first.id)
+        search = ""
+    }
+}
+
+/// Staffs a project from the project's side.
+struct ParticipantsField: View {
+    let people: [Person]
+    @Binding var selected: Set<EntityID>
+    @Binding var roles: [EntityID: String]
+    let known: [String]
+
+    var body: some View {
+        RoleAssignmentField(
+            options: people.map {
+                ($0.id, $0.displayName, Theme.color(for: $0), $0.placeholder)
+            },
+            label: "People",
+            prompt: "Search people",
+            emptyMessage: "No people in the vault yet — add some and you can staff this here.",
+            selected: $selected,
+            roles: $roles,
+            known: known)
+    }
+}
+
+/// The same memberships from the person's side.
+struct ProjectMembershipsField: View {
+    let projects: [Project]
+    @Binding var selected: Set<EntityID>
+    @Binding var roles: [EntityID: String]
+    let known: [String]
+
+    var body: some View {
+        RoleAssignmentField(
+            options: projects.map { ($0.id, $0.displayName, Theme.projectColor, false) },
+            label: "Projects",
+            prompt: "Search projects",
+            emptyMessage: "No projects in the vault yet.",
+            selected: $selected,
+            roles: $roles,
+            known: known)
+    }
+}
+
+/// A free-text role with the vault's existing vocabulary behind a chevron.
+///
+/// Same reasoning as ``LabelField``: typing is the primary action and the suggestions are a
+/// shortcut, so this is a plain field rather than a picker. The menu only appears once
+/// something has been typed before, so a fresh vault shows no empty affordance.
+struct RoleField: View {
+    @Binding var role: String
+    let known: [String]
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.xs) {
+            TextField("", text: $role)
+                .textFieldStyle(.plain)
+                .font(Theme.Font.body)
+                .foregroundStyle(Theme.textNormal)
+                .placeholder("Role", isVisible: role.isEmpty)
+                .frame(width: 130)
+                .padding(.horizontal, Theme.Spacing.small)
+                .padding(.vertical, 4)
+                .background(Theme.bgPrimary)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.Radius.medium)
+                        .stroke(Theme.border, lineWidth: Theme.hairline)
+                )
+
+            if !suggestions.isEmpty {
+                Menu {
+                    ForEach(suggestions, id: \.self) { suggestion in
+                        Button(suggestion) { role = suggestion }
+                    }
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(Theme.Font.caption)
+                        .foregroundStyle(Theme.textFaint)
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Roles you've used before")
+            }
+        }
+    }
+
+    private var suggestions: [String] {
+        known.filter { $0 != role }
     }
 }
 
