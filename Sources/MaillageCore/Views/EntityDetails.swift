@@ -83,6 +83,21 @@ private struct PersonDetailBody: View {
                 } else {
                     ForEach(person.relations) { relation in
                         HStack(spacing: Theme.Spacing.small) {
+                            // Leads the row rather than trailing the pill. Pills are as wide
+                            // as the name inside them, so a button after one landed at a
+                            // different x on every line — a ragged column of "−" glyphs.
+                            // First position is the only one that lines them all up.
+                            Button {
+                                store.removeRelation(from: person.id, relation: relation)
+                            } label: {
+                                Image(systemName: "minus.circle")
+                                    .font(Theme.Font.caption)
+                                    .foregroundStyle(Theme.textFaint)
+                            }
+                            .buttonStyle(.plain)
+                            .clickableCursor()
+                            .help("Remove this relation")
+
                             Text(relation.label)
                                 .font(Theme.Font.caption)
                                 .foregroundStyle(Theme.textMuted)
@@ -100,20 +115,6 @@ private struct PersonDetailBody: View {
                             ) {
                                 selection = relation.to.id
                             }
-
-                            // Follows the pill it removes rather than sitting at the pane's
-                            // right edge, where a column of "−" glyphs was stranded far from
-                            // the relations they belonged to.
-                            Button {
-                                store.removeRelation(from: person.id, relation: relation)
-                            } label: {
-                                Image(systemName: "minus.circle")
-                                    .font(Theme.Font.caption)
-                                    .foregroundStyle(Theme.textFaint)
-                            }
-                            .buttonStyle(.plain)
-                            .clickableCursor()
-                            .help("Remove this relation")
 
                             Spacer(minLength: 0)
                         }
