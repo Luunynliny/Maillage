@@ -107,15 +107,20 @@ struct OrganizationBoardView: View {
                 Spacer(minLength: 0)
             }
 
+            // No role line here on purpose. These people hold no role *on a project*, and
+            // the profile role sits in the same slot the project cards use for one — so
+            // showing "Dev" here would read as a project role rather than a job title.
             ForEach(unassigned) { person in
-                memberRow(person, role: person.role, isOutsider: false)
+                memberRow(person, role: nil, isOutsider: false)
             }
         }
         .frame(width: 240)
     }
 
-    /// One person on a card: their name, and what they do — the project role where there
-    /// is one, otherwise the role from their profile.
+    /// One person on a card: their name, and the role they hold **on that project** if any.
+    ///
+    /// Only ever a project role. A person's `role` is their job title, which means something
+    /// different, and putting the two in the same slot would make them indistinguishable.
     private func memberRow(_ person: Person, role: String?, isOutsider: Bool) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: Theme.Spacing.xs) {
