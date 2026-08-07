@@ -11,6 +11,11 @@ public struct RootView: View {
     @State private var editorRequest: EditorRequest?
     @State private var isPaletteVisible = false
     @State private var isPickingVault = false
+    /// Whether the detail column is showing. The leading column gets a toggle from
+    /// `NavigationSplitView` for free, but the detail column gets none —
+    /// `NavigationSplitViewVisibility` only ever collapses columns from the left — so
+    /// hiding it is this view's own state. See ``detailToggle``.
+    @State private var isDetailVisible = true
 
     public init() {}
 
@@ -22,10 +27,18 @@ public struct RootView: View {
             CenterPane(selection: $selection, editorRequest: $editorRequest)
                 .navigationSplitViewColumnWidth(min: 320, ideal: 520)
         } detail: {
-            DetailView(selection: $selection, editorRequest: $editorRequest)
-                .navigationSplitViewColumnWidth(min: 300, ideal: 380, max: 560)
+            if isDetailVisible {
+                DetailView(selection: $selection, editorRequest: $editorRequest)
+                    .navigationSplitViewColumnWidth(min: 300, ideal: 380, max: 560)
+            } else {
+                // Width zero rather than an absent column: the `detail` closure has to
+                // return something, and a collapsed column hands its width to the centre
+                // pane, which is what makes the graph grow into the freed space.
+                Color.clear.navigationSplitViewColumnWidth(0)
+            }
         }
         .navigationTitle("")
+        .toolbar { detailToggle }
         .toolbarBackground(Theme.bgSecondary, for: .windowToolbar)
         .background(Theme.bgPrimary)
         .sheet(item: $editorRequest) { request in
@@ -45,10 +58,32 @@ public struct RootView: View {
         .onAppear(perform: start)
         .focusedSceneValue(\.editorRequest, $editorRequest)
         .focusedSceneValue(\.isPaletteVisible, $isPaletteVisible)
+        .focusedSceneValue(\.isDetailVisible, $isDetailVisible)
         .overlay(alignment: .bottom) {
             if let error = store.lastError {
                 errorBanner(error)
             }
+        }
+    }
+
+    // MARK: Detail toggle
+
+    /// Hides and shows the detail column, mirroring the sidebar toggle AppKit installs at
+    /// the leading edge.
+    ///
+    /// Deliberately the same `sidebar.right` glyph Xcode and Mail use for their inspectors,
+    /// and pinned to `.primaryAction` so it lands at the trailing edge — the two toggles then
+    /// sit at opposite ends of the toolbar, each next to the pane it controls.
+    @ToolbarContentBuilder
+    private var detailToggle: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            Button {
+                isDetailVisible.toggle()
+            } label: {
+                Image(systemName: "sidebar.right")
+            }
+            .help(isDetailVisible ? "Hide details" : "Show details")
+            .clickableCursor()
         }
     }
 
@@ -261,6 +296,11 @@ public struct PaletteFocusKey: FocusedValueKey {
     public typealias Value = Binding<Bool>
 }
 
+/// Same idea for ⌥⌘0, the detail column's toggle.
+public struct DetailVisibleFocusKey: FocusedValueKey {
+    public typealias Value = Binding<Bool>
+}
+
 extension FocusedValues {
     public var editorRequest: Binding<EditorRequest?>? {
         get { self[EditorRequestFocusKey.self] }
@@ -270,6 +310,11 @@ extension FocusedValues {
     public var isPaletteVisible: Binding<Bool>? {
         get { self[PaletteFocusKey.self] }
         set { self[PaletteFocusKey.self] = newValue }
+    }
+
+    public var isDetailVisible: Binding<Bool>? {
+        get { self[DetailVisibleFocusKey.self] }
+        set { self[DetailVisibleFocusKey.self] = newValue }
     }
 }
 

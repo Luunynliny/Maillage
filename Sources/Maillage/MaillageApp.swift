@@ -9,6 +9,7 @@ struct MaillageApp: App {
     /// Bound from the focused window so menu commands can open its sheets.
     @FocusedBinding(\.editorRequest) private var editorRequest
     @FocusedBinding(\.isPaletteVisible) private var isPaletteVisible
+    @FocusedBinding(\.isDetailVisible) private var isDetailVisible
 
     var body: some Scene {
         WindowGroup("maillage") {
@@ -35,7 +36,16 @@ struct MaillageApp: App {
                     .keyboardShortcut("k")
             }
 
+            // Beside the system's "Show Sidebar" item, since it toggles the pane at the
+            // other end of the window. ⌥⌘0 pairs with the ⌃⌘S macOS gives the sidebar.
             CommandGroup(after: .sidebar) {
+                Button(isDetailVisible == false ? "Show Details" : "Hide Details") {
+                    isDetailVisible?.toggle()
+                }
+                .keyboardShortcut("0", modifiers: [.option, .command])
+                .disabled(isDetailVisible == nil)
+
+                Divider()
                 Button("Reload Vault") { store.load() }
                     .keyboardShortcut("r")
                 Button("Reveal Vault in Finder") {
