@@ -118,8 +118,12 @@ struct PersonEditor: View {
     @State private var role = ""
     @State private var descriptor = ""
     @State private var notes = ""
+    /// Holds at most one — see the `limit: 1` on its field.
     @State private var organizations: Set<EntityID> = []
     @State private var projects: Set<EntityID> = []
+    /// Roles already recorded per project, kept aside so saving this sheet — which only
+    /// edits *which* projects — never discards what the person does on them.
+    @State private var projectRoles: [EntityID: String] = [:]
     /// Live placeholder state, seeded from ``isPlaceholder`` on appear.
     @State private var isBlank = false
 
@@ -160,12 +164,14 @@ struct PersonEditor: View {
                 // learn about them, and for a placeholder it's the one thing you know.
                 FormField("Role", placeholder: "Head of Engineering", text: $role)
 
+                // One employer at a time, so picking a second replaces the first.
                 MultiSelectField(
-                    label: "Organizations",
+                    label: "Organization",
                     options: store.allOrganizations.map { ($0.id, $0.displayName) },
                     selected: $organizations,
                     color: Theme.organizationColor,
-                    prompt: "Search organizations")
+                    prompt: "Search organizations",
+                    limit: 1)
 
                 MultiSelectField(
                     label: "Projects",
@@ -207,19 +213,24 @@ struct PersonEditor: View {
         role = existing.role ?? ""
         descriptor = existing.descriptor ?? ""
         notes = existing.body
-        organizations = Set(existing.organizations.map(\.id))
-        projects = Set(existing.projects.map(\.id))
+        organizations = Set(existing.organization.map { [$0.id] } ?? [])
+        projects = Set(existing.projects.map(\.to.id))
+        projectRoles = existing.projects.reduce(into: [:]) { roles, membership in
+            if let role = membership.role { roles[membership.to.id] = role }
+        }
     }
 
     private func save() {
-        let orgLinks = organizations.sorted().map(Wikilink.init)
-        let projectLinks = projects.sorted().map(Wikilink.init)
+        let orgLink = organizations.sorted().first.map(Wikilink.init)
+        let memberships = projects.sorted().map {
+            ProjectMembership(to: $0, role: projectRoles[$0])
+        }
 
         if var person = existing {
             if isResolving {
                 person.role = role.nilIfBlank
-                person.organizations = orgLinks
-                person.projects = projectLinks
+                person.organization = orgLink
+                person.projects = memberships
                 person.body = notes
                 _ = store.update(person)
 
@@ -237,8 +248,8 @@ struct PersonEditor: View {
                 person.email = email.nilIfBlank
                 person.role = role.nilIfBlank
                 person.descriptor = descriptor.nilIfBlank
-                person.organizations = orgLinks
-                person.projects = projectLinks
+                person.organization = orgLink
+                person.projects = memberships
                 person.body = notes
                 if store.update(person) { onSaved(person.id) }
             }
@@ -251,8 +262,8 @@ struct PersonEditor: View {
             role: role,
             descriptor: isBlank ? descriptor : nil,
             placeholder: isBlank,
-            organizations: orgLinks,
-            projects: projectLinks,
+            organization: orgLink,
+            projects: memberships,
             body: notes)
         {
             onSaved(created.id)
@@ -543,7 +554,7 @@ struct LabelField: View {
     }
 }
 
-/// Picks any number of entities, used for org and project membership.
+/// Picks entities, used for org and project membership.
 ///
 /// Laying every option out as a pill stops scaling once a vault holds hundreds of
 /// organizations, so this is search-first: what you've picked stays pinned as removable
@@ -555,6 +566,12 @@ struct MultiSelectField: View {
     let color: Color
     /// Shown under the search field when nothing is typed yet.
     var prompt: String = "Search to add"
+    /// How many can be held at once, or `nil` for no ceiling.
+    ///
+    /// `1` makes this a single-select — picking replaces rather than adds, which is how a
+    /// person's employer is chosen. Deliberately not a separate component: the search,
+    /// pills and option list are identical, only the arity differs.
+    var limit: Int?
 
     @State private var search = ""
     @State private var isSearchFocused = false
@@ -608,8 +625,7 @@ struct MultiSelectField: View {
                             dotColor: color,
                             isSelected: false
                         ) {
-                            selected.insert(option.id)
-                            search = ""
+                            pick(option.id)
                         }
                     }
                 }
@@ -641,7 +657,20 @@ struct MultiSelectField: View {
     /// Return adds the top match, so a whole list can be built without the mouse.
     private func addFirstMatch() {
         guard let first = matches.first else { return }
-        selected.insert(first.id)
+        pick(first.id)
+    }
+
+    /// Adds `id`, making room by dropping earlier picks once ``limit`` is reached.
+    ///
+    /// Making room rather than refusing: at a limit of 1, clicking a second organization
+    /// obviously means "this one instead", and a field that went inert until the first
+    /// pill was dismissed would read as a bug.
+    private func pick(_ id: EntityID) {
+        if let limit, selected.count >= limit {
+            let keep = selectedOptions.suffix(max(0, limit - 1)).map(\.id)
+            selected = Set(keep)
+        }
+        selected.insert(id)
         search = ""
     }
 }

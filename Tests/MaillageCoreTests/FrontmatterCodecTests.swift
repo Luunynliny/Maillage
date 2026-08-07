@@ -45,8 +45,8 @@ struct FrontmatterCodecTests {
             lastname: "Dupont",
             email: "marie@example.com",
             role: "Head of Engineering",
-            organizations: [Wikilink("acme-corp")],
-            projects: [Wikilink("maillage")],
+            organization: Wikilink("acme-corp"),
+            projects: [ProjectMembership(to: "maillage", role: "Lead")],
             relations: [
                 Relation(to: "jean-martin", label: "manager of"),
                 Relation(to: "alice-bernard", label: "friend of"),
@@ -60,7 +60,8 @@ struct FrontmatterCodecTests {
         #expect(decoded.firstname == "Marie")
         #expect(decoded.email == "marie@example.com")
         #expect(decoded.role == "Head of Engineering")
-        #expect(decoded.organizations == [Wikilink("acme-corp")])
+        #expect(decoded.organization == Wikilink("acme-corp"))
+        #expect(decoded.projects == [ProjectMembership(to: "maillage", role: "Lead")])
         #expect(decoded.relations.count == 2)
         #expect(decoded.relations.first?.label == "manager of")
         #expect(decoded.relations.first?.to.id == "jean-martin")
@@ -71,7 +72,7 @@ struct FrontmatterCodecTests {
     func writesWikilinkForm() throws {
         let person = Person(
             id: "marie-dupont",
-            organizations: [Wikilink("acme-corp")],
+            organization: Wikilink("acme-corp"),
             relations: [Relation(to: "jean-martin", label: "manager of")]
         )
         let file = try FrontmatterCodec.encode(person, body: "")
@@ -86,7 +87,7 @@ struct FrontmatterCodecTests {
             id: "_head-of-aa",
             placeholder: true,
             descriptor: "Head of AA",
-            organizations: [Wikilink("aa")],
+            organization: Wikilink("aa"),
             body: "Introduced by Marie."
         )
         let file = try FrontmatterCodec.encode(person, body: person.body)
@@ -96,6 +97,62 @@ struct FrontmatterCodecTests {
         #expect(decoded.descriptor == "Head of AA")
         #expect(decoded.firstname == nil)
         #expect(decoded.displayName == "Head of AA")
+    }
+
+    /// Vaults written before employment became singular say `organizations:`. They must keep
+    /// loading, and migrate only when that person is next saved.
+    @Test("Reads the retired plural organizations key")
+    func readsLegacyOrganizationsKey() throws {
+        let file = """
+            ---
+            id: marie-dupont
+            type: person
+            firstname: Marie
+            organizations:
+              - '[[acme-corp]]'
+              - '[[globex]]'
+            ---
+            """
+        let (decoded, _) = try FrontmatterCodec.decode(Person.self, from: file)
+        // First entry wins: someone who listed two employers by hand had one at a time.
+        #expect(decoded.organization == Wikilink("acme-corp"))
+
+        // Re-encoding drops the plural form entirely.
+        let rewritten = try FrontmatterCodec.encode(decoded, body: "")
+        #expect(rewritten.contains("organization: '[[acme-corp]]'"))
+        #expect(!rewritten.contains("organizations:"))
+    }
+
+    @Test("Reads a project membership written as a bare wikilink")
+    func readsBareProjectMembership() throws {
+        let file = """
+            ---
+            id: marie-dupont
+            type: person
+            projects:
+              - '[[maillage]]'
+              - to: '[[atlas]]'
+                role: Reviewer
+            ---
+            """
+        let (decoded, _) = try FrontmatterCodec.decode(Person.self, from: file)
+        #expect(decoded.projects == [ProjectMembership(to: "maillage"), ProjectMembership(to: "atlas", role: "Reviewer")])
+    }
+
+    /// Adding the role field must not churn every file that has no roles in it.
+    @Test("Writes a role-less membership back as a bare wikilink")
+    func writesRolelessMembershipBare() throws {
+        let person = Person(
+            id: "marie-dupont",
+            projects: [ProjectMembership(to: "maillage"), ProjectMembership(to: "atlas", role: "Lead")])
+        let file = try FrontmatterCodec.encode(person, body: "")
+
+        #expect(file.contains("- '[[maillage]]'"))
+        #expect(file.contains("to: '[[atlas]]'"))
+        #expect(file.contains("role: Lead"))
+
+        let (decoded, _) = try FrontmatterCodec.decode(Person.self, from: file)
+        #expect(decoded.projects == person.projects)
     }
 
     @Test("Round-trips organization and project")

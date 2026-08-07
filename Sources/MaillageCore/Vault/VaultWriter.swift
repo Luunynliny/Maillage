@@ -137,16 +137,15 @@ public struct VaultWriter {
                     touched = true
                 }
             }
-            if kind == .organization {
-                for index in person.organizations.indices
-                where person.organizations[index].id == oldID {
-                    person.organizations[index].id = newID
-                    touched = true
-                }
+            if kind == .organization, person.organization?.id == oldID {
+                person.organization?.id = newID
+                touched = true
             }
             if kind == .project {
-                for index in person.projects.indices where person.projects[index].id == oldID {
-                    person.projects[index].id = newID
+                // Only the link moves; the role rides along untouched.
+                for index in person.projects.indices
+                where person.projects[index].to.id == oldID {
+                    person.projects[index].to.id = newID
                     touched = true
                 }
             }

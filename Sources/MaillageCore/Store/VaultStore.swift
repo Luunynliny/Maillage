@@ -107,14 +107,52 @@ public final class VaultStore {
         entity(id: id)?.displayName
     }
 
-    /// People who list `organizationID` in their `organizations`.
+    /// People employed by `organizationID`.
     public func members(ofOrganization organizationID: EntityID) -> [Person] {
-        allPeople.filter { $0.organizations.contains(Wikilink(organizationID)) }
+        allPeople.filter { $0.organization?.id == organizationID }
     }
 
     /// People who list `projectID` in their `projects`.
     public func members(ofProject projectID: EntityID) -> [Person] {
-        allPeople.filter { $0.projects.contains(Wikilink(projectID)) }
+        allPeople.filter { person in person.projects.contains { $0.to.id == projectID } }
+    }
+
+    /// Everyone on a project paired with the role they hold *there*.
+    ///
+    /// The roster the project view shows. Derived by scanning people, like every other
+    /// membership query, so the project file stores nothing about who is on it.
+    public func participants(ofProject projectID: EntityID)
+        -> [(person: Person, role: String?)]
+    {
+        allPeople.compactMap { person in
+            guard let membership = person.projects.first(where: { $0.to.id == projectID })
+            else { return nil }
+            return (person, membership.role)
+        }
+    }
+
+    /// Every person bucketed by employer, for the clustered People graph.
+    ///
+    /// Organizations come in ``allOrganizations`` order with the unaffiliated bucket
+    /// (`nil`) last, so cluster positions are derived from a stable index and the graph
+    /// lays out the same way on every launch. Empty organizations are omitted — an anchor
+    /// with nothing around it is just an isolated node.
+    public func peopleGroupedByOrganization()
+        -> [(organization: Organization?, people: [Person])]
+    {
+        var groups: [(organization: Organization?, people: [Person])] = []
+        for org in allOrganizations {
+            let people = members(ofOrganization: org.id)
+            if !people.isEmpty { groups.append((org, people)) }
+        }
+        // A dangling employer counts as unaffiliated rather than vanishing: a hand-edited
+        // link to a nonexistent org must not drop someone out of the graph entirely.
+        let unaffiliated = allPeople.filter { person in
+            guard let employer = person.organization else { return true }
+            return snapshot.organizations[employer.id] == nil
+        }
+        if !unaffiliated.isEmpty { groups.append((nil, unaffiliated)) }
+        return groups
     }
 
     /// Projects attached to an organization.
@@ -143,6 +181,26 @@ public final class VaultStore {
         .map(\.key)
     }
 
+    /// Every project role already in use, most-used first.
+    ///
+    /// Same reasoning as ``usedRelationLabels``: the vocabulary is whatever is on disk, so
+    /// "Lead" is offered back once it has been typed and needs no config file.
+    public var usedProjectRoles: [String] {
+        var counts: [String: Int] = [:]
+        for person in snapshot.people.values {
+            for membership in person.projects {
+                guard let role = membership.role?.nilIfBlank else { continue }
+                counts[role, default: 0] += 1
+            }
+        }
+        return counts.sorted {
+            $0.value != $1.value
+                ? $0.value > $1.value
+                : $0.key.localizedStandardCompare($1.key) == .orderedAscending
+        }
+        .map(\.key)
+    }
+
     // MARK: Creating
 
     /// Creates a named person. Pass `placeholder: true` with a `descriptor` for
@@ -155,8 +213,8 @@ public final class VaultStore {
         role: String? = nil,
         descriptor: String? = nil,
         placeholder: Bool = false,
-        organizations: [Wikilink] = [],
-        projects: [Wikilink] = [],
+        organization: Wikilink? = nil,
+        projects: [ProjectMembership] = [],
         body: String = ""
     ) -> Person? {
         let nameForSlug =
@@ -176,7 +234,7 @@ public final class VaultStore {
             role: role?.nilIfBlank,
             placeholder: placeholder,
             descriptor: descriptor?.nilIfBlank,
-            organizations: organizations,
+            organization: organization,
             projects: projects,
             created: .today(),
             body: body
@@ -238,6 +296,25 @@ public final class VaultStore {
         return persist(person)
     }
 
+    /// Sets what `personID` does on `projectID`, or clears it when `role` is blank.
+    ///
+    /// Only the person's file is written — the project file stores nothing about its
+    /// roster. Does nothing if the person is not on the project: a role is a property of
+    /// the membership, so there is nothing to hang it on.
+    @discardableResult
+    public func setProjectRole(
+        person personID: EntityID, project projectID: EntityID, role: String?
+    ) -> Bool {
+        guard var person = snapshot.people[personID],
+            let index = person.projects.firstIndex(where: { $0.to.id == projectID })
+        else { return false }
+
+        let trimmed = role?.nilIfBlank
+        guard person.projects[index].role != trimmed else { return true }
+        person.projects[index].role = trimmed
+        return persist(person)
+    }
+
     /// Fills in a placeholder person's real name and renames their file, rewriting
     /// every inbound `[[_old-id]]` reference so nothing is orphaned.
     @discardableResult
@@ -283,12 +360,14 @@ public final class VaultStore {
                     person.relations.removeAll { $0.to.id == id }
                     touched = person.relations.count != before
                 }
-                if kind == .organization, person.organizations.contains(Wikilink(id)) {
-                    person.organizations.removeAll { $0.id == id }
+                if kind == .organization, person.organization?.id == id {
+                    person.organization = nil
                     touched = true
                 }
-                if kind == .project, person.projects.contains(Wikilink(id)) {
-                    person.projects.removeAll { $0.id == id }
+                if kind == .project, person.projects.contains(where: { $0.to.id == id }) {
+                    // Drops the role with it — a role only means something as part of a
+                    // membership.
+                    person.projects.removeAll { $0.to.id == id }
                     touched = true
                 }
                 if touched {

@@ -149,7 +149,7 @@ struct VaultStoreTests {
         #expect(store.addRelation(from: marie.id, to: jean.id, label: "manager of"))
 
         var updated = try #require(store.snapshot.people[marie.id])
-        updated.organizations = [Wikilink(acme.id)]
+        updated.organization = Wikilink(acme.id)
         #expect(store.update(updated))
 
         // A second store reading the same folder must see identical data.
@@ -194,13 +194,182 @@ struct VaultStoreTests {
 
         let acme = try #require(store.createOrganization(name: "Acme Corp"))
         var marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
-        marie.organizations = [Wikilink(acme.id)]
+        marie.organization = Wikilink(acme.id)
         #expect(store.update(marie))
 
         #expect(store.renameEntity(kind: .organization, from: acme.id, to: "acme-global") != nil)
 
-        #expect(store.snapshot.people[marie.id]?.organizations == [Wikilink("acme-global")])
+        #expect(store.snapshot.people[marie.id]?.organization == Wikilink("acme-global"))
         #expect(store.members(ofOrganization: "acme-global").count == 1)
+    }
+
+    // MARK: Membership and roles
+
+    @Test("Employing someone replaces their previous employer")
+    func employmentIsSingular() throws {
+        let (store, root) = try makeStore()
+        defer { cleanUp(root) }
+
+        let acme = try #require(store.createOrganization(name: "Acme Corp"))
+        let globex = try #require(store.createOrganization(name: "Globex"))
+        var marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
+
+        marie.organization = Wikilink(acme.id)
+        #expect(store.update(marie))
+        marie.organization = Wikilink(globex.id)
+        #expect(store.update(marie))
+
+        #expect(store.members(ofOrganization: acme.id).isEmpty)
+        #expect(store.members(ofOrganization: globex.id).map(\.id) == [marie.id])
+    }
+
+    /// A role belongs to the membership, so it is written to the person's file and the
+    /// project file learns nothing about its roster.
+    @Test("Setting a project role writes only the person's file")
+    func setsProjectRole() throws {
+        let (store, root) = try makeStore()
+        defer { cleanUp(root) }
+
+        let project = try #require(store.createProject(name: "Maillage"))
+        var marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
+        marie.projects = [ProjectMembership(to: project.id)]
+        #expect(store.update(marie))
+
+        #expect(store.setProjectRole(person: marie.id, project: project.id, role: "Lead"))
+
+        let participants = store.participants(ofProject: project.id)
+        #expect(participants.map(\.person.id) == [marie.id])
+        #expect(participants.first?.role == "Lead")
+
+        let marieFile = try String(
+            contentsOf: root.appendingPathComponent("people/marie-dupont.md"), encoding: .utf8)
+        #expect(marieFile.contains("role: Lead"))
+        let projectFile = try String(
+            contentsOf: root.appendingPathComponent("projects/maillage.md"), encoding: .utf8)
+        #expect(!projectFile.contains("marie-dupont"))
+        #expect(!projectFile.contains("Lead"))
+    }
+
+    @Test("A blank role clears the stored one")
+    func clearsProjectRole() throws {
+        let (store, root) = try makeStore()
+        defer { cleanUp(root) }
+
+        let project = try #require(store.createProject(name: "Maillage"))
+        var marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
+        marie.projects = [ProjectMembership(to: project.id, role: "Lead")]
+        #expect(store.update(marie))
+
+        #expect(store.setProjectRole(person: marie.id, project: project.id, role: "   "))
+        #expect(store.participants(ofProject: project.id).first?.role == nil)
+        // Still on the project — only the role went away.
+        #expect(store.members(ofProject: project.id).map(\.id) == [marie.id])
+    }
+
+    /// Nothing to hang a role on when there is no membership, so the write is refused
+    /// rather than silently inventing one.
+    @Test("Setting a role on a project someone isn't on fails")
+    func rejectsRoleWithoutMembership() throws {
+        let (store, root) = try makeStore()
+        defer { cleanUp(root) }
+
+        let project = try #require(store.createProject(name: "Maillage"))
+        let marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
+
+        #expect(!store.setProjectRole(person: marie.id, project: project.id, role: "Lead"))
+        #expect(store.snapshot.people[marie.id]?.projects.isEmpty == true)
+    }
+
+    @Test("Project roles are derived from use, most-used first")
+    func derivesProjectRoles() throws {
+        let (store, root) = try makeStore()
+        defer { cleanUp(root) }
+
+        #expect(store.usedProjectRoles.isEmpty)
+
+        let maillage = try #require(store.createProject(name: "Maillage"))
+        let atlas = try #require(store.createProject(name: "Atlas"))
+
+        var marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
+        marie.projects = [
+            ProjectMembership(to: maillage.id, role: "Lead"),
+            ProjectMembership(to: atlas.id, role: "Reviewer"),
+        ]
+        #expect(store.update(marie))
+
+        var jean = try #require(store.createPerson(firstname: "Jean", lastname: "Martin"))
+        jean.projects = [ProjectMembership(to: maillage.id, role: "Reviewer")]
+        #expect(store.update(jean))
+
+        #expect(store.usedProjectRoles == ["Reviewer", "Lead"])
+    }
+
+    @Test("Renaming a project keeps the role on the membership")
+    func renameKeepsProjectRole() throws {
+        let (store, root) = try makeStore()
+        defer { cleanUp(root) }
+
+        let project = try #require(store.createProject(name: "Maillage"))
+        var marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
+        marie.projects = [ProjectMembership(to: project.id, role: "Lead")]
+        #expect(store.update(marie))
+
+        #expect(store.renameEntity(kind: .project, from: project.id, to: "maillage-v2") != nil)
+
+        #expect(
+            store.snapshot.people[marie.id]?.projects
+                == [ProjectMembership(to: "maillage-v2", role: "Lead")])
+        #expect(store.participants(ofProject: "maillage-v2").first?.role == "Lead")
+    }
+
+    /// The clustered graph derives each cluster's position from its index in this list, so
+    /// the order has to be stable and nobody may fall out of it.
+    @Test("Groups people by employer with the unaffiliated last")
+    func groupsPeopleByOrganization() throws {
+        let (store, root) = try makeStore()
+        defer { cleanUp(root) }
+
+        let acme = try #require(store.createOrganization(name: "Acme Corp"))
+        _ = try #require(store.createOrganization(name: "Zenith"))  // no employees
+        var marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
+        marie.organization = Wikilink(acme.id)
+        #expect(store.update(marie))
+        var jean = try #require(store.createPerson(firstname: "Jean", lastname: "Martin"))
+        // Hand-edited link to an org that doesn't exist: still has to appear somewhere.
+        jean.organization = Wikilink("ghost-corp")
+        #expect(store.update(jean))
+        let alice = try #require(store.createPerson(firstname: "Alice", lastname: "Roy"))
+
+        let groups = store.peopleGroupedByOrganization()
+
+        // Zenith is omitted: an anchor with nobody around it is just a stray node.
+        #expect(groups.map { $0.organization?.id } == [acme.id, nil])
+        #expect(groups.first?.people.map(\.id) == [marie.id])
+        #expect(groups.last?.people.map(\.id) == [alice.id, jean.id])
+
+        // Same input, same order — the layout has to be recognisable between launches.
+        #expect(
+            store.peopleGroupedByOrganization().map { $0.organization?.id }
+                == groups.map { $0.organization?.id })
+    }
+
+    @Test("Deleting a project scrubs the membership and its role")
+    func deleteScrubsProjectMembership() throws {
+        let (store, root) = try makeStore()
+        defer { cleanUp(root) }
+
+        let project = try #require(store.createProject(name: "Maillage"))
+        var marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
+        marie.projects = [ProjectMembership(to: project.id, role: "Lead")]
+        #expect(store.update(marie))
+
+        #expect(store.delete(kind: .project, id: project.id))
+
+        #expect(store.snapshot.people[marie.id]?.projects.isEmpty == true)
+        let marieFile = try String(
+            contentsOf: root.appendingPathComponent("people/marie-dupont.md"), encoding: .utf8)
+        #expect(!marieFile.contains("maillage"))
+        #expect(!marieFile.contains("Lead"))
     }
 
     // MARK: Placeholders
@@ -320,11 +489,11 @@ struct VaultStoreTests {
 
         let acme = try #require(store.createOrganization(name: "Acme Corp"))
         var marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
-        marie.organizations = [Wikilink(acme.id)]
+        marie.organization = Wikilink(acme.id)
         #expect(store.update(marie))
 
         #expect(store.delete(kind: .organization, id: acme.id))
-        #expect(store.snapshot.people[marie.id]?.organizations.isEmpty == true)
+        #expect(store.snapshot.people[marie.id]?.organization == nil)
     }
 
     // MARK: Robustness

@@ -2,7 +2,7 @@
 
 A personal CRM with Obsidian's look and feel. People, organizations and projects live as
 markdown files with YAML frontmatter; labeled one-way relations between people are visualized
-as a force-directed graph.
+as a force-directed graph clustered by employer.
 
 ## Stack
 
@@ -27,7 +27,7 @@ Two build systems describe the same sources, deliberately. Pick by what you're d
 
 | Task | Use | Why |
 |---|---|---|
-| Tests, quick compile check | `rtk swift test` | ~0.1s. Xcode's runner takes ~80s for the same 25 tests |
+| Tests, quick compile check | `rtk swift test` | ~0.1s. Xcode's runner takes ~80s for the same 40 tests |
 | Running, debugging, breakpoints | `open maillage.xcodeproj` → scheme **Maillage** → ⌘R | Only path that produces a real `.app` |
 
 `maillage.xcodeproj` has two targets mirroring the package: `MaillageCore.framework` and
@@ -59,11 +59,18 @@ maillage.xcodeproj/                  committed; shared Maillage scheme
 Sources/Maillage/MaillageApp.swift   @main, WindowGroup, menu commands (⌘N, ⌘K, ⌘R)
 Sources/MaillageCore/
 ├── Design/     Theme.swift (tokens), Components.swift (Card, Pill, SidebarRow, …)
-├── Model/      Entity, Person, Organization, Project, Relation, Wikilink, CalendarDay
+├── Model/      Entity, Person, Organization, Project, Relation, ProjectMembership, Wikilink, CalendarDay
 ├── Vault/      VaultLocation, FrontmatterCodec, VaultReader, VaultWriter
 ├── Store/      VaultStore — single source of truth
-└── Views/      RootView, SidebarView, GraphView, DetailView, Editors, CommandPalette, VaultPicker
+└── Views/      RootView, SidebarView, CenterPane, DetailView, Editors, CommandPalette, VaultPicker
 ```
+
+The centre pane picks its representation from what's selected, since the three questions have
+different shapes: a **person** (or nothing) gets `PeopleGraphView`, the force graph, clustered by
+employer — irregular person↔person topology is the one thing a force layout is for. An
+**organization** gets `OrganizationBoardView`, and a **project** gets `ProjectRosterView`; both
+are containment hierarchies where every edge would mean "belongs to", so they are laid out
+deterministically instead of simulated.
 
 The app target is a thin `@main` shell; everything testable lives in `MaillageCore`.
 
@@ -85,8 +92,11 @@ lastname: Dupont
 email: marie@example.com
 role: Head of Engineering
 placeholder: false
-organizations: ["[[acme-corp]]"]
-projects: ["[[maillage]]"]
+organization: "[[acme-corp]]"
+projects:
+  - to: "[[maillage]]"
+    role: Lead
+  - "[[atlas]]"
 relations:
   - to: "[[jean-martin]]"
     label: manager of
@@ -105,8 +115,17 @@ These are invariants, not preferences — the tests enforce most of them.
   memory so the target can show "Referenced by", exactly like Obsidian.
 - **Never hardcode a color, radius, spacing or font in a view.** Reference `Theme`. Both light
   and dark are resolved inside `Theme.adaptive`, so use sites never branch on appearance.
-- **Membership lives on the person** (`organizations:`, `projects:`), never duplicated onto the
+- **Membership lives on the person** (`organization:`, `projects:`), never duplicated onto the
   org or project. Org/project member lists are derived by scanning people.
+- **One employer per person.** `organization:` is singular, because the People graph clusters on
+  it and a cluster needs exactly one key per node. The retired plural `organizations:` still
+  decodes (first entry wins) so old vaults load; only `organization:` is ever written.
+  `Project.organizations` stays plural — the constraint is about employment, not about which orgs
+  a piece of work spans.
+- **A project role lives on the person's project entry**, never on the project. An entry is a
+  bare `"[[id]]"` until a role is set, then a `to:`/`role:` mapping — so adding a role rewrites
+  one person's file and nothing else. Free text, and the vocabulary offered back is derived from
+  use (`VaultStore.usedProjectRoles`), like relation labels.
 - **The filename is the identity.** `id` is the filename slug and the only link target;
   frontmatter `id` disagreeing with the filename loses. Renaming therefore *must* go through
   `VaultWriter.rename`, which rewrites every inbound `[[id]]`.

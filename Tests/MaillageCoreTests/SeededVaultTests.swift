@@ -26,7 +26,9 @@ struct SeededVaultTests {
         let marie = try #require(store.snapshot.people["marie-dupont"])
         #expect(marie.displayName == "Marie Dupont")
         #expect(marie.email == "marie@example.com")
-        #expect(marie.organizations.map(\.id) == ["acme-corp"])
+        // Her file still carries the retired plural `organizations:` key, so this doubles as
+        // proof the tolerant decode works on a real hand-written file.
+        #expect(marie.organization?.id == "acme-corp")
         #expect(marie.relations.count == 2)
         #expect(marie.body == "Met at the Paris conference.")
 

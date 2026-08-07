@@ -207,13 +207,13 @@ private struct PersonDetailBody: View {
 
     @ViewBuilder
     private var membershipSection: some View {
-        if !person.organizations.isEmpty || !person.projects.isEmpty {
+        if person.organization != nil || !person.projects.isEmpty {
             VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-                if !person.organizations.isEmpty {
+                if let employer = person.organization {
                     VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-                        SectionHeader("Organizations")
+                        SectionHeader("Organization")
                         WrappingPills(
-                            links: person.organizations,
+                            links: [employer],
                             color: Theme.organizationColor,
                             selection: $selection)
                     }
@@ -221,14 +221,28 @@ private struct PersonDetailBody: View {
                 if !person.projects.isEmpty {
                     VStack(alignment: .leading, spacing: Theme.Spacing.small) {
                         SectionHeader("Projects")
-                        WrappingPills(
-                            links: person.projects,
-                            color: Theme.projectColor,
+                        // The role rides in the pill: what someone does on a project is
+                        // the reason they're listed, so it shouldn't need a second click.
+                        PillCloud(
+                            items: person.projects.map { membership in
+                                (
+                                    membership.to.id,
+                                    projectLabel(membership),
+                                    Theme.projectColor
+                                )
+                            },
                             selection: $selection)
                     }
                 }
             }
         }
+    }
+
+    /// `Maillage · Lead`, or just the project name when no role is recorded.
+    private func projectLabel(_ membership: ProjectMembership) -> String {
+        let name = store.displayName(for: membership.to.id) ?? membership.to.id
+        guard let role = membership.role?.nilIfBlank else { return name }
+        return "\(name) · \(role)"
     }
 }
 
@@ -351,17 +365,24 @@ private struct ProjectDetailBody: View {
                 }
             }
 
-            let members = store.members(ofProject: project.id)
+            let participants = store.participants(ofProject: project.id)
             VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-                SectionHeader("People", trailing: members.isEmpty ? nil : "\(members.count)")
-                if members.isEmpty {
+                SectionHeader(
+                    "People", trailing: participants.isEmpty ? nil : "\(participants.count)")
+                if participants.isEmpty {
                     Text("Nobody is linked to this project yet.")
                         .font(Theme.Font.caption)
                         .foregroundStyle(Theme.textFaint)
                 } else {
-                    PillCloud(
-                        items: members.map { ($0.id, $0.displayName, Theme.color(for: $0)) },
-                        selection: $selection)
+                    // The one place a role is typed. It is stored on the person, so this
+                    // writes their file, not the project's.
+                    ForEach(participants, id: \.person.id) { participant in
+                        ParticipantRoleRow(
+                            person: participant.person,
+                            role: participant.role,
+                            projectID: project.id,
+                            selection: $selection)
+                    }
                 }
             }
         }
@@ -376,6 +397,90 @@ private struct ProjectDetailBody: View {
             items.append(.init("Added", value: created.description))
         }
         return items
+    }
+}
+
+// MARK: - Participant role
+
+/// One project participant and what they do on it, with the role editable in place.
+///
+/// The role is stored on the *person's* project entry, so committing writes their file and
+/// leaves the project's untouched — the same one-way discipline relations follow. Editing
+/// happens here rather than in the centre roster so there is exactly one place to type it.
+private struct ParticipantRoleRow: View {
+    @Environment(VaultStore.self) private var store
+
+    let person: Person
+    let role: String?
+    let projectID: EntityID
+    @Binding var selection: EntityID?
+
+    /// Local while typing; committed on Return or when focus leaves, so a save doesn't
+    /// fire on every keystroke.
+    @State private var draft = ""
+    @FocusState private var isEditing: Bool
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.small) {
+            Pill(person.displayName, color: Theme.color(for: person)) {
+                selection = person.id
+            }
+
+            Spacer(minLength: 0)
+
+            TextField("", text: $draft)
+                .textFieldStyle(.plain)
+                .font(Theme.Font.body)
+                .foregroundStyle(Theme.textNormal)
+                .multilineTextAlignment(.trailing)
+                .placeholder(
+                    "Add a role", isVisible: draft.isEmpty && !isEditing,
+                    alignment: .trailing)
+                .focused($isEditing)
+                .onSubmit(commit)
+                .frame(maxWidth: 150)
+                .padding(.horizontal, Theme.Spacing.small)
+                .padding(.vertical, 4)
+                .background(isEditing ? Theme.bgPrimary : .clear)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.Radius.medium)
+                        .stroke(isEditing ? Theme.border : .clear, lineWidth: Theme.hairline)
+                )
+                .onChange(of: isEditing) { if !isEditing { commit() } }
+
+            if !suggestions.isEmpty, isEditing {
+                Menu {
+                    ForEach(suggestions, id: \.self) { suggestion in
+                        Button(suggestion) {
+                            draft = suggestion
+                            commit()
+                        }
+                    }
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(Theme.Font.caption)
+                        .foregroundStyle(Theme.textFaint)
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Roles you've used before")
+            }
+        }
+        // Seeded here rather than in `init` so an external change — a rename, a reload —
+        // is picked up instead of being overwritten by a stale draft.
+        .onAppear { draft = role ?? "" }
+        .onChange(of: role) { if !isEditing { draft = role ?? "" } }
+    }
+
+    /// Roles already used in the vault, minus the one already shown.
+    private var suggestions: [String] {
+        store.usedProjectRoles.filter { $0 != draft }
+    }
+
+    private func commit() {
+        store.setProjectRole(person: person.id, project: projectID, role: draft)
     }
 }
 
@@ -397,7 +502,10 @@ private struct WrappingPills: View {
 }
 
 /// Flow layout of entity pills that wraps to the available width.
-private struct PillCloud: View {
+///
+/// Shared with the centre pane's organization board, so selecting an entity looks and
+/// behaves identically wherever a set of links is shown.
+struct PillCloud: View {
     let items: [(id: EntityID, title: String, color: Color)]
     @Binding var selection: EntityID?
 

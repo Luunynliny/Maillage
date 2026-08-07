@@ -20,10 +20,13 @@ public struct Person: Entity, Codable {
     /// Stand-in label for a placeholder, e.g. `Head of AA`.
     public var descriptor: String?
 
-    /// Organizations this person belongs to. Membership lives here and nowhere else.
-    public var organizations: [Wikilink]
-    /// Projects this person is involved in.
-    public var projects: [Wikilink]
+    /// Who employs this person. Membership lives here and nowhere else.
+    ///
+    /// Singular: someone works for one company at a time, and the People graph clusters
+    /// on this, which needs exactly one key per person.
+    public var organization: Wikilink?
+    /// Projects this person is involved in, each with their role on it.
+    public var projects: [ProjectMembership]
     /// One-way labeled relations to other people.
     public var relations: [Relation]
 
@@ -40,8 +43,8 @@ public struct Person: Entity, Codable {
         role: String? = nil,
         placeholder: Bool = false,
         descriptor: String? = nil,
-        organizations: [Wikilink] = [],
-        projects: [Wikilink] = [],
+        organization: Wikilink? = nil,
+        projects: [ProjectMembership] = [],
         relations: [Relation] = [],
         created: CalendarDay? = nil,
         body: String = ""
@@ -53,7 +56,7 @@ public struct Person: Entity, Codable {
         self.role = role
         self.placeholder = placeholder
         self.descriptor = descriptor
-        self.organizations = organizations
+        self.organization = organization
         self.projects = projects
         self.relations = relations
         self.created = created
@@ -76,7 +79,9 @@ public struct Person: Entity, Codable {
     /// separately from the markdown below the closing `---`.
     private enum CodingKeys: String, CodingKey {
         case id, type, firstname, lastname, email, role, placeholder, descriptor
-        case organizations, projects, relations, created
+        case organization, projects, relations, created
+        /// Retired plural form, still read so existing vaults keep loading.
+        case organizations
     }
 
     public init(from decoder: Decoder) throws {
@@ -88,8 +93,16 @@ public struct Person: Entity, Codable {
         self.role = try c.decodeIfPresent(String.self, forKey: .role)
         self.placeholder = try c.decodeIfPresent(Bool.self, forKey: .placeholder) ?? false
         self.descriptor = try c.decodeIfPresent(String.self, forKey: .descriptor)
-        self.organizations = try c.decodeIfPresent([Wikilink].self, forKey: .organizations) ?? []
-        self.projects = try c.decodeIfPresent([Wikilink].self, forKey: .projects) ?? []
+        // Employment used to be a list. Read the singular key, and fall back to the first
+        // entry of a legacy list so a vault written before the change still loads; saving
+        // rewrites the file in the singular form.
+        if let single = try c.decodeIfPresent(Wikilink.self, forKey: .organization) {
+            self.organization = single
+        } else {
+            self.organization = try c.decodeIfPresent([Wikilink].self, forKey: .organizations)?
+                .first
+        }
+        self.projects = try c.decodeIfPresent([ProjectMembership].self, forKey: .projects) ?? []
         self.relations = try c.decodeIfPresent([Relation].self, forKey: .relations) ?? []
         self.created = try c.decodeIfPresent(CalendarDay.self, forKey: .created)
         self.body = ""
@@ -105,7 +118,7 @@ public struct Person: Entity, Codable {
         try c.encodeIfPresent(role, forKey: .role)
         try c.encode(placeholder, forKey: .placeholder)
         try c.encodeIfPresent(descriptor, forKey: .descriptor)
-        if !organizations.isEmpty { try c.encode(organizations, forKey: .organizations) }
+        try c.encodeIfPresent(organization, forKey: .organization)
         if !projects.isEmpty { try c.encode(projects, forKey: .projects) }
         if !relations.isEmpty { try c.encode(relations, forKey: .relations) }
         try c.encodeIfPresent(created, forKey: .created)
