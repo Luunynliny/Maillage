@@ -34,7 +34,11 @@ public enum Theme {
 
     // MARK: Entity colors
     // One hue per entity kind, used consistently by the sidebar dots, detail
-    // headers and graph nodes so a colour always means the same thing.
+    // headers and pills so a colour always means the same thing.
+    //
+    // The People graph is the one documented exception: inside a labelled company bubble,
+    // "purple means this is a person" is already said by the bubble, so the hue is freed
+    // to carry *which employer* instead. See ``clusterPalette``.
 
     public static let personColor = adaptive(dark: 0x8B_6CEF, light: 0x7C_5CE0)
     public static let organizationColor = adaptive(dark: 0x4E_A8DE, light: 0x2F_86C4)
@@ -58,6 +62,38 @@ public enum Theme {
     public static func color(for entity: AnyEntity) -> Color {
         if case .person(let person) = entity { return color(for: person) }
         return color(for: entity.kind)
+    }
+
+    // MARK: Cluster colors
+
+    /// One hue per employer cluster in the People graph — the only place a colour means
+    /// "which company" rather than "which kind of thing".
+    ///
+    /// Each hue does double duty: a saturated dot at 14pt across, and the same colour at low
+    /// opacity as the bubble wash behind it. That's why the wash is derived at the use site
+    /// by lowering opacity rather than stored as a second palette — one value guarantees the
+    /// dot and the bubble that contains it always agree.
+    ///
+    /// Purple is deliberately absent: it is ``accent``, which means selection everywhere in
+    /// the app, and a cluster that looked selected would be a lie. Hues cycle if a vault
+    /// holds more organizations than there are entries.
+    public static let clusterPalette: [Color] = [
+        adaptive(dark: 0x4E_A8DE, light: 0x2F_86C4),  // blue
+        adaptive(dark: 0x4F_B79A, light: 0x2E_9179),  // teal
+        adaptive(dark: 0xE8_9E4C, light: 0xD1_7F26),  // amber
+        adaptive(dark: 0xD9_6F7A, light: 0xC2_4E5B),  // rose
+        adaptive(dark: 0x7E_A845, light: 0x5F_8A2B),  // olive
+        adaptive(dark: 0xC8_7BD1, light: 0xA9_55B4),  // orchid
+        adaptive(dark: 0xD2_8B5A, light: 0xB3_6B3A),  // clay
+    ]
+
+    /// The unaffiliated bucket's wash — grey, so "no employer" never reads as a company.
+    public static let noClusterColor = adaptive(dark: 0x7A_7A8C, light: 0x92_95A3)
+
+    /// Hue for the cluster at `index`, or grey for the unaffiliated bucket (`nil`).
+    public static func clusterColor(at index: Int?) -> Color {
+        guard let index else { return noClusterColor }
+        return clusterPalette[index % clusterPalette.count]
     }
 
     // MARK: Metrics
