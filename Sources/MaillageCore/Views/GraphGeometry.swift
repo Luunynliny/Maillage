@@ -1,22 +1,23 @@
 import SwiftUI
 
-/// The pieces the three centre-pane graphs draw themselves out of.
+/// The pieces the centre pane's graphs draw themselves out of.
 ///
 /// All of it is pure geometry over `CGPoint`: given the same inputs it returns the same
-/// points, every launch. That is the property the views are chosen for — none of the three
-/// is a simulation, so nothing here settles, drifts, or needs a frame clock — and it's also
-/// what lets the layouts be unit-tested without a window.
+/// points, every launch. That is the property the views are chosen for — neither the bubbles
+/// nor the ego graph is a simulation, so nothing here settles, drifts, or needs a frame
+/// clock — and it's also what lets the layouts be unit-tested without a window.
 ///
-/// Kept in one file rather than duplicated per view, because a node hit-test that disagrees
-/// between two graphs is a bug the user experiences as "clicking works here but not there".
+/// Kept out of the view files rather than inlined, because a circle placed and hit-tested by
+/// the same arithmetic in both graphs can't read as clickable in one and dead in the other —
+/// a bug the user experiences as "clicking works here but not there".
 
 // MARK: - Node
 
 /// A laid-out circle: where it goes, what it's called, and what selecting it means.
 ///
-/// Deliberately not tied to `Person`. The ring and the ego graph both draw people, but the
-/// layouts that place them have nothing else in common, so what they hand the renderer is
-/// this — position and appearance, already resolved.
+/// Deliberately not tied to `Person`. What a layout hands the renderer is position and
+/// appearance, already resolved — so a view draws circles without knowing what they stand for,
+/// and a layout can be tested without a vault.
 struct GraphNode: Identifiable, Equatable {
     let id: EntityID
     let center: CGPoint
@@ -54,18 +55,6 @@ struct GraphNode: Identifiable, Equatable {
 /// reading as a click on empty canvas.
 let graphHitSlop: CGFloat = 8
 
-/// The node under `point`, or the nearest one within ``graphHitSlop`` of it.
-///
-/// Nearest rather than first-match, so two nodes whose padded targets overlap resolve to
-/// whichever you were actually closer to.
-func node(at point: CGPoint, in nodes: [GraphNode], slop: CGFloat = graphHitSlop) -> GraphNode? {
-    nodes
-        .map { (node: $0, distance: point.distance(to: $0.center) - $0.radius) }
-        .filter { $0.distance <= slop }
-        .min { $0.distance < $1.distance }?
-        .node
-}
-
 // MARK: - Rings
 
 /// The most of a pane's half-width or half-height a name is allowed to reserve.
@@ -90,29 +79,6 @@ func ringRadius(in size: CGSize, horizontal: CGFloat, vertical: CGFloat, floor: 
 }
 
 // MARK: - Edges
-
-/// A relation drawn as a curve bowing toward `pullTo` — the bundling in hierarchical edge
-/// bundling.
-///
-/// One quadratic control point rather than a spline through a hierarchy path. With a
-/// realistic vault holding a few dozen relations, pulling each chord toward the ring's
-/// centre already separates the bundle from the rim, and it has nothing to tune per vault.
-///
-/// `tension` 0 leaves a straight chord; 1 pulls the curve all the way to `pullTo`. Varying
-/// it is what makes the bundling *mean* something: a link that stays near the rim is inside
-/// one group, one that dives through the middle crosses a boundary.
-func bundledPath(from: CGPoint, to: CGPoint, pullTo: CGPoint, tension: CGFloat) -> Path {
-    let midpoint = CGPoint(x: (from.x + to.x) / 2, y: (from.y + to.y) / 2)
-    let clamped = min(max(tension, 0), 1)
-    let control = CGPoint(
-        x: midpoint.x + (pullTo.x - midpoint.x) * clamped,
-        y: midpoint.y + (pullTo.y - midpoint.y) * clamped)
-
-    return Path { path in
-        path.move(to: from)
-        path.addQuadCurve(to: to, control: control)
-    }
-}
 
 /// The arrowhead for a one-way relation, as a filled triangle sitting at `tip`.
 ///

@@ -66,15 +66,16 @@ Sources/MaillageCore/
 
 The centre pane picks its representation from what's selected, since each selection is a different
 question: **nothing** gets `OrganizationBubblesView` (one circle per employer, headcount inside,
-area ∝ headcount), an **organization** gets `OrganizationRingView` (its people in arcs by project,
-relations bundled through the centre), a **person** gets `EgoGraphView` (them centred, direct
-relations as labelled spokes), and a **project** gets `ProjectRosterView`.
+area ∝ headcount), an **organization** gets `OrganizationBoardView` (a card per project listing who
+staffs it), a **person** gets `EgoGraphView` (them centred, direct relations as labelled spokes),
+and a **project** gets `ProjectRosterView`.
 
-All four are **laid out from computed geometry, never simulated** — `Views/GraphGeometry.swift`
-holds the shared pieces and each view its own layout struct (`BubblePacking`, `RingLayout`,
-`EgoLayout`), all unit-tested without a window. That is why there is no graph library in the stack
-table: a force layout settles somewhere slightly different on every launch, and "Acme is the big
-one in the middle" has to stay true between launches to be worth reading.
+All four are **laid out, never simulated** — the two graphs from computed geometry
+(`Views/GraphGeometry.swift` holds the shared pieces, `BubblePacking` and `EgoLayout` the per-view
+layout, all unit-tested without a window), the two rosters from a stack. That is why there is no
+graph library in the stack table: a force layout settles somewhere slightly different on every
+launch, and "Acme is the big one in the middle" has to stay true between launches to be worth
+reading.
 
 The app target is a thin `@main` shell; everything testable lives in `MaillageCore`.
 

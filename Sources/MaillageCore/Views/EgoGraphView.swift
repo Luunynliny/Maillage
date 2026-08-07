@@ -9,8 +9,8 @@ import SwiftUI
 ///
 /// Both directions are shown. Relations are one-way on disk, so a person you declared and a
 /// person who declared you are different facts; each spoke's arrowhead says which. Neighbours
-/// are tinted and grouped by employer, so colleagues sit together — the same principle as
-/// ``OrganizationRingView``, one level down.
+/// are tinted and grouped by employer, so colleagues sit together — the same hue means the
+/// same company here as in ``OrganizationBubblesView``.
 struct EgoGraphView: View {
     @Environment(VaultStore.self) private var store
 
@@ -192,7 +192,7 @@ struct EgoGraphView: View {
 
     /// A person's employer as its index in the store's stable organization order — the same
     /// number ``Theme/clusterColor(at:)`` takes, so a colleague here is the same hue as in the
-    /// bubbles and the org ring.
+    /// bubbles.
     private func employerIndex(of id: EntityID) -> Int? {
         guard let employer = store.snapshot.people[id]?.organization?.id else { return nil }
         let groups = store.peopleGroupedByOrganization()
@@ -227,9 +227,9 @@ struct EgoSpoke: Hashable {
 struct EgoLayout {
     static let subjectRadius: CGFloat = 11
     static let neighbourRadius: CGFloat = 7
-    /// Room left either side of the ring. Wider than it is tall for the same reason the org
-    /// ring's is: a name is horizontal text, so a neighbour at three o'clock needs half their
-    /// name's width clear of the rim, not a line's height.
+    /// Room left either side of the ring. Wider than it is tall because a name is horizontal
+    /// text: a neighbour at three o'clock needs half their name's width clear of the rim, not
+    /// a line's height.
     ///
     /// Capped at a share of the pane by ``ringRadius(in:horizontal:vertical:floor:)``, so a
     /// narrow pane spreads the neighbours out rather than collapsing them onto the subject.

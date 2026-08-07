@@ -8,16 +8,18 @@ import SwiftUI
 /// - **Nothing** — ``OrganizationBubblesView``, one circle per employer sized by headcount.
 ///   "What does my network look like?" is a question about companies, and drawing every person
 ///   here made a hairball you couldn't read a headcount off.
-/// - **An organization** — ``OrganizationRingView``, its people in arcs by project with their
-///   relations bundled through the middle. Who's here, on what, and who talks to whom.
+/// - **An organization** — ``OrganizationBoardView``, a card per project listing who staffs it.
+///   What a company is working on and with whom is a roster question, and a roster is what
+///   answers it: names in a column read at a glance, where dots on a rim have to be traced.
 /// - **A person** — ``EgoGraphView``, them at the centre with their direct relations as
 ///   labelled spokes. One hop, because the labels are the payload and the second ring is
 ///   somebody else's network.
 /// - **A project** — ``ProjectRosterView``, its participants and their roles. A role wants a
 ///   column, not an edge label at 11pt.
 ///
-/// All four are laid out from computed geometry rather than simulated, so each looks the same
-/// every time you open it — "Acme is the big one" stays true between launches.
+/// None of the four is simulated — the two graphs lay out from computed geometry and the two
+/// boards from a stack — so each looks the same every time you open it. "Acme is the big one"
+/// stays true between launches.
 ///
 /// The mode follows the selection with no switch of its own: the sidebar section you
 /// clicked already says which of the four you meant.
@@ -33,7 +35,7 @@ struct CenterPane: View {
 
             switch selection.flatMap({ store.entity(id: $0) }) {
             case .organization(let organization):
-                OrganizationRingView(organization: organization, selection: $selection)
+                OrganizationBoardView(organization: organization, selection: $selection)
             case .project(let project):
                 ProjectRosterView(
                     project: project, selection: $selection, editorRequest: $editorRequest)
@@ -51,8 +53,8 @@ struct CenterPane: View {
 
 /// Header shown above the three subject views, naming what you're looking at.
 ///
-/// The detail pane names it too, but the centre pane is wide — without this a ring of dots or
-/// a scrolled roster has no anchor saying whose it is. The bubbles have no header, since
+/// The detail pane names it too, but the centre pane is wide — without this a fan of spokes or
+/// a scrolled board has no anchor saying whose it is. The bubbles have no header, since
 /// nothing is selected and every circle labels itself.
 struct CenterPaneHeader: View {
     let title: String

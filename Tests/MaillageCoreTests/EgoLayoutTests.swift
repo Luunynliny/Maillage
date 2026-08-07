@@ -198,9 +198,9 @@ struct EgoLayoutTests {
         #expect(Set(result.labels.map(\.id)).count == 2)
     }
 
-    /// Same reason as the org ring: a neighbour at three o'clock needs half their name's width
-    /// clear of the rim, so the horizontal margin has to be the wider of the two — and, as
-    /// there, it's capped at a share of the pane so a narrow one doesn't collapse the ring.
+    /// A neighbour at three o'clock needs half their name's width clear of the rim, so the
+    /// horizontal margin has to be the wider of the two — and it's capped at a share of the
+    /// pane, so a narrow pane doesn't collapse the ring onto the subject.
     @Test(
         "Leaves room for the names either side of the ring",
         arguments: [

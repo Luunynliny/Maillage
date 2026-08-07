@@ -81,7 +81,7 @@ struct BubblePackingTests {
     }
 
     /// Because the packing is scaled to fit, a bubble spilling off the edge is invisible rather
-    /// than merely ugly — and a narrow pane is the case that broke the old ring layout.
+    /// than merely ugly — and a narrow pane is the shape that catches it.
     @Test(
         "Fits inside the pane at any shape",
         arguments: [

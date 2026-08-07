@@ -11,8 +11,8 @@ import SwiftUI
 ///
 /// Area tracks headcount rather than radius, so a five-person company looks like more than a
 /// two-person one by the amount it actually is. Clicking a bubble selects the organization,
-/// which switches the pane to ``OrganizationRingView`` — the bubbles are the entry point to
-/// the other two views, not a dead end.
+/// which switches the pane to ``OrganizationBoardView`` — the bubbles are the entry point to
+/// the other views, not a dead end.
 struct OrganizationBubblesView: View {
     @Environment(VaultStore.self) private var store
     @Binding var selection: EntityID?
