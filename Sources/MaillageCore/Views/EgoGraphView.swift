@@ -128,7 +128,10 @@ struct EgoGraphView: View {
                 width: node.radius * 2 + graphHitSlop * 2,
                 height: node.radius * 2 + graphHitSlop * 2
             ).offset(x: -graphHitSlop, y: -graphHitSlop))
-            .position(node.center)
+            // Before `.position`, not after: `.position` hands back a view the size of the
+            // whole pane, so anything interactive attached to its result covers the pane
+            // rather than this node. Every node claiming that same region left the last one
+            // in the `ZStack` owning the hand and the dimming for all of them.
             .onHover { inside in
                 if inside {
                     hovered = node.id
@@ -140,6 +143,7 @@ struct EgoGraphView: View {
             // rather than a single snapshot. The subject is already selected, so it's inert.
             .onTapGesture { selection = node.id }
             .clickableCursor(!isSubject)
+            .position(node.center)
     }
 
     /// The relation's own words, at the curve's midpoint.

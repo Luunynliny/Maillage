@@ -68,6 +68,17 @@ public struct SidebarView: View {
 
     // MARK: Header
 
+    /// The app's name, and the way back out of whatever you've selected.
+    ///
+    /// Clicking it clears the selection, which is what puts the organization bubbles back in
+    /// the centre pane — the overview of the whole vault. Every other route into that view is
+    /// an absence of a click, so without this there was no *action* that reached it: once you
+    /// had selected anything you were stuck one entity or another for the rest of the session.
+    /// A title in the top-left going home is the convention every app on the machine follows.
+    ///
+    /// The whole band is the target, not just the six letters, and it stays clickable while
+    /// nothing is selected — going where you already are is harmless, and a hit target that
+    /// disappears depending on state is worse than a no-op.
     private var header: some View {
         HStack {
             Text("maillage")
@@ -76,6 +87,10 @@ public struct SidebarView: View {
             Spacer()
         }
         .padding(Theme.Spacing.medium)
+        .contentShape(Rectangle())
+        .onTapGesture { selection = nil }
+        .clickableCursor()
+        .help("Show every organization")
         .overlay(alignment: .bottom) {
             Rectangle().fill(Theme.border).frame(height: Theme.hairline)
         }

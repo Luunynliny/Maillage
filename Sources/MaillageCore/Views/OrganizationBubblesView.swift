@@ -62,7 +62,13 @@ struct OrganizationBubblesView: View {
             // Without this the square frame swallows clicks aimed at the gap between two
             // bubbles, and the hand cursor appears well outside the drawn circle.
             .contentShape(Circle())
-            .position(bubble.center)
+            // Everything interactive goes on *before* `.position`, which is not cosmetic
+            // ordering. `.position` returns a view that fills the whole pane and draws its
+            // child at one point inside it — so a hover or tap attached after it is attached
+            // to the entire graph area, not to the circle. Every bubble then claimed the same
+            // full-pane region, the last one in the `ZStack` won, and since that one is the
+            // unaffiliated bucket the result was no hand and no hover wash anywhere on the
+            // view.
             .onHover { inside in
                 guard let id = bubble.id else { return }
                 if inside {
@@ -77,6 +83,7 @@ struct OrganizationBubblesView: View {
             // The grey bucket has no organization behind it, so nothing to select — and a
             // hand there would promise a click that does nothing.
             .clickableCursor(bubble.id != nil)
+            .position(bubble.center)
     }
 
     /// The count is the payload, so it gets the largest type and the centre; the name is what
