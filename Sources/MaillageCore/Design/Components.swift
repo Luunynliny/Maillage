@@ -230,6 +230,36 @@ public struct SectionHeader: View {
     }
 }
 
+// MARK: - Disclosure chevron
+
+/// The triangle that says whether a collapsible section is open.
+///
+/// One glyph rotated rather than two symbols swapped, so the turn animates and the arrow is
+/// visibly the *same* arrow throughout — swapping `chevron.right` for `chevron.down` cuts
+/// instead, which reads as a different control appearing.
+///
+/// Sized to ``Theme/Font/sectionHeader`` and drawn in ``Theme/textFaint``, matching the
+/// ``SectionHeader`` it sits beside: the chevron is punctuation on that label, not a control
+/// competing with it for attention. Deliberately not a `DisclosureGroup` — that brings
+/// AppKit's own label styling and indentation, which don't match this sidebar.
+public struct DisclosureChevron: View {
+    private let isExpanded: Bool
+
+    public init(isExpanded: Bool) {
+        self.isExpanded = isExpanded
+    }
+
+    public var body: some View {
+        Image(systemName: "chevron.right")
+            .font(Theme.Font.sectionHeader)
+            .foregroundStyle(Theme.textFaint)
+            .rotationEffect(.degrees(isExpanded ? 90 : 0))
+            // Fixed square: rotating a non-square glyph changes the width it claims, which
+            // would shove the section title sideways on every toggle.
+            .frame(width: Theme.chevron, height: Theme.chevron)
+    }
+}
+
 // MARK: - Placeholder
 
 /// Draws `text` dimmed behind an input while it is empty.
@@ -539,6 +569,10 @@ public struct AddButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // No focus ring: this is the first focusable control in the sidebar, so on launch
+        // AppKit gave it a blue ring that read as a selected row. It's reached by clicking,
+        // never by tabbing — the keyboard route to creating something is ⌘N.
+        .focusable(false)
         .onHover { isHovering = $0 }
         .clickableCursor()
         .help(help)

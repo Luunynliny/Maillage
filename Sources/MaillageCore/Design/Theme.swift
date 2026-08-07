@@ -115,6 +115,10 @@ public enum Theme {
     /// Obsidian draws separators as true hairlines.
     public static let hairline: CGFloat = 1
 
+    /// The square a ``DisclosureChevron`` occupies. Fixed so rotating the glyph can't change
+    /// the width it claims and nudge the label beside it.
+    public static let chevron: CGFloat = 10
+
     /// The dot that marks an entity's kind, wherever one appears. One size everywhere:
     /// it means the same thing in a sidebar row as on a board card or a palette result,
     /// so it shouldn't change size between them.
