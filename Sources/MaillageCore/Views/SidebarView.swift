@@ -152,15 +152,14 @@ public struct SidebarView: View {
         }
     }
 
-    /// Animated so the rows slide rather than blink, which is what makes it read as folding
-    /// rather than as the list being replaced.
+    /// Unanimated on purpose: folding a section is navigation, not an effect, and the rows
+    /// should be gone by the time the click finishes rather than sliding for a fifth of a
+    /// second first.
     private func toggle(_ kind: EntityKind) {
-        withAnimation(.easeInOut(duration: 0.18)) {
-            if collapsed.contains(kind) {
-                collapsed.remove(kind)
-            } else {
-                collapsed.insert(kind)
-            }
+        if collapsed.contains(kind) {
+            collapsed.remove(kind)
+        } else {
+            collapsed.insert(kind)
         }
     }
 

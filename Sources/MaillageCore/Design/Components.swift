@@ -234,9 +234,8 @@ public struct SectionHeader: View {
 
 /// The triangle that says whether a collapsible section is open.
 ///
-/// One glyph rotated rather than two symbols swapped, so the turn animates and the arrow is
-/// visibly the *same* arrow throughout — swapping `chevron.right` for `chevron.down` cuts
-/// instead, which reads as a different control appearing.
+/// One glyph rotated rather than two symbols swapped, so the arrow is visibly the *same*
+/// arrow in both states instead of two that happen to sit in the same place.
 ///
 /// Sized to ``Theme/Font/sectionHeader`` and drawn in ``Theme/textFaint``, matching the
 /// ``SectionHeader`` it sits beside: the chevron is punctuation on that label, not a control
@@ -254,6 +253,10 @@ public struct DisclosureChevron: View {
             .font(Theme.Font.sectionHeader)
             .foregroundStyle(Theme.textFaint)
             .rotationEffect(.degrees(isExpanded ? 90 : 0))
+            // Snaps rather than spins. `rotationEffect` is animatable, so an animation
+            // anywhere up the tree would otherwise pick it up and turn the glyph — and the
+            // rows it describes appear instantly, so a turning arrow would lag them.
+            .animation(nil, value: isExpanded)
             // Fixed square: rotating a non-square glyph changes the width it claims, which
             // would shove the section title sideways on every toggle.
             .frame(width: Theme.chevron, height: Theme.chevron)
