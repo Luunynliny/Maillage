@@ -32,5 +32,12 @@
 	<string>maillage records meeting audio so it can attach notes to the people you spoke with.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<!-- Opt out of the macOS 26 design language. It gives every window a ~24pt corner
+	     radius and draws a NavigationSplitView's sidebar as a card inset from the window
+	     edges, both of which fight the flat, border-separated Obsidian look the rest of
+	     the app is built on. Neither is reachable from app code — this key is the only
+	     lever. It also declines Liquid Glass, which this app never used. -->
+	<key>UIDesignRequiresCompatibility</key>
+	<true/>
 </dict>
 </plist>
