@@ -173,7 +173,7 @@ public struct SidebarRow: View {
                     .background(
                         Circle().fill(isPlaceholder ? Color.clear : dotColor)
                     )
-                    .frame(width: 8, height: 8)
+                    .frame(width: Theme.entityDot, height: Theme.entityDot)
 
                 Text(title)
                     .font(Theme.Font.body)

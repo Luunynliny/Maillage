@@ -115,6 +115,11 @@ public enum Theme {
     /// Obsidian draws separators as true hairlines.
     public static let hairline: CGFloat = 1
 
+    /// The dot that marks an entity's kind, wherever one appears. One size everywhere:
+    /// it means the same thing in a sidebar row as on a board card or a palette result,
+    /// so it shouldn't change size between them.
+    public static let entityDot: CGFloat = 8
+
     // MARK: Typography
 
     public enum Font {

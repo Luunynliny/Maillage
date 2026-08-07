@@ -92,7 +92,7 @@ struct CommandPalette: View {
                 Circle()
                     .strokeBorder(item.color, lineWidth: item.isPlaceholder ? 1.5 : 0)
                     .background(Circle().fill(item.isPlaceholder ? Color.clear : item.color))
-                    .frame(width: 8, height: 8)
+                    .frame(width: Theme.entityDot, height: Theme.entityDot)
 
                 Text(item.title)
                     .font(Theme.Font.body)

@@ -65,7 +65,7 @@ struct OrganizationBoardView: View {
                 HStack(spacing: Theme.Spacing.small) {
                     Circle()
                         .fill(Theme.projectColor)
-                        .frame(width: 8, height: 8)
+                        .frame(width: Theme.entityDot, height: Theme.entityDot)
                     Text(project.displayName)
                         .font(Theme.Font.heading)
                         .foregroundStyle(Theme.textNormal)
@@ -100,7 +100,7 @@ struct OrganizationBoardView: View {
             HStack(spacing: Theme.Spacing.small) {
                 Circle()
                     .strokeBorder(Theme.textFaint, lineWidth: 1.5)
-                    .frame(width: 8, height: 8)
+                    .frame(width: Theme.entityDot, height: Theme.entityDot)
                 Text("On no project")
                     .font(Theme.Font.heading)
                     .foregroundStyle(Theme.textMuted)
