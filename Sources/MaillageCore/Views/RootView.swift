@@ -18,8 +18,8 @@ public struct RootView: View {
     @State private var isPaletteVisible = false
     @State private var isPickingVault = false
     /// Whether the centre pane's details section is unfolded. Held here rather than in
-    /// ``CenterPaneHeader`` so it survives changing selection — someone who wants to see
-    /// metadata generally wants to keep seeing it as they click around.
+    /// ``CenterPaneHeader`` so the ⌥⌘0 menu command can reach it; the header folds it back
+    /// shut on every change of subject.
     @State private var isDetailVisible = false
 
     public init() {}
@@ -34,6 +34,10 @@ public struct RootView: View {
                 editorRequest: $editorRequest,
                 isDetailVisible: $isDetailVisible)
         }
+        // Details fold shut on every change of subject. Here rather than in
+        // ``CenterPaneHeader``, because switching between kinds swaps the whole centre view for
+        // a different one — an `onChange` inside the header would miss exactly that case.
+        .onChange(of: selection) { isDetailVisible = false }
         .navigationTitle("")
         .toolbarBackground(Theme.bgSecondary, for: .windowToolbar)
         .background(Theme.bgPrimary)

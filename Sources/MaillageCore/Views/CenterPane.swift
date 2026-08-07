@@ -66,9 +66,10 @@ struct CenterPane: View {
 /// the widest thing in the app, was permanently narrowed by a pane of metadata worth one
 /// glance. So the metadata moved here, under the name it describes, behind a chevron.
 ///
-/// Collapsed by default: the graph is what you came for, and the details are an answer to a
-/// question you have to ask. The state lives in ``RootView`` so unfolding it once keeps it
-/// unfolded as you click from person to person.
+/// Collapsed by default, and collapsed again whenever the selection changes: the graph is what
+/// you came for, and the details are an answer to a question you have to ask about one specific
+/// subject. Carrying the unfolded state to the next subject would answer a question nobody
+/// asked, with the graph shoved down the window.
 ///
 /// The bubbles have no header, since nothing is selected and every circle labels itself.
 /// Takes the whole subject rather than a title and a colour, because everything except the
@@ -82,6 +83,10 @@ struct CenterPaneHeader: View {
     @Binding var isDetailVisible: Bool
     @Binding var selection: EntityID?
     @Binding var editorRequest: EditorRequest?
+
+    /// How tall the details actually want to be, measured rather than assumed. Zero until the
+    /// first measurement arrives.
+    @State private var contentHeight: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -132,18 +137,32 @@ struct CenterPaneHeader: View {
             .padding(.vertical, Theme.Spacing.medium)
 
             if isDetailVisible {
-                // Capped, and scrolls past the cap: a person with thirty backlinks would
-                // otherwise push the graph out of the window entirely.
+                // No divider above this: the details belong to the name directly above them,
+                // and a line between the two read as a border between separate things. The
+                // band's own bottom hairline already says where the header stops.
+                //
+                // Height follows the content up to a cap, rather than always claiming the cap.
+                // A person with an email and one relation would otherwise sit in a tall empty
+                // box; a person with thirty backlinks would otherwise push the graph out of
+                // the window. So: measure, then take the smaller of the two.
                 ScrollView {
                     EntityDetails(
                         entity: entity, selection: $selection, editorRequest: $editorRequest)
                         .padding(.horizontal, Theme.Spacing.large)
                         .padding(.bottom, Theme.Spacing.large)
+                        .background {
+                            GeometryReader { geometry in
+                                Color.clear.onChange(of: geometry.size.height, initial: true) {
+                                    contentHeight = geometry.size.height
+                                }
+                            }
+                        }
                 }
-                .frame(maxHeight: Theme.Height.detailsMax)
-                .overlay(alignment: .top) {
-                    Rectangle().fill(Theme.border).frame(height: Theme.hairline)
-                }
+                .frame(height: min(contentHeight, Theme.Height.detailsMax))
+                // Until the first measurement lands, `contentHeight` is 0 and the section has
+                // no height — one frame of nothing rather than one frame of a full-height box
+                // snapping shut.
+                .opacity(contentHeight > 0 ? 1 : 0)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -151,6 +170,12 @@ struct CenterPaneHeader: View {
         .overlay(alignment: .bottom) {
             Rectangle().fill(Theme.border).frame(height: Theme.hairline)
         }
+        // Every subject gets its own measurement, so the stale height from the last one never
+        // sizes this one's box. Needed because clicking person → person reuses this instance
+        // with a new `entity` rather than building a fresh one. Folding back shut is
+        // ``RootView``'s job, since switching kind replaces this view entirely and an
+        // `onChange` here would never fire for it.
+        .onChange(of: entity.id) { contentHeight = 0 }
     }
 
     private var isPlaceholder: Bool {
