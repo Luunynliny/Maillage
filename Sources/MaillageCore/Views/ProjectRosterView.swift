@@ -11,15 +11,19 @@ struct ProjectRosterView: View {
 
     let project: Project
     @Binding var selection: EntityID?
-    /// So the empty state can open the editor, which is where staffing happens.
+    /// So the empty state and the header can open the editor, where staffing happens.
     @Binding var editorRequest: EditorRequest?
+    /// Whether the header's details section is folded out. Owned by ``RootView``.
+    @Binding var isDetailVisible: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             CenterPaneHeader(
-                title: project.displayName,
+                entity: .project(project),
                 subtitle: subtitle,
-                color: Theme.projectColor)
+                isDetailVisible: $isDetailVisible,
+                selection: $selection,
+                editorRequest: $editorRequest)
 
             if participants.isEmpty {
                 EmptyStateView(

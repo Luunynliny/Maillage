@@ -191,6 +191,11 @@ public struct SidebarRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // No focus ring. Selection in this sidebar is drawn by `rowBackground`, and AppKit's
+        // blue ring on whichever row happens to be first responder is a second, competing
+        // claim — on launch it landed on the top row while a different row was actually
+        // selected, so two rows looked chosen. Rows are reached by clicking or through ⌘K.
+        .focusable(false)
         .onHover { isHovering = $0 }
         .clickableCursor()
     }

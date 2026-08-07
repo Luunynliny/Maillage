@@ -36,8 +36,11 @@ struct MaillageApp: App {
                     .keyboardShortcut("k")
             }
 
-            // Beside the system's "Show Sidebar" item, since it toggles the pane at the
-            // other end of the window. ⌥⌘0 pairs with the ⌃⌘S macOS gives the sidebar.
+            // Beside the system's "Show Sidebar" item: both reveal a body of information the
+            // window is otherwise hiding. ⌥⌘0 pairs with the ⌃⌘S macOS gives the sidebar.
+            // Kept even though the details now fold out of the centre pane's own header
+            // rather than being a column, because the chevron is the only other way in and
+            // a keyboard route shouldn't disappear because the geometry changed.
             CommandGroup(after: .sidebar) {
                 Button(isDetailVisible == false ? "Show Details" : "Hide Details") {
                     isDetailVisible?.toggle()

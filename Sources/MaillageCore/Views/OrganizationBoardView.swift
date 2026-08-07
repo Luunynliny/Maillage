@@ -11,13 +11,19 @@ struct OrganizationBoardView: View {
 
     let organization: Organization
     @Binding var selection: EntityID?
+    /// So the header can open the editor that changes it.
+    @Binding var editorRequest: EditorRequest?
+    /// Whether the header's details section is folded out. Owned by ``RootView``.
+    @Binding var isDetailVisible: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             CenterPaneHeader(
-                title: organization.displayName,
+                entity: .organization(organization),
                 subtitle: subtitle,
-                color: Theme.organizationColor)
+                isDetailVisible: $isDetailVisible,
+                selection: $selection,
+                editorRequest: $editorRequest)
 
             if projects.isEmpty && employees.isEmpty {
                 EmptyStateView(

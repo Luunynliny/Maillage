@@ -1,9 +1,15 @@
 import SwiftUI
 
-/// Three-pane shell: sidebar, graph, detail.
+/// Two-pane shell: sidebar and subject.
 ///
-/// Owns the selection and the currently presented editor so the sidebar, graph and
-/// detail pane all stay in sync through a single piece of state.
+/// Owns the selection and the currently presented editor so the sidebar and the centre pane
+/// stay in sync through a single piece of state.
+///
+/// There is no detail column. What it held now folds out of the centre pane's own title band
+/// (``CenterPaneHeader``), directly under the name of the thing it describes. A third column
+/// meant the subject's name was drawn twice, side by side, and the graph — the widest thing in
+/// the app and the reason it's a desktop app — was permanently squeezed by a pane of metadata
+/// that is mostly worth one glance.
 public struct RootView: View {
     @Environment(VaultStore.self) private var store
 
@@ -11,11 +17,10 @@ public struct RootView: View {
     @State private var editorRequest: EditorRequest?
     @State private var isPaletteVisible = false
     @State private var isPickingVault = false
-    /// Whether the detail column is showing. The leading column gets a toggle from
-    /// `NavigationSplitView` for free, but the detail column gets none —
-    /// `NavigationSplitViewVisibility` only ever collapses columns from the left — so
-    /// hiding it is this view's own state. See ``detailToggle``.
-    @State private var isDetailVisible = true
+    /// Whether the centre pane's details section is unfolded. Held here rather than in
+    /// ``CenterPaneHeader`` so it survives changing selection — someone who wants to see
+    /// metadata generally wants to keep seeing it as they click around.
+    @State private var isDetailVisible = false
 
     public init() {}
 
@@ -23,22 +28,13 @@ public struct RootView: View {
         NavigationSplitView {
             SidebarView(selection: $selection, editorRequest: $editorRequest)
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 340)
-        } content: {
-            CenterPane(selection: $selection, editorRequest: $editorRequest)
-                .navigationSplitViewColumnWidth(min: 320, ideal: 520)
         } detail: {
-            if isDetailVisible {
-                DetailView(selection: $selection, editorRequest: $editorRequest)
-                    .navigationSplitViewColumnWidth(min: 300, ideal: 380, max: 560)
-            } else {
-                // Width zero rather than an absent column: the `detail` closure has to
-                // return something, and a collapsed column hands its width to the centre
-                // pane, which is what makes the graph grow into the freed space.
-                Color.clear.navigationSplitViewColumnWidth(0)
-            }
+            CenterPane(
+                selection: $selection,
+                editorRequest: $editorRequest,
+                isDetailVisible: $isDetailVisible)
         }
         .navigationTitle("")
-        .toolbar { detailToggle }
         .toolbarBackground(Theme.bgSecondary, for: .windowToolbar)
         .background(Theme.bgPrimary)
         .sheet(item: $editorRequest) { request in
@@ -63,27 +59,6 @@ public struct RootView: View {
             if let error = store.lastError {
                 errorBanner(error)
             }
-        }
-    }
-
-    // MARK: Detail toggle
-
-    /// Hides and shows the detail column, mirroring the sidebar toggle AppKit installs at
-    /// the leading edge.
-    ///
-    /// Deliberately the same `sidebar.right` glyph Xcode and Mail use for their inspectors,
-    /// and pinned to `.primaryAction` so it lands at the trailing edge — the two toggles then
-    /// sit at opposite ends of the toolbar, each next to the pane it controls.
-    @ToolbarContentBuilder
-    private var detailToggle: some ToolbarContent {
-        ToolbarItem(placement: .primaryAction) {
-            Button {
-                isDetailVisible.toggle()
-            } label: {
-                Image(systemName: "sidebar.right")
-            }
-            .help(isDetailVisible ? "Hide details" : "Show details")
-            .clickableCursor()
         }
     }
 

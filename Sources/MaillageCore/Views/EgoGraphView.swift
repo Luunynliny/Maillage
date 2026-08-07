@@ -16,17 +16,21 @@ struct EgoGraphView: View {
 
     let person: Person
     @Binding var selection: EntityID?
-    /// So the empty state can offer the editor that fills it.
+    /// So the empty state and the header can offer the editors that fill and change them.
     @Binding var editorRequest: EditorRequest?
+    /// Whether the header's details section is folded out. Owned by ``RootView``.
+    @Binding var isDetailVisible: Bool
 
     @State private var hovered: EntityID?
 
     var body: some View {
         VStack(spacing: 0) {
             CenterPaneHeader(
-                title: person.displayName,
+                entity: .person(person),
                 subtitle: subtitle,
-                color: Theme.color(for: person))
+                isDetailVisible: $isDetailVisible,
+                selection: $selection,
+                editorRequest: $editorRequest)
 
             if spokes.isEmpty {
                 EmptyStateView(

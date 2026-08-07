@@ -119,6 +119,13 @@ public enum Theme {
     /// the width it claims and nudge the label beside it.
     public static let chevron: CGFloat = 10
 
+    /// Fixed heights, for surfaces that must not grow to whatever their content wants.
+    public enum Height {
+        /// The tallest an unfolded details section may get before it scrolls. A subject with
+        /// thirty backlinks would otherwise push the graph out of the window.
+        public static let detailsMax: CGFloat = 340
+    }
+
     /// The dot that marks an entity's kind, wherever one appears. One size everywhere:
     /// it means the same thing in a sidebar row as on a board card or a palette result,
     /// so it shouldn't change size between them.

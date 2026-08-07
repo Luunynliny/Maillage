@@ -28,6 +28,9 @@ struct CenterPane: View {
     @Binding var selection: EntityID?
     /// Passed down so an empty view can offer the editor that fills it.
     @Binding var editorRequest: EditorRequest?
+    /// Whether each subject view's header has its details folded out. Owned by ``RootView``
+    /// so the choice outlives the selection it was made on.
+    @Binding var isDetailVisible: Bool
 
     var body: some View {
         ZStack {
@@ -35,13 +38,17 @@ struct CenterPane: View {
 
             switch selection.flatMap({ store.entity(id: $0) }) {
             case .organization(let organization):
-                OrganizationBoardView(organization: organization, selection: $selection)
+                OrganizationBoardView(
+                    organization: organization, selection: $selection,
+                    editorRequest: $editorRequest, isDetailVisible: $isDetailVisible)
             case .project(let project):
                 ProjectRosterView(
-                    project: project, selection: $selection, editorRequest: $editorRequest)
+                    project: project, selection: $selection,
+                    editorRequest: $editorRequest, isDetailVisible: $isDetailVisible)
             case .person(let person):
                 EgoGraphView(
-                    person: person, selection: $selection, editorRequest: $editorRequest)
+                    person: person, selection: $selection,
+                    editorRequest: $editorRequest, isDetailVisible: $isDetailVisible)
             // Nothing selected: the bubbles are the only view that stands on its own without a
             // subject, and they're where you click through to the other three.
             case nil:
@@ -51,37 +58,102 @@ struct CenterPane: View {
     }
 }
 
-/// Header shown above the three subject views, naming what you're looking at.
+/// Header above the three subject views: what you're looking at, and — folded away until
+/// asked for — everything known about it.
 ///
-/// The detail pane names it too, but the centre pane is wide — without this a fan of spokes or
-/// a scrolled board has no anchor saying whose it is. The bubbles have no header, since
-/// nothing is selected and every circle labels itself.
+/// This band is the only place the subject is named. It used to share that job with a detail
+/// column on the right, which meant the same name drawn twice side by side while the graph,
+/// the widest thing in the app, was permanently narrowed by a pane of metadata worth one
+/// glance. So the metadata moved here, under the name it describes, behind a chevron.
+///
+/// Collapsed by default: the graph is what you came for, and the details are an answer to a
+/// question you have to ask. The state lives in ``RootView`` so unfolding it once keeps it
+/// unfolded as you click from person to person.
+///
+/// The bubbles have no header, since nothing is selected and every circle labels itself.
+/// Takes the whole subject rather than a title and a colour, because everything except the
+/// subtitle is derivable from it — the name, the kind's hue, the italic that marks a
+/// placeholder, the buttons that edit it and the details that describe it. The three subject
+/// views each have their own subtitle (a headcount, a status, a job title) and nothing else
+/// to say here, so that stays the one parameter.
 struct CenterPaneHeader: View {
-    let title: String
+    let entity: AnyEntity
     let subtitle: String
-    let color: Color
+    @Binding var isDetailVisible: Bool
+    @Binding var selection: EntityID?
+    @Binding var editorRequest: EditorRequest?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+        VStack(alignment: .leading, spacing: 0) {
+            // The name and chevron together are the hit target, matching the sidebar's
+            // section headings — the same gesture folds a section there and details here.
+            // The edit buttons sit outside it, so editing never folds.
             HStack(spacing: Theme.Spacing.small) {
-                Circle()
-                    .fill(color)
-                    .frame(width: 8, height: 8)
-                Text(title)
-                    .font(Theme.Font.heading)
-                    .foregroundStyle(Theme.textNormal)
-                Spacer(minLength: 0)
+                HStack(spacing: Theme.Spacing.small) {
+                    DisclosureChevron(isExpanded: isDetailVisible)
+
+                    Circle()
+                        .fill(Theme.color(for: entity))
+                        .frame(width: Theme.entityDot, height: Theme.entityDot)
+
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                        Text(entity.displayName)
+                            .font(Theme.Font.heading)
+                            .foregroundStyle(Theme.textNormal)
+                            // Placeholder people are named in italic, as in the sidebar.
+                            .italic(isPlaceholder)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Text(subtitle)
+                            .font(Theme.Font.caption)
+                            .foregroundStyle(Theme.textMuted)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: Theme.Spacing.small)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { isDetailVisible.toggle() }
+                .clickableCursor()
+                .help(isDetailVisible ? "Hide details" : "Show details")
+
+                // Kept in the always-visible row: editing is something you do to the
+                // subject, not a detail of it.
+                if isPlaceholder {
+                    SecondaryButton("Add name…", icon: "person.badge.plus") {
+                        editorRequest = .resolvePlaceholder(entity.id)
+                    }
+                }
+                IconButton("pencil", help: "Edit \(entity.displayName)") {
+                    editorRequest = .edit(entity.id)
+                }
             }
-            Text(subtitle)
-                .font(Theme.Font.caption)
-                .foregroundStyle(Theme.textMuted)
+            .padding(.horizontal, Theme.Spacing.large)
+            .padding(.vertical, Theme.Spacing.medium)
+
+            if isDetailVisible {
+                // Capped, and scrolls past the cap: a person with thirty backlinks would
+                // otherwise push the graph out of the window entirely.
+                ScrollView {
+                    EntityDetails(
+                        entity: entity, selection: $selection, editorRequest: $editorRequest)
+                        .padding(.horizontal, Theme.Spacing.large)
+                        .padding(.bottom, Theme.Spacing.large)
+                }
+                .frame(maxHeight: Theme.Height.detailsMax)
+                .overlay(alignment: .top) {
+                    Rectangle().fill(Theme.border).frame(height: Theme.hairline)
+                }
+            }
         }
-        .padding(.horizontal, Theme.Spacing.large)
-        .padding(.vertical, Theme.Spacing.medium)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.bgSecondary)
         .overlay(alignment: .bottom) {
             Rectangle().fill(Theme.border).frame(height: Theme.hairline)
         }
+    }
+
+    private var isPlaceholder: Bool {
+        entity.asPerson?.placeholder == true
     }
 }

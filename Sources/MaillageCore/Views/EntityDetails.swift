@@ -1,111 +1,43 @@
 import SwiftUI
 
-/// Right pane: everything known about the selected entity.
-public struct DetailView: View {
-    @Environment(VaultStore.self) private var store
+/// Everything known about one entity: metadata, membership, relations, backlinks, notes.
+///
+/// No longer a pane of its own. It fills the details section that folds out of
+/// ``CenterPaneHeader``, under the name of the thing it describes — so it draws no title,
+/// no dot and no edit button, all of which the header above it already owns.
+///
+/// Still one view per kind behind one entry point, because the three have genuinely
+/// different bodies: a person has relations and an employer, a project has a status and a
+/// roster, an organization has neither.
+struct EntityDetails: View {
+    let entity: AnyEntity
     @Binding var selection: EntityID?
     @Binding var editorRequest: EditorRequest?
 
-    public init(selection: Binding<EntityID?>, editorRequest: Binding<EditorRequest?>) {
-        self._selection = selection
-        self._editorRequest = editorRequest
-    }
-
-    public var body: some View {
-        Group {
-            switch selection.flatMap({ store.entity(id: $0) }) {
-            case .person(let person):
-                detail(for: .person(person)) { PersonDetailBody(person: person, selection: $selection, editorRequest: $editorRequest) }
-            case .organization(let org):
-                detail(for: .organization(org)) { OrganizationDetailBody(organization: org, selection: $selection) }
-            case .project(let project):
-                detail(for: .project(project)) { ProjectDetailBody(project: project, selection: $selection) }
-            case nil:
-                EmptyStateView(
-                    icon: "person.crop.circle",
-                    title: "Nothing selected",
-                    message: "Pick someone from the sidebar or click a node in the graph."
-                )
-            }
-        }
-        .background(Theme.bgPrimary)
-    }
-
-    @ViewBuilder
-    private func detail<Body: View>(
-        for entity: AnyEntity, @ViewBuilder body: () -> Body
-    ) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Spacing.large) {
-                EntityHeader(entity: entity, editorRequest: $editorRequest)
-                body()
-
-                if !entity.body.isEmpty {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-                        SectionHeader(entity.bodyTitle)
-                        Text(entity.body)
-                            .font(Theme.Font.body)
-                            .foregroundStyle(Theme.textNormal)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-            }
-            .padding(Theme.Spacing.large)
-        }
-    }
-}
-
-// MARK: - Header
-
-private struct EntityHeader: View {
-    let entity: AnyEntity
-    @Binding var editorRequest: EditorRequest?
-
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            HStack(spacing: Theme.Spacing.small) {
-                Circle()
-                    .fill(Theme.color(for: entity))
-                    .frame(width: 10, height: 10)
-
-                Text(entity.displayName)
-                    .font(Theme.Font.title)
-                    .foregroundStyle(Theme.textNormal)
-                    .italic(isPlaceholder)
-
-                Spacer()
-
-                if isPlaceholder {
-                    SecondaryButton("Add name…", icon: "person.badge.plus") {
-                        editorRequest = .resolvePlaceholder(entity.id)
-                    }
-                }
-                IconButton("pencil", help: "Edit \(entity.displayName)") {
-                    editorRequest = .edit(entity.id)
-                }
+        VStack(alignment: .leading, spacing: Theme.Spacing.large) {
+            switch entity {
+            case .person(let person):
+                PersonDetailBody(
+                    person: person, selection: $selection, editorRequest: $editorRequest)
+            case .organization(let org):
+                OrganizationDetailBody(organization: org, selection: $selection)
+            case .project(let project):
+                ProjectDetailBody(project: project, selection: $selection)
             }
 
-            HStack(spacing: Theme.Spacing.small) {
-                Text(entity.kind.rawValue.capitalized)
-                    .font(Theme.Font.caption)
-                    .foregroundStyle(Theme.textFaint)
-                Text(entity.id)
-                    .font(Theme.Font.mono)
-                    .foregroundStyle(Theme.textFaint)
-                    .textSelection(.enabled)
-            }
-
-            if isPlaceholder {
-                Text("Name unknown — this profile is a placeholder.")
-                    .font(Theme.Font.caption)
-                    .foregroundStyle(Theme.placeholderColor)
+            if !entity.body.isEmpty {
+                VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                    SectionHeader(entity.bodyTitle)
+                    Text(entity.body)
+                        .font(Theme.Font.body)
+                        .foregroundStyle(Theme.textNormal)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
         }
-    }
-
-    private var isPlaceholder: Bool {
-        entity.asPerson?.placeholder == true
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
