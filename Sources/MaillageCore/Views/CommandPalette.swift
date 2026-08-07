@@ -54,6 +54,7 @@ struct CommandPalette: View {
                 }
         }
         .padding(Theme.Spacing.medium)
+        .textCursor()
     }
 
     @ViewBuilder
@@ -117,6 +118,7 @@ struct CommandPalette: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .clickableCursor()
     }
 
     // MARK: Behaviour

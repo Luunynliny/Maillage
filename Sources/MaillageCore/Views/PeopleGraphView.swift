@@ -1,3 +1,4 @@
+import AppKit
 import Grape
 import SwiftUI
 
@@ -23,6 +24,10 @@ struct PeopleGraphView: View {
     @State private var graphState = ForceDirectedGraphState(
         initialIsRunning: false,
         ticksOnAppear: .untilStable)
+
+    /// Whether the pointer is currently over a node, so the hand cursor is pushed and
+    /// popped exactly once per crossing instead of on every hover sample.
+    @State private var isHoveringNode = false
 
     var body: some View {
         ZStack {
@@ -100,8 +105,27 @@ struct PeopleGraphView: View {
             Rectangle()
                 .fill(.clear)
                 .contentShape(Rectangle())
-                .withGraphTapGesture(proxy, of: EntityID.self) { id in
+                .onTapGesture { point in
+                    guard let id = proxy.node(of: EntityID.self, near: point) else { return }
                     selection = id
+                }
+                // A node is clickable, the canvas around it isn't, and nothing about a
+                // painted circle says which — so the cursor has to.
+                .onContinuousHover { phase in
+                    let isOverNode: Bool
+                    switch phase {
+                    case .active(let point):
+                        isOverNode = proxy.node(of: EntityID.self, near: point) != nil
+                    case .ended:
+                        isOverNode = false
+                    }
+                    guard isOverNode != isHoveringNode else { return }
+                    isHoveringNode = isOverNode
+                    if isOverNode {
+                        NSCursor.pointingHand.push()
+                    } else {
+                        NSCursor.pop()
+                    }
                 }
                 // Dragging only takes effect while the simulation ticks, so run it for
                 // the duration of the drag and settle again on release.
@@ -174,6 +198,44 @@ struct PeopleGraphView: View {
         case .project:
             return 8  // Not drawn in this view; here so the switch stays exhaustive.
         }
+    }
+}
+
+// MARK: - Forgiving hit testing
+
+extension GraphProxy {
+    /// How far off a node's edge still counts as hitting it, in points.
+    ///
+    /// A person's circle is 14pt across. Grape's own `node(of:at:)` tests the drawn radius
+    /// exactly, so a click a few points off centre — well inside what a pointer can
+    /// reasonably be asked to hit — returned nil and the node looked dead. Mouse targets
+    /// want ~20pt; this pads the small ones up to that without inflating an org node, whose
+    /// circle is already large.
+    private static let slop: CGFloat = 8
+
+    /// The node at `point`, or the nearest one within ``slop`` of it.
+    ///
+    /// Grape exposes only an exact test, so this samples it on a ring of offsets around the
+    /// point: cheap, needs no access to node positions, and picks the node whose edge is
+    /// closest because it tries the smallest offsets first. Ties go to whatever Grape's own
+    /// reverse iteration prefers, which is the topmost drawn node.
+    @MainActor
+    func node<ID: Hashable>(of type: ID.Type, near point: CGPoint) -> ID? {
+        if let hit = node(of: type, at: point) { return hit }
+
+        let directions = 8
+        // Two rings rather than one: a single ring at full slop skips a node that sits
+        // between the samples, and stepping finer than this buys nothing at 8pt.
+        for distance in stride(from: Self.slop / 2, through: Self.slop, by: Self.slop / 2) {
+            for step in 0..<directions {
+                let angle = 2 * CGFloat.pi * CGFloat(step) / CGFloat(directions)
+                let probe = CGPoint(
+                    x: point.x + cos(angle) * distance,
+                    y: point.y + sin(angle) * distance)
+                if let hit = node(of: type, at: probe) { return hit }
+            }
+        }
+        return nil
     }
 }
 

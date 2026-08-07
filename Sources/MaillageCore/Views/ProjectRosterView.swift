@@ -100,6 +100,7 @@ struct ProjectRosterView: View {
                     .lineLimit(1)
             }
             .buttonStyle(.plain)
+            .clickableCursor()
         } else {
             Text("—")
                 .font(Theme.Font.body)

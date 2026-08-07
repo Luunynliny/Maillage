@@ -115,6 +115,17 @@ These are invariants, not preferences — the tests enforce most of them.
   memory so the target can show "Referenced by", exactly like Obsidian.
 - **Never hardcode a color, radius, spacing or font in a view.** Reference `Theme`. Both light
   and dark are resolved inside `Theme.adaptive`, so use sites never branch on appearance.
+- **The cursor says what's clickable.** `.buttonStyle(.plain)` installs no tracking area, so
+  AppKit leaves the arrow over every control in `Components.swift` unless told otherwise. Each
+  one applies `clickableCursor()` itself (text inputs `textCursor()`), so a new button is
+  clickable-looking by construction. Pass `clickableCursor(false)` when a control is only
+  sometimes clickable — a disabled button or an action-less `Pill` — since a hand promises a
+  click that does nothing. The graph is the exception and resolves per-point with
+  `onContinuousHover`, because one `Canvas` holds every node.
+- **A text input's box is bigger than its `TextField`.** Padding, border and placeholder are
+  drawn around it, so a click near the edge misses the input and the field reads as dead.
+  Whatever draws the box also claims it: `contentShape` plus `onTapGesture` setting the field's
+  own `@FocusState`. `RoleField` in `Editors.swift` is the worked example.
 - **Membership lives on the person** (`organization:`, `projects:`), never duplicated onto the
   org or project. Org/project member lists are derived by scanning people.
 - **One employer per person.** `organization:` is singular, because the People graph clusters on

@@ -466,6 +466,7 @@ struct RelationEditor: View {
                             newPlaceholderDescriptor = ""
                         }
                         .buttonStyle(.plain)
+                        .clickableCursor()
                         .font(Theme.Font.caption)
                         .foregroundStyle(Theme.accent)
                     }
@@ -502,6 +503,7 @@ struct RelationEditor: View {
                             targetID = nil
                         }
                         .buttonStyle(.plain)
+                        .clickableCursor()
                         .font(Theme.Font.caption)
                         .foregroundStyle(Theme.accent)
                     }
@@ -881,6 +883,8 @@ struct RoleField: View {
     @Binding var role: String
     let known: [String]
 
+    @FocusState private var isFocused: Bool
+
     var body: some View {
         HStack(spacing: Theme.Spacing.xs) {
             TextField("", text: $role)
@@ -888,6 +892,7 @@ struct RoleField: View {
                 .font(Theme.Font.body)
                 .foregroundStyle(Theme.textNormal)
                 .placeholder("Role", isVisible: role.isEmpty)
+                .focused($isFocused)
                 .frame(width: 130)
                 .padding(.horizontal, Theme.Spacing.small)
                 .padding(.vertical, 4)
@@ -895,8 +900,17 @@ struct RoleField: View {
                 .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
                 .overlay(
                     RoundedRectangle(cornerRadius: Theme.Radius.medium)
-                        .stroke(Theme.border, lineWidth: Theme.hairline)
+                        .stroke(
+                            isFocused ? Theme.accent : Theme.border,
+                            lineWidth: Theme.hairline)
                 )
+                // The border, the padding and the placeholder are all drawn *outside* the
+                // `TextField` itself, so only a click on the glyph line reached the input —
+                // the field read as dead. Claiming the whole drawn box and focusing it by
+                // hand makes every part of what looks like the field behave like it.
+                .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
+                .onTapGesture { isFocused = true }
+                .textCursor()
 
             if !suggestions.isEmpty {
                 Menu {
@@ -911,6 +925,7 @@ struct RoleField: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
+                .clickableCursor()
                 .help("Roles you've used before")
             }
         }

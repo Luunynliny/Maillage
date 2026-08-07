@@ -138,6 +138,7 @@ private struct PersonDetailBody: View {
                             .foregroundStyle(Theme.textMuted)
                     }
                     .buttonStyle(.plain)
+                    .clickableCursor()
                     .help("Add a relation from \(person.displayName)")
                 }
 
@@ -176,6 +177,7 @@ private struct PersonDetailBody: View {
                                     .foregroundStyle(Theme.textFaint)
                             }
                             .buttonStyle(.plain)
+                            .clickableCursor()
                             .help("Remove this relation")
                         }
                     }

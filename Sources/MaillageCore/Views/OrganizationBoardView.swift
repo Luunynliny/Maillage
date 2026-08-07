@@ -77,6 +77,7 @@ struct OrganizationBoardView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .clickableCursor()
 
             if participants.isEmpty {
                 Text("Nobody on it yet.")

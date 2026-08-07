@@ -149,6 +149,7 @@ public struct RootView: View {
                     .foregroundStyle(Theme.textFaint)
             }
             .buttonStyle(.plain)
+            .clickableCursor()
         }
         .padding(Theme.Spacing.small)
         .background(Theme.bgSurface)
