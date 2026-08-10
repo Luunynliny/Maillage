@@ -239,19 +239,26 @@ struct EgoSpoke: Hashable {
 struct EgoLayout {
     /// Big enough to read a logo in. At the 11pt/7pt these were when the nodes were plain dots,
     /// an avatar had ~14pt across to work with, which is a few pixels of a face — the image was
-    /// there but told you nothing. Doubling them is the whole reason the logos are worth putting
-    /// on this view; ``ringRadius(in:horizontal:vertical:floor:)`` keeps the ring itself clear of
-    /// the rim, so the larger nodes cost no names.
-    static let subjectRadius: CGFloat = 18
-    static let neighbourRadius: CGFloat = 14
+    /// there but told you nothing. ``ringRadius(in:horizontal:vertical:floor:)`` keeps the ring
+    /// itself clear of the rim, so the larger nodes cost no names.
+    ///
+    /// Sized against the name under each node rather than against the pane: at a 28pt diameter a
+    /// face was still shorter than its own caption, which reads as a label with a smudge over it
+    /// instead of a portrait. A node wider than its name is the threshold where the picture
+    /// becomes the thing you identify the person by, which is the point of putting it here.
+    static let subjectRadius: CGFloat = 30
+    static let neighbourRadius: CGFloat = 24
     /// Room left either side of the ring. Wider than it is tall because a name is horizontal
     /// text: a neighbour at three o'clock needs half their name's width clear of the rim, not
     /// a line's height.
     ///
+    /// Covers the node as well as its name, so both grew when ``neighbourRadius`` did — a
+    /// margin measured for the caption alone would now let a node's own rim reach the pane edge.
+    ///
     /// Capped at a share of the pane by ``ringRadius(in:horizontal:vertical:floor:)``, so a
     /// narrow pane spreads the neighbours out rather than collapsing them onto the subject.
-    static let horizontalMargin: CGFloat = 130
-    static let verticalMargin: CGFloat = 70
+    static let horizontalMargin: CGFloat = 140
+    static let verticalMargin: CGFloat = 84
     /// How far apart two edges between the same pair bow, so a mutual pair reads as two.
     static let pairSpread: CGFloat = 0.16
 

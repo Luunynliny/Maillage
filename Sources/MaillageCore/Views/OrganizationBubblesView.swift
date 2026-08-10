@@ -95,12 +95,18 @@ struct OrganizationBubblesView: View {
     private func label(_ bubble: BubblePacking.Bubble) -> some View {
         VStack(spacing: 0) {
             // Only for a real employer: the grey bucket is "no organization", which has no
-            // logo to show and no id to look one up by. Sized off the bubble so it stays
-            // smaller than the count — the headcount is still what this view is read for.
+            // logo to show and no id to look one up by.
+            //
+            // Sized off the bubble rather than fixed, so a two-person company and a
+            // twenty-person one each get a mark in proportion to the circle it sits in. The
+            // share is set by what a wordmark needs to be legible at — at 0.4 the smallest
+            // bubbles rendered "momcorp" a handful of pixels tall, which is a blur where a
+            // logo should be. Still well under the count's own height, so the headcount stays
+            // what the view is read for.
             if let id = bubble.id {
                 EntityAvatar(
                     kind: .organization, id: id,
-                    size: bubble.radius * 0.4,
+                    size: bubble.radius * 0.62,
                     tint: bubble.color)
                     .padding(.bottom, Theme.Spacing.xs)
             }

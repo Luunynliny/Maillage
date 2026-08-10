@@ -146,8 +146,14 @@ public enum Theme {
     public enum Avatar {
         /// Rows: the sidebar, the ⌘K palette, the editors' option lists.
         public static let row: CGFloat = 20
-        /// The centre pane's title band, beside a 15pt heading.
-        public static let header: CGFloat = 28
+        /// The centre pane's title band, beside a 15pt heading over an 11pt subtitle.
+        ///
+        /// Matched to the height of those two lines together rather than to the heading alone.
+        /// At 28 it was sized to the name and came out shorter than the text block beside it,
+        /// which put a 28pt-wide crop of a face next to two lines of type — too small to
+        /// recognise, and visibly not aligned with either line. Squaring it off against the
+        /// whole block costs no band height, since the text already claims that much.
+        public static let header: CGFloat = 40
         /// Beside a project's name on an organization board card.
         public static let card: CGFloat = 16
         /// The editors' logo well, where the image is the subject rather than a marker.
