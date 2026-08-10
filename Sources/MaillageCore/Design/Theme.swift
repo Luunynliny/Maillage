@@ -141,6 +141,11 @@ public enum Theme {
         /// ``EntityLink`` allows on purpose: wrapping a name is better than truncating it when
         /// the name is the identification.
         public static let rosterEmployer: CGFloat = 190
+        /// The ``AppShortcut`` list the sidebar's ⓘ opens. Fixed rather than sized to its
+        /// content, because a popover that sizes itself lands a different width for every row
+        /// added — and the panel is read as two columns, which needs the gap between them to be
+        /// the same on every line.
+        public static let shortcutsHint: CGFloat = 250
     }
 
     /// Fixed heights, for surfaces that must not grow to whatever their content wants.

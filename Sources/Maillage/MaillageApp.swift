@@ -19,21 +19,19 @@ struct MaillageApp: App {
         }
         .windowToolbarStyle(.unified)
         .commands {
+            // Every item's title and keys come from ``AppShortcut``, which the sidebar's ⓘ also
+            // lists — so the panel advertising a shortcut and the item that rings it cannot say
+            // different things.
             CommandGroup(replacing: .newItem) {
-                Button("New Person…") { editorRequest = .newPerson }
-                    .keyboardShortcut("n")
-                Button("New Unnamed Person…") { editorRequest = .newPlaceholder }
-                    .keyboardShortcut("n", modifiers: [.command, .shift])
+                command(.newPerson) { editorRequest = .newPerson }
+                command(.newPlaceholder) { editorRequest = .newPlaceholder }
                 Divider()
-                Button("New Organization…") { editorRequest = .newOrganization }
-                    .keyboardShortcut("o", modifiers: [.command, .shift])
-                Button("New Project…") { editorRequest = .newProject }
-                    .keyboardShortcut("p", modifiers: [.command, .shift])
+                command(.newOrganization) { editorRequest = .newOrganization }
+                command(.newProject) { editorRequest = .newProject }
             }
 
             CommandGroup(after: .textEditing) {
-                Button("Jump to Anything…") { isPaletteVisible = true }
-                    .keyboardShortcut("k")
+                command(.palette) { isPaletteVisible = true }
             }
 
             // Beside the system's "Show Sidebar" item: both reveal a body of information the
@@ -42,19 +40,28 @@ struct MaillageApp: App {
             // rather than being a column, because the chevron is the only other way in and
             // a keyboard route shouldn't disappear because the geometry changed.
             CommandGroup(after: .sidebar) {
+                // Named for the state it will produce, unlike the hint's single entry, which has
+                // no window to ask.
                 Button(isDetailVisible == false ? "Show Details" : "Hide Details") {
                     isDetailVisible?.toggle()
                 }
-                .keyboardShortcut("0", modifiers: [.option, .command])
+                .keyboardShortcut(
+                    AppShortcut.toggleDetails.keyEquivalent,
+                    modifiers: AppShortcut.toggleDetails.modifiers)
                 .disabled(isDetailVisible == nil)
 
                 Divider()
-                Button("Reload Vault") { store.load() }
-                    .keyboardShortcut("r")
+                command(.reload) { store.load() }
                 Button("Reveal Vault in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([store.location.root])
                 }
             }
         }
+    }
+
+    /// A menu item titled and keyed by `shortcut`.
+    private func command(_ shortcut: AppShortcut, action: @escaping () -> Void) -> some View {
+        Button(shortcut.menuTitle, action: action)
+            .keyboardShortcut(shortcut.keyEquivalent, modifiers: shortcut.modifiers)
     }
 }

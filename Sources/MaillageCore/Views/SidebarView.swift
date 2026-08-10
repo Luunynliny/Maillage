@@ -72,11 +72,16 @@ public struct SidebarView: View {
     /// The whole band is the target, not just the six letters, and it stays clickable while
     /// nothing is selected — going where you already are is harmless, and a hit target that
     /// disappears depending on state is worse than a no-op.
+    ///
+    /// The ⓘ beside the name lists the app's keyboard shortcuts on hover (``ShortcutsHint``).
+    /// Here because this is the one band that is on screen whatever is selected, and next to the
+    /// app's name because what it describes is the app rather than the vault below it.
     private var header: some View {
-        HStack {
+        HStack(spacing: Theme.Spacing.xs) {
             Text("maillage")
                 .font(Theme.Font.heading)
                 .foregroundStyle(Theme.textNormal)
+            ShortcutsHint()
             Spacer()
         }
         .padding(Theme.Spacing.medium)
