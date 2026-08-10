@@ -57,22 +57,41 @@ pointed at Xcode; if a fresh machine errors out, run
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every push and PR to `main` and `develop`, in three parallel
-jobs. `make check` runs the same things locally, in the same order — reproduce a red check with
-one command rather than reading the workflow.
+`.github/workflows/ci.yml` runs on every push and PR to `main` and `develop`, as a **chain of
+stages** — cheapest gate first, and nothing downstream starts until everything upstream is green,
+so a failure costs the least it can and its reason is never buried under an unrelated one.
+`make check` runs the pre-build stages locally, in the same order — reproduce a red check with one
+command rather than reading the workflow.
 
-| Job | Runs | Guards |
+```
+quality ┐
+commits ├─→ test ─→ package ─→ release      release: push to main only
+branch  ┘
+```
+
+| Stage | Runs | Guards |
 |---|---|---|
 | Format & lint | `swift format lint`, SwiftLint, `Scripts/check-build-parity.sh` | Needs no build, so it reports in under a minute |
+| Commit messages | `commitlint` on the PR title and on every commit in the PR | That a merge will actually release something — see Releasing. PRs only |
+| Branch name | `<type>/<slug>` against commitlint's type list | That the branch and the commit type it produces stay in step. PRs only |
 | Tests | `swift test` | The 91 tests, via the fast path |
-| Build app bundle | `xcodebuild -scheme Maillage` with signing off | That the project file, `Info.plist` and embedded framework still produce a real `.app` — breakage `swift test` passes straight through |
+| Build app bundle | `Scripts/build-app.sh`, then a throwaway DMG | That the project file, `Info.plist` and embedded framework still produce a real, **signed, packageable** `.app` — breakage `swift test` passes straight through |
+| Release | `semantic-release` | Publishes. Push to `main` only |
 
 | Target | What it does |
 |---|---|
-| `make check` | Everything CI runs |
+| `make check` | Every pre-build stage CI runs |
 | `make format` | Rewrites sources to match `.swift-format` (CI only *checks*) |
 | `make lint` | SwiftLint — needs `brew install swiftlint` |
 | `make parity` | Just the two-build-system check |
+| `make build` | The shippable `.app` into `dist/`, by the same script CI uses |
+| `make dmg` | `dist/Maillage-0.0.0-dev.dmg`, exactly as a release would build it |
+| `make commits` | `commitlint` over this branch, against `origin/main` |
+| `make release-dry` | The version and notes a merge would produce. Publishes nothing |
+
+`test` needs all three of the first stage, and carries `if: ${{ !failure() && !cancelled() }}`
+because `commits` and `branch-name` are skipped on a `push` — without it, a skipped need would skip
+the whole rest of the chain.
 
 Both quality tools are **pinned**: the runner uses Xcode 26.6 (so `swift format`'s rules can't
 change under the repo) on `macos-26`, and SwiftLint by release version.
@@ -103,15 +122,76 @@ Watch out for:
 - **A skipped test needs `.enabled(if:)`, not `#require`.** A failed `#require` *fails* the test;
   it does not skip it. `SeededVaultTests` reads the real `~/Documents/Maillage` and must skip
   where there is none, which is every CI run.
+- **No check is *required* yet.** The repo is private on a free plan, so branch protection returns
+  403 (`Upgrade to GitHub Pro or make this repository public`). Every gate above is advisory until
+  the repo goes public or Pro — a red PR can still be merged. That is a real gap, not an oversight.
+
+## Releasing
+
+Merging into `main` publishes a GitHub Release: generated notes, both source archives, and
+`Maillage-<version>.dmg`. Nothing about it is typed by hand — **the version is computed from the
+commit messages**, which is why Conventional Commits are machinery here rather than a style.
+
+| Piece | Where |
+|---|---|
+| Version, tag, notes, publish | `semantic-release`, config in `.releaserc.json`, pinned in `package-lock.json` |
+| Message rules | `commitlint.config.js` (`config-conventional`, `header-max-length` 100) |
+| The app | `Scripts/build-app.sh` — Release config, ad-hoc signed, into `dist/` |
+| The version stamp | `Scripts/stamp-version.sh` — rewrites `Info.plist` and re-signs |
+| The DMG | `Scripts/make-dmg.sh` — `hdiutil`, app beside an `/Applications` symlink |
+| The install note | `Scripts/release-appendix.sh` — appended to every release body |
+
+The bump comes from the commit type: `fix:` → patch, `feat:` → minor, `feat!:` or a
+`BREAKING CHANGE:` footer → major. Everything else (`chore:`, `ci:`, `docs:`, `style:`, `test:`,
+`refactor:`) releases **nothing** — which is correct, and also the most common reason a merge lands
+and no release appears.
+
+Preview any of this before merging with `make release-dry`.
+
+Watch out for:
+
+- **The PR title is the release note.** Merges into `main` are squash-only, so the title becomes the
+  single commit on `main` and is the only thing `commit-analyzer` reads. A perfectly conventional
+  branch under a `chore:` PR title ships nothing. Re-enabling merge commits changes what gets
+  parsed — every commit, not the title — and makes the notes unreadable.
+- **The version has exactly one source: `MARKETING_VERSION`.** `App/Info.plist` must keep
+  `$(MARKETING_VERSION)`; the app target sets `GENERATE_INFOPLIST_FILE = NO`, so a literal there
+  *wins silently* over the version the release passes in, and ships an app whose About window
+  disagrees with the DMG it came in. `Scripts/check-build-parity.sh` now fails on that.
+- **Never edit a version to release, and never commit a changelog.** No commit lands on `main` from
+  a release — no `CHANGELOG.md`, no `chore(release)` — because the release body *is* the changelog
+  and a bot commit on `main` would force a `main`→`develop` back-merge after every ship. `main`
+  stays linear; `develop` never diverges.
+- **The app is built once.** `package` compiles and signs it; `release` restamps *that bundle* with
+  the computed version rather than rebuilding, so the binary that ships is the one the pipeline
+  tested. The `.app` travels between stages as a `ditto` archive: `upload-artifact` zips its
+  payload, and a plain zip drops the symlinks and signature inside `MaillageCore.framework`.
+- **Signing stays on in CI.** The old build passed `CODE_SIGNING_ALLOWED=NO`, which answers "does it
+  compile", not "does it run" — Apple silicon refuses to launch a totally unsigned app. The
+  project's `CODE_SIGN_IDENTITY = "-"` needs no Developer ID, so ad-hoc signing works on a runner.
+  Anything that edits a bundle afterwards must re-sign it, inside-out (framework, then app).
+- **The DMG can't be notarized** (no Developer ID, same reason as ad-hoc signing), so macOS
+  quarantines it on download and calls it unopenable. `Scripts/release-appendix.sh` puts the way
+  past that *in the release body*, beside the download, rather than in a document nobody reads.
+- **Don't cancel a running release.** semantic-release pushes the tag *before* calling its publish
+  plugins and cannot roll back, so a cancel in that window leaves a tag on `main` with no release
+  and no commits left for the next run to analyze. Hence the `release` job's own `release-main`
+  concurrency group with `cancel-in-progress: false`, deliberately not the workflow's cancelling one.
 
 ## Layout
 
 ```
-.github/workflows/ci.yml             format & lint, tests, app build
+.github/workflows/ci.yml             staged: quality/commits/branch → test → package → release
 .swift-format / .swiftlint.yml       layout / semantics — see CI for why they're split
+.releaserc.json / commitlint.config.js   what a merge to main publishes / what a message must be
+package.json + package-lock.json     release tooling only, pinned — the app is Swift
 Makefile                             make check runs the pipeline locally
 Scripts/check-build-parity.sh        the two build systems must agree on versions
-App/Info.plist                       bundle id, version, NSAudioCaptureUsageDescription
+Scripts/build-app.sh                 the one place the shippable .app is compiled
+Scripts/stamp-version.sh             version into a built bundle, then re-sign
+Scripts/make-dmg.sh                  the release artifact
+Scripts/release-appendix.sh          the install note in every release body
+App/Info.plist                       bundle id, $(MARKETING_VERSION), NSAudioCaptureUsageDescription
 maillage.xcodeproj/                  committed; shared Maillage scheme
 Sources/Maillage/MaillageApp.swift   @main, WindowGroup, menu commands (no key equivalents)
 Sources/MaillageCore/
@@ -253,6 +333,13 @@ These are invariants, not preferences — the tests enforce most of them.
   action stays reachable by pointer (the sidebar's per-section "+", the centre pane's pencil and
   chevron) and by menu item, so nothing was lost with them. Don't add one back without checking
   it actually fires in the running app.
+- **Every commit is `type: description`**, every branch is `type/slug`, and every PR title is
+  `type: description` — one vocabulary, checked by `commitlint` in CI. This is not tidiness: the
+  squashed PR title is what decides the next version and what people read in the release notes. See
+  Releasing for which types release and which don't.
+- **The version is never written by a human.** `semantic-release` derives it from the commits;
+  `App/Info.plist` defers to `$(MARKETING_VERSION)` so there is one source, and
+  `Scripts/check-build-parity.sh` fails if that becomes a literal again.
 
 <!-- rtk-instructions v2 -->
 # RTK (Rust Token Killer) - Token-Optimized Commands

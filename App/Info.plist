@@ -14,10 +14,15 @@
 	<string>maillage</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<!-- Both substituted from the build settings, never written literally: semantic-release
+	     computes the version from the commits and passes it to the build as MARKETING_VERSION
+	     (see Scripts/build-app.sh). A literal here would silently win over it and ship an app
+	     whose About window disagrees with the DMG it came in. Scripts/check-build-parity.sh
+	     fails if either becomes a literal again. -->
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
 	<key>LSMinimumSystemVersion</key>
