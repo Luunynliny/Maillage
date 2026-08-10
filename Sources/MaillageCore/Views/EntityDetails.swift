@@ -295,11 +295,11 @@ private struct ProjectDetailBody: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.large) {
             MetadataList(metadata)
 
-            if !project.organizations.isEmpty {
+            if let owner = project.organization {
                 VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-                    SectionHeader("Organizations")
+                    SectionHeader("Organization")
                     WrappingPills(
-                        links: project.organizations,
+                        links: [owner],
                         color: Theme.organizationColor,
                         selection: $selection)
                 }

@@ -157,17 +157,11 @@ public struct VaultWriter {
         }
 
         if kind == .organization {
-            for (id, var project) in updated.projects {
-                var touched = false
-                for index in project.organizations.indices
-                where project.organizations[index].id == oldID {
-                    project.organizations[index].id = newID
-                    touched = true
-                }
-                if touched {
-                    updated.projects[id] = project
-                    try write(project)
-                }
+            for (id, var project) in updated.projects
+            where project.organization?.id == oldID {
+                project.organization?.id = newID
+                updated.projects[id] = project
+                try write(project)
             }
         }
 

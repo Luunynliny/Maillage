@@ -165,12 +165,35 @@ struct FrontmatterCodecTests {
 
         let project = Project(
             id: "maillage", name: "Maillage", status: .active,
-            organizations: [Wikilink("acme-corp")])
+            organization: Wikilink("acme-corp"))
         let (decodedProject, _) = try FrontmatterCodec.decode(
             Project.self, from: try FrontmatterCodec.encode(project, body: ""))
         #expect(decodedProject.name == "Maillage")
         #expect(decodedProject.status == .active)
-        #expect(decodedProject.organizations == [Wikilink("acme-corp")])
+        #expect(decodedProject.organization == Wikilink("acme-corp"))
+    }
+
+    /// Ownership went singular after employment did, so a project file written earlier says
+    /// `organizations:`. Same tolerance, same one-way migration on next save.
+    @Test("Reads the retired plural organizations key on a project")
+    func readsLegacyProjectOrganizationsKey() throws {
+        let file = """
+            ---
+            id: maillage
+            type: project
+            name: Maillage
+            organizations:
+              - '[[acme-corp]]'
+              - '[[globex]]'
+            ---
+            """
+        let (decoded, _) = try FrontmatterCodec.decode(Project.self, from: file)
+        // First entry wins: a project listed under two orgs was owned by one of them.
+        #expect(decoded.organization == Wikilink("acme-corp"))
+
+        let rewritten = try FrontmatterCodec.encode(decoded, body: "")
+        #expect(rewritten.contains("organization: '[[acme-corp]]'"))
+        #expect(!rewritten.contains("organizations:"))
     }
 
     /// Regression: encoding a `Date` made Yams emit a UTC timestamp, so a Paris-local

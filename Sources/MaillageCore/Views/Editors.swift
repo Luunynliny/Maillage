@@ -335,6 +335,7 @@ struct ProjectEditor: View {
 
     @State private var name = ""
     @State private var status: ProjectStatus = .active
+    /// Holds at most one — see the `limit: 1` on its field.
     @State private var organizations: Set<EntityID> = []
     @State private var notes = ""
     /// The intended roster. Applied on save, so an abandoned sheet changes nobody's file.
@@ -365,12 +366,14 @@ struct ProjectEditor: View {
                     .labelsHidden()
                 }
 
+                // One owner at a time, so picking a second replaces the first.
                 MultiSelectField(
-                    label: "Organizations",
+                    label: "Organization",
                     options: store.allOrganizations.map { ($0.id, $0.displayName) },
                     selected: $organizations,
                     color: Theme.organizationColor,
-                    prompt: "Search organizations")
+                    prompt: "Search organizations",
+                    limit: 1)
 
                 // Staffing the project is part of describing it, so it happens here rather
                 // than one person at a time from their profiles. Written to the people's
@@ -391,7 +394,7 @@ struct ProjectEditor: View {
         guard let existing else { return }
         name = existing.name
         status = existing.status
-        organizations = Set(existing.organizations.map(\.id))
+        organizations = Set(existing.organization.map { [$0.id] } ?? [])
         notes = existing.body
 
         let roster = store.participants(ofProject: existing.id)
@@ -402,21 +405,21 @@ struct ProjectEditor: View {
     }
 
     private func save() {
-        let orgLinks = organizations.sorted().map(Wikilink.init)
+        let orgLink = organizations.sorted().first.map(Wikilink.init)
         // Sorted so the writes are deterministic, which keeps them diffable in git.
         let roster = participants.sorted().map { (person: $0, role: roles[$0]?.nilIfBlank) }
 
         if var project = existing {
             project.name = name
             project.status = status
-            project.organizations = orgLinks
+            project.organization = orgLink
             project.body = notes
             if store.update(project) {
                 store.setParticipants(ofProject: project.id, to: roster)
                 onSaved(project.id)
             }
         } else if let created = store.createProject(
-            name: name, status: status, organizations: orgLinks, body: notes)
+            name: name, status: status, organization: orgLink, body: notes)
         {
             store.setParticipants(ofProject: created.id, to: roster)
             onSaved(created.id)

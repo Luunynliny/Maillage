@@ -155,9 +155,9 @@ public final class VaultStore {
         return groups
     }
 
-    /// Projects attached to an organization.
+    /// Projects owned by an organization.
     public func projects(inOrganization organizationID: EntityID) -> [Project] {
-        allProjects.filter { $0.organizations.contains(Wikilink(organizationID)) }
+        allProjects.filter { $0.organization == Wikilink(organizationID) }
     }
 
     /// Every relation label already in use, most-used first.
@@ -256,12 +256,12 @@ public final class VaultStore {
     public func createProject(
         name: String,
         status: ProjectStatus = .active,
-        organizations: [Wikilink] = [],
+        organization: Wikilink? = nil,
         body: String = ""
     ) -> Project? {
         let id = writer.availableID(for: name, kind: .project)
         let project = Project(
-            id: id, name: name, status: status, organizations: organizations,
+            id: id, name: name, status: status, organization: organization,
             created: .today(), body: body)
         return persist(project) ? project : nil
     }
@@ -403,8 +403,8 @@ public final class VaultStore {
 
             if kind == .organization {
                 for (projectID, var project) in snapshot.projects
-                where project.organizations.contains(Wikilink(id)) {
-                    project.organizations.removeAll { $0.id == id }
+                where project.organization == Wikilink(id) {
+                    project.organization = nil
                     snapshot.projects[projectID] = project
                     try writer.write(project)
                 }

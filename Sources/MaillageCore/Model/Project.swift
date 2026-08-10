@@ -14,8 +14,12 @@ public struct Project: Entity, Codable {
     public var id: EntityID
     public var name: String
     public var status: ProjectStatus
-    /// Organizations this project belongs to or is run with.
-    public var organizations: [Wikilink]
+    /// The organization this project belongs to.
+    ///
+    /// Singular: a piece of work is owned by one org, the same way a person has one
+    /// employer, so ``VaultStore/projects(inOrganization:)`` partitions rather than
+    /// overlaps and a project appears on exactly one board.
+    public var organization: Wikilink?
     public var created: CalendarDay?
     public var body: String
 
@@ -26,20 +30,22 @@ public struct Project: Entity, Codable {
         id: EntityID,
         name: String,
         status: ProjectStatus = .active,
-        organizations: [Wikilink] = [],
+        organization: Wikilink? = nil,
         created: CalendarDay? = nil,
         body: String = ""
     ) {
         self.id = id
         self.name = name
         self.status = status
-        self.organizations = organizations
+        self.organization = organization
         self.created = created
         self.body = body
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, type, name, status, organizations, created
+        case id, type, name, status, organization, created
+        /// Retired plural form, still read so existing vaults keep loading.
+        case organizations
     }
 
     public init(from decoder: Decoder) throws {
@@ -47,7 +53,15 @@ public struct Project: Entity, Codable {
         self.id = try c.decode(EntityID.self, forKey: .id)
         self.name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
         self.status = try c.decodeIfPresent(ProjectStatus.self, forKey: .status) ?? .active
-        self.organizations = try c.decodeIfPresent([Wikilink].self, forKey: .organizations) ?? []
+        // Ownership used to be a list, exactly as employment was on `Person`. Read the
+        // singular key, falling back to the first entry of a legacy list so an older vault
+        // still loads; saving rewrites the file in the singular form.
+        if let single = try c.decodeIfPresent(Wikilink.self, forKey: .organization) {
+            self.organization = single
+        } else {
+            self.organization = try c.decodeIfPresent([Wikilink].self, forKey: .organizations)?
+                .first
+        }
         self.created = try c.decodeIfPresent(CalendarDay.self, forKey: .created)
         self.body = ""
     }
@@ -58,7 +72,7 @@ public struct Project: Entity, Codable {
         try c.encode(EntityKind.project.rawValue, forKey: .type)
         try c.encode(name, forKey: .name)
         try c.encode(status.rawValue, forKey: .status)
-        if !organizations.isEmpty { try c.encode(organizations, forKey: .organizations) }
+        try c.encodeIfPresent(organization, forKey: .organization)
         try c.encodeIfPresent(created, forKey: .created)
     }
 }

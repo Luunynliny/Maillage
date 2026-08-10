@@ -1,7 +1,7 @@
 import Foundation
 
 /// A company or organization. Membership is not stored here — it is derived by
-/// scanning every ``Person``'s `organizations` list.
+/// scanning every ``Person``'s `organization` link.
 public struct Organization: Entity, Codable {
     public var id: EntityID
     public var name: String

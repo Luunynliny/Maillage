@@ -133,11 +133,13 @@ These are invariants, not preferences — the tests enforce most of them.
   own `@FocusState`. `RoleField` in `Editors.swift` is the worked example.
 - **Membership lives on the person** (`organization:`, `projects:`), never duplicated onto the
   org or project. Org/project member lists are derived by scanning people.
-- **One employer per person.** `organization:` is singular, because the People graph clusters on
-  it and a cluster needs exactly one key per node. The retired plural `organizations:` still
-  decodes (first entry wins) so old vaults load; only `organization:` is ever written.
-  `Project.organizations` stays plural — the constraint is about employment, not about which orgs
-  a piece of work spans.
+- **One organization per person, and one per project.** `organization:` is singular on both,
+  because the People graph clusters on a person's employer and a cluster needs exactly one key
+  per node, and because a project belongs to whoever owns the work — so
+  `VaultStore.projects(inOrganization:)` partitions the projects rather than overlapping and a
+  project shows on exactly one board. On both types the retired plural `organizations:` still
+  decodes (first entry wins) so old vaults load; only `organization:` is ever written, so a file
+  migrates the next time it is saved.
 - **A project role lives on the person's project entry**, never on the project. An entry is a
   bare `"[[id]]"` until a role is set, then a `to:`/`role:` mapping — so adding a role rewrites
   one person's file and nothing else. Free text, and the vocabulary offered back is derived from

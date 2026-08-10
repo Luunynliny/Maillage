@@ -203,6 +203,22 @@ struct VaultStoreTests {
         #expect(store.members(ofOrganization: "acme-global").count == 1)
     }
 
+    /// The other inbound link an organization has: a project's owner.
+    @Test("Renaming an organization rewrites its projects' owner link")
+    func renameRewritesProjectOwner() throws {
+        let (store, root) = try makeStore()
+        defer { cleanUp(root) }
+
+        let acme = try #require(store.createOrganization(name: "Acme Corp"))
+        let project = try #require(
+            store.createProject(name: "Maillage", organization: Wikilink(acme.id)))
+
+        #expect(store.renameEntity(kind: .organization, from: acme.id, to: "acme-global") != nil)
+
+        #expect(store.snapshot.projects[project.id]?.organization == Wikilink("acme-global"))
+        #expect(store.projects(inOrganization: "acme-global").map(\.id) == [project.id])
+    }
+
     // MARK: Membership and roles
 
     @Test("Employing someone replaces their previous employer")
@@ -576,6 +592,42 @@ struct VaultStoreTests {
 
         #expect(store.delete(kind: .organization, id: acme.id))
         #expect(store.snapshot.people[marie.id]?.organization == nil)
+    }
+
+    /// A project outlives the org that owned it — it just loses the owner link, rather than
+    /// keeping one that points at nothing.
+    @Test("Deleting an organization clears its projects' owner link")
+    func deleteScrubsProjectOwner() throws {
+        let (store, root) = try makeStore()
+        defer { cleanUp(root) }
+
+        let acme = try #require(store.createOrganization(name: "Acme Corp"))
+        let project = try #require(
+            store.createProject(name: "Maillage", organization: Wikilink(acme.id)))
+
+        #expect(store.delete(kind: .organization, id: acme.id))
+
+        #expect(store.snapshot.projects[project.id] != nil)
+        #expect(store.snapshot.projects[project.id]?.organization == nil)
+    }
+
+    /// A project belongs to one organization, so assigning a second replaces the first —
+    /// otherwise it would show on two boards at once.
+    @Test("Assigning a project to an organization replaces its previous owner")
+    func projectOwnershipIsSingular() throws {
+        let (store, root) = try makeStore()
+        defer { cleanUp(root) }
+
+        let acme = try #require(store.createOrganization(name: "Acme Corp"))
+        let globex = try #require(store.createOrganization(name: "Globex"))
+        var project = try #require(
+            store.createProject(name: "Maillage", organization: Wikilink(acme.id)))
+
+        project.organization = Wikilink(globex.id)
+        #expect(store.update(project))
+
+        #expect(store.projects(inOrganization: acme.id).isEmpty)
+        #expect(store.projects(inOrganization: globex.id).map(\.id) == [project.id])
     }
 
     // MARK: Robustness
