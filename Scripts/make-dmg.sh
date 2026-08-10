@@ -43,6 +43,12 @@ if [ "$built_version" != "$version" ]; then
 fi
 
 mkdir -p dist
+
+# Leave exactly one DMG in dist/. The release uploads `dist/Maillage-*.dmg`, and a stale one from an
+# earlier build — a `make dmg` at the dev version, say — would be attached to the release beside the
+# real one, with nothing to say which is which.
+rm -f dist/Maillage-*.dmg
+
 dmg="dist/Maillage-$version.dmg"
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
