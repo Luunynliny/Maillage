@@ -1,6 +1,7 @@
 {
   "name": "maillage",
-  "version": "0.0.0-managed-by-semantic-release",
+  "comment": "Not the app's version. Nothing reads this — the release version is derived from the commits and lives on the git tag, and this package is never published. See CLAUDE.md's Releasing section.",
+  "version": "0.0.0-unused",
   "private": true,
   "type": "module",
   "description": "Release tooling only. The app is Swift — see Package.swift and maillage.xcodeproj.",
