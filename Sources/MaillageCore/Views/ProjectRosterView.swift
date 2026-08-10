@@ -58,9 +58,9 @@ struct ProjectRosterView: View {
             SectionHeader("Participant")
                 .frame(maxWidth: .infinity, alignment: .leading)
             SectionHeader("Role")
-                .frame(width: 150, alignment: .leading)
+                .frame(width: Theme.Width.rosterRole, alignment: .leading)
             SectionHeader("Organization")
-                .frame(width: 150, alignment: .leading)
+                .frame(width: Theme.Width.rosterEmployer, alignment: .leading)
         }
         .padding(.bottom, Theme.Spacing.small)
         .overlay(alignment: .bottom) {
@@ -75,6 +75,7 @@ struct ProjectRosterView: View {
                     title: person.displayName,
                     kind: .person,
                     id: person.id,
+                    size: Theme.Avatar.tableRow,
                     isPlaceholder: person.placeholder
                 ) {
                     selection = person.id
@@ -87,10 +88,10 @@ struct ProjectRosterView: View {
             Text(role?.nilIfBlank ?? "—")
                 .font(Theme.Font.body)
                 .foregroundStyle(role?.nilIfBlank == nil ? Theme.textFaint : Theme.textNormal)
-                .frame(width: 150, alignment: .leading)
+                .frame(width: Theme.Width.rosterRole, alignment: .leading)
 
             employerCell(person)
-                .frame(width: 150, alignment: .leading)
+                .frame(width: Theme.Width.rosterEmployer, alignment: .leading)
         }
         .padding(.vertical, Theme.Spacing.xs)
     }
@@ -104,7 +105,15 @@ struct ProjectRosterView: View {
             // the fastest way to see that three of them work for the same one, which is what
             // the column is there to tell you. Blue text alone said "organization", which the
             // heading already says.
-            EntityLink(title: name, kind: .organization, id: employer.id) {
+            //
+            // At the participant's size, for the same reason — this is the column that gets
+            // compared down its length, and two columns of logos have to be weighted alike or
+            // the smaller one reads as subordinate detail rather than as the other half of the
+            // row.
+            EntityLink(
+                title: name, kind: .organization, id: employer.id,
+                size: Theme.Avatar.tableRow
+            ) {
                 selection = employer.id
             }
         } else {

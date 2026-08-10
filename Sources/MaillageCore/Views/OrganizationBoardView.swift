@@ -69,6 +69,10 @@ struct OrganizationBoardView: View {
                 selection = project.id
             } label: {
                 HStack(spacing: Theme.Spacing.small) {
+                    // The card's own subject, so it leads at ``Theme/Avatar/card`` while the
+                    // people under it sit at ``Theme/Avatar/row``. One big mark and a column of
+                    // small ones is what makes a card scannable as "this project, these people";
+                    // at one size the title dissolved into its own list.
                     EntityAvatar(
                         kind: .project, id: project.id, size: Theme.Avatar.card)
                     Text(project.displayName)
@@ -97,15 +101,19 @@ struct OrganizationBoardView: View {
                 }
             }
         }
-        .frame(width: 240)
+        .frame(width: Theme.Width.boardCard)
     }
 
     private var unassignedCard: some View {
         Card {
             HStack(spacing: Theme.Spacing.small) {
+                // Sized to the project logo on the cards beside it, not to itself: this card
+                // stands in the same row as those and its heading has to start at the same x.
+                // The ring stays thin at that diameter, since there is no entity here to
+                // identify — it marks the slot a logo would occupy.
                 Circle()
                     .strokeBorder(Theme.textFaint, lineWidth: 1.5)
-                    .frame(width: Theme.entityDot, height: Theme.entityDot)
+                    .frame(width: Theme.Avatar.card, height: Theme.Avatar.card)
                 Text("On no project")
                     .font(Theme.Font.heading)
                     .foregroundStyle(Theme.textMuted)
@@ -119,7 +127,7 @@ struct OrganizationBoardView: View {
                 memberRow(person, role: nil, isOutsider: false)
             }
         }
-        .frame(width: 240)
+        .frame(width: Theme.Width.boardCard)
     }
 
     /// One person on a card: their name, and the role they hold **on that project** if any.
@@ -133,7 +141,6 @@ struct OrganizationBoardView: View {
                     title: person.displayName,
                     kind: .person,
                     id: person.id,
-                    size: Theme.Avatar.card,
                     isPlaceholder: person.placeholder
                 ) {
                     selection = person.id
@@ -151,8 +158,9 @@ struct OrganizationBoardView: View {
                     .font(Theme.Font.caption)
                     .foregroundStyle(Theme.textMuted)
                     // Indented to start where the name does, past the avatar — the role belongs
-                    // to the person above it, and a hanging indent is what says so.
-                    .padding(.leading, Theme.Avatar.card + Theme.Spacing.xs)
+                    // to the person above it, and a hanging indent is what says so. Reads the
+                    // same token ``EntityLink`` defaults to, so the two cannot drift apart.
+                    .padding(.leading, Theme.Avatar.row + Theme.Spacing.xs)
             }
         }
     }

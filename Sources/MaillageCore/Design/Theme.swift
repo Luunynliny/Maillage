@@ -124,6 +124,22 @@ public enum Theme {
         /// The role input in a ``RoleAssignmentField`` row. Shared with the "Role" header,
         /// so the two cannot drift apart.
         public static let roleField: CGFloat = 130
+        /// An ``OrganizationBoardView`` card. Every card is the same width whatever it holds, so
+        /// the board reads as a row of equals rather than as a ranking by name length.
+        ///
+        /// Grew with ``Theme/Avatar/card``: the title shares its line with the logo and the
+        /// status, so a bigger logo is width taken straight off the name — at 240 "Dark Matter
+        /// Supply" started wrapping, which cost a line of card height to save none.
+        public static let boardCard: CGFloat = 252
+        /// A ``ProjectRosterView`` row's role column, and the heading over it.
+        public static let rosterRole: CGFloat = 150
+        /// Its employer column. Wider than the role beside it because this cell carries a logo
+        /// as well as a name, and the logo eats into the width the name had — enough of it that
+        /// at the role column's 150 a company like "Democratic Order of Planets" wrapped to a
+        /// third line and pushed the whole row taller. Long names still wrap to two, which
+        /// ``EntityLink`` allows on purpose: wrapping a name is better than truncating it when
+        /// the name is the identification.
+        public static let rosterEmployer: CGFloat = 190
     }
 
     /// Fixed heights, for surfaces that must not grow to whatever their content wants.
@@ -133,19 +149,30 @@ public enum Theme {
         public static let detailsMax: CGFloat = 340
     }
 
-    /// The dot that marks a kind where no entity is being named — the "On no project" card's
-    /// hollow ring. Entities themselves get an ``Avatar``, which can carry a logo.
-    public static let entityDot: CGFloat = 8
-
     /// The circle that stands for one entity: its logo, or its kind's glyph until it has one.
     ///
-    /// Three sizes rather than one, unlike the dot this replaced. A dot carries no detail, so
+    /// Several sizes rather than one, unlike the dot this replaced. A dot carries no detail, so
     /// one size fit everywhere; a logo has to be big enough to recognise, and how much room
     /// there is differs — a title band can afford more than a scrolling list of rows, and a
     /// board card packs many into a narrow column.
+    ///
+    /// Each is measured against the text it sits beside, not chosen as a round number: a circle
+    /// shorter than the type next to it reads as a smudge on a label rather than as a picture of
+    /// something, which is the failure these sizes exist to avoid.
     public enum Avatar {
-        /// Rows: the sidebar, the ⌘K palette, the editors' option lists.
+        /// Rows: the sidebar, the ⌘K palette, the editors' option lists, and a person on a
+        /// board card. Every one of those is a list as long as the vault, where a taller row
+        /// costs entries visible at once.
         public static let row: CGFloat = 20
+        /// A table row that exists to be read *across*: ``ProjectRosterView``'s participant and
+        /// employer columns.
+        ///
+        /// Bigger than ``row`` because the trade-off inverts. A roster is as long as one
+        /// project — a handful of people — so row height is nearly free, and the pane is scanned
+        /// down two columns of logos to see who is on this and who they work for. At 20 the
+        /// employer logos were the same height as the company names beside them and read as
+        /// bullets rather than as marks you could tell apart.
+        public static let tableRow: CGFloat = 28
         /// The centre pane's title band, beside a 15pt heading over an 11pt subtitle.
         ///
         /// Matched to the height of those two lines together rather than to the heading alone.
@@ -154,8 +181,14 @@ public enum Theme {
         /// recognise, and visibly not aligned with either line. Squaring it off against the
         /// whole block costs no band height, since the text already claims that much.
         public static let header: CGFloat = 40
-        /// Beside a project's name on an organization board card.
-        public static let card: CGFloat = 16
+        /// A board card's title: the project the card is about.
+        ///
+        /// Matched to the 15pt heading it leads rather than to the people listed under it, so the
+        /// card has one mark that identifies it and a column of smaller ones that fill it. At 16
+        /// the project's own logo was the same size as its members', which flattened the card
+        /// into an undifferentiated list — and it sat below the cap height of the name it
+        /// belonged to.
+        public static let card: CGFloat = 26
         /// The editors' logo well, where the image is the subject rather than a marker.
         public static let well: CGFloat = 64
     }
