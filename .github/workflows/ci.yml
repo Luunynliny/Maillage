@@ -197,6 +197,11 @@ jobs:
   package:
     name: Build app bundle
     needs: test
+    # Same reason `test` needs this: `package` is downstream of `commits` and
+    # `branch-name`, which are skipped on `push` — and GitHub's default
+    # `success()` treats a skipped job as unsuccessful, which would silently
+    # skip packaging (and therefore release) on every push, main included.
+    if: ${{ !failure() && !cancelled() }}
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
