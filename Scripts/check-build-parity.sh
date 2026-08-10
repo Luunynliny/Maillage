@@ -9,6 +9,10 @@
 #   2. Dependency versions are declared twice. Bumped in one place only, the two build paths
 #      compile against different code, and the tests keep passing while the app ships something
 #      the suite never ran against.
+#   3. `App/Info.plist` must not hardcode a version. It has to keep `$(MARKETING_VERSION)`, or the
+#      literal wins over the version semantic-release passes to the build and the release ships an
+#      app whose About window disagrees with the DMG's filename. Same class of silent drift as the
+#      two above: nothing fails, the wrong number just ships.
 #
 # Exits non-zero with an explanation rather than a diff, since the fix is always "make the other
 # file agree" and which one is wrong depends on what you meant.
@@ -26,8 +30,9 @@ pbxproj="maillage.xcodeproj/project.pbxproj"
 package="Package.swift"
 pkg_resolved="Package.resolved"
 xcode_resolved="maillage.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+info_plist="App/Info.plist"
 
-for file in "$pbxproj" "$package" "$pkg_resolved" "$xcode_resolved"; do
+for file in "$pbxproj" "$package" "$pkg_resolved" "$xcode_resolved" "$info_plist"; do
     [ -f "$file" ] || fail "missing $file"
 done
 [ "$status" -eq 0 ] || exit 1
@@ -119,7 +124,25 @@ if [ -n "$parity" ]; then
     done <<<"$parity"
 fi
 
+# 3. The version has one source. Read with PlistBuddy rather than grepped, so the check is about
+# the value the build actually sees and not about where the key sits in the file.
+plist_version=$(
+    /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$info_plist" 2>/dev/null || echo ""
+)
+plist_build=$(
+    /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$info_plist" 2>/dev/null || echo ""
+)
+if [ "$plist_version" != '$(MARKETING_VERSION)' ]; then
+    fail "$info_plist sets CFBundleShortVersionString to '$plist_version'.
+       It must stay \$(MARKETING_VERSION): semantic-release passes the computed version to the
+       build as MARKETING_VERSION, and a literal here overrides it silently."
+fi
+if [ "$plist_build" != '$(CURRENT_PROJECT_VERSION)' ]; then
+    fail "$info_plist sets CFBundleVersion to '$plist_build'.
+       It must stay \$(CURRENT_PROJECT_VERSION), for the same reason as the line above."
+fi
+
 if [ "$status" -eq 0 ]; then
-    echo "build parity: Package.swift and maillage.xcodeproj agree"
+    echo "build parity: Package.swift and maillage.xcodeproj agree, and the version has one source"
 fi
 exit "$status"

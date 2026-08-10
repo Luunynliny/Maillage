@@ -16,6 +16,10 @@ build/
 *.hmap
 
 ## App packaging
+#
+# dist/ is where Scripts/build-app.sh and Scripts/make-dmg.sh put the app and the DMG. Release
+# artifacts are attached to a GitHub release, never committed.
+dist/
 *.ipa
 *.dSYM.zip
 *.dSYM
@@ -33,6 +37,12 @@ playground.xcworkspace
 
 # Code coverage
 *.profraw
+
+# Release tooling
+#
+# package.json and package-lock.json ARE committed: semantic-release and commitlint are pinned by
+# the lockfile the same way Xcode and SwiftLint are pinned in the workflow. Only the tree is not.
+node_modules/
 
 # CocoaPods
 #
