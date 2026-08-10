@@ -3,12 +3,23 @@
 # gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
 
 ## User settings
+#
+# The project and shared schemes are committed; per-user state is not.
 xcuserdata/
+*.xcuserstate
+
+## Build products
+DerivedData/
+build/
 
 ## Obj-C/Swift specific
 *.hmap
 
 ## App packaging
+#
+# dist/ is where Scripts/build-app.sh and Scripts/make-dmg.sh put the app and the DMG. Release
+# artifacts are attached to a GitHub release, never committed.
+dist/
 *.ipa
 *.dSYM.zip
 *.dSYM
@@ -19,17 +30,19 @@ playground.xcworkspace
 
 # Swift Package Manager
 #
-# Add this line if you want to avoid checking in source code from Swift Package Manager dependencies.
-# Packages/
-# Package.pins
-# Package.resolved
-# *.xcodeproj
-#
-# Xcode automatically generates this directory with a .xcworkspacedata file and xcuserdata
-# hence it is not needed unless you have added a package configuration file to your project
-# .swiftpm
-
+# Package.resolved and maillage.xcodeproj are committed on purpose: both build paths
+# must resolve identical dependency versions, and the Maillage scheme is shared.
 .build/
+.swiftpm/
+
+# Code coverage
+*.profraw
+
+# Release tooling
+#
+# package.json and package-lock.json ARE committed: semantic-release and commitlint are pinned by
+# the lockfile the same way Xcode and SwiftLint are pinned in the workflow. Only the tree is not.
+node_modules/
 
 # CocoaPods
 #
@@ -60,3 +73,6 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# macOS
+.DS_Store

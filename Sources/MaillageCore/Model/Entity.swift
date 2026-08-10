@@ -1,0 +1,112 @@
+import Foundation
+
+/// The three kinds of things a vault can hold. The raw value is written to the
+/// `type:` frontmatter key and decides which subdirectory the file lives in.
+public enum EntityKind: String, Codable, CaseIterable, Sendable {
+    case person
+    case organization
+    case project
+
+    /// Vault subdirectory for this kind.
+    public var directoryName: String {
+        switch self {
+        case .person: "people"
+        case .organization: "organizations"
+        case .project: "projects"
+        }
+    }
+
+    public var displayName: String {
+        switch self {
+        case .person: "People"
+        case .organization: "Organizations"
+        case .project: "Projects"
+        }
+    }
+}
+
+/// Common surface shared by ``Person``, ``Organization`` and ``Project``.
+public protocol Entity: Identifiable, Hashable, Sendable {
+    var id: EntityID { get }
+    var kind: EntityKind { get }
+    /// Human-readable name shown in the sidebar, graph and detail pane.
+    var displayName: String { get }
+    /// Free-form markdown body stored below the closing `---`.
+    var body: String { get }
+}
+
+extension Entity {
+    public var wikilink: Wikilink { Wikilink(id) }
+}
+
+extension EntityKind {
+    /// What the markdown body is called for this kind.
+    ///
+    /// Same storage everywhere, different meaning: prose about a person or organization
+    /// is a note you keep, while a project's prose describes the work itself.
+    public var bodyTitle: String {
+        switch self {
+        case .person, .organization: "Notes"
+        case .project: "Description"
+        }
+    }
+
+    /// The glyph an entity of this kind wears until it has a logo of its own.
+    ///
+    /// Filled variants, because they are drawn small and inside a tinted disc — an outline
+    /// glyph at 20pt reads as a thin scribble against the fill behind it.
+    public var symbolName: String {
+        switch self {
+        case .person: "person.fill"
+        case .organization: "building.2.fill"
+        case .project: "folder.fill"
+        }
+    }
+}
+
+/// Type-erased entity, used by the sidebar, command palette and graph so they can
+/// treat all three kinds uniformly.
+public enum AnyEntity: Identifiable, Hashable, Sendable {
+    case person(Person)
+    case organization(Organization)
+    case project(Project)
+
+    public var id: EntityID {
+        switch self {
+        case .person(let p): p.id
+        case .organization(let o): o.id
+        case .project(let p): p.id
+        }
+    }
+
+    public var kind: EntityKind {
+        switch self {
+        case .person: .person
+        case .organization: .organization
+        case .project: .project
+        }
+    }
+
+    public var displayName: String {
+        switch self {
+        case .person(let p): p.displayName
+        case .organization(let o): o.displayName
+        case .project(let p): p.displayName
+        }
+    }
+
+    public var body: String {
+        switch self {
+        case .person(let p): p.body
+        case .organization(let o): o.body
+        case .project(let p): p.body
+        }
+    }
+
+    public var bodyTitle: String { kind.bodyTitle }
+
+    public var asPerson: Person? {
+        if case .person(let p) = self { return p }
+        return nil
+    }
+}

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>maillage</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<!-- Both substituted from the build settings, never written literally: semantic-release
+	     computes the version from the commits and passes it to the build as MARKETING_VERSION
+	     (see Scripts/build-app.sh). A literal here would silently win over it and ship an app
+	     whose About window disagrees with the DMG it came in. Scripts/check-build-parity.sh
+	     fails if either becomes a literal again. -->
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 Thomas Mattone. All rights reserved.</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<!-- Declared ahead of use: the later audio phase captures system audio via Core
+	     Audio process taps, which macOS refuses without this key present. -->
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>maillage records meeting audio so it can attach notes to the people you spoke with.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<!-- Opt out of the macOS 26 design language. It gives every window a ~24pt corner
+	     radius and draws a NavigationSplitView's sidebar as a card inset from the window
+	     edges, both of which fight the flat, border-separated Obsidian look the rest of
+	     the app is built on. Neither is reachable from app code — this key is the only
+	     lever. It also declines Liquid Glass, which this app never used. -->
+	<key>UIDesignRequiresCompatibility</key>
+	<true/>
+</dict>
+</plist>
