@@ -178,8 +178,7 @@ struct PersonEditor: View {
                 ProjectMembershipsField(
                     projects: store.allProjects,
                     selected: $projects,
-                    roles: $projectRoles,
-                    known: store.usedProjectRoles)
+                    roles: $projectRoles)
 
                 NotesField(text: $notes)
             }
@@ -381,8 +380,7 @@ struct ProjectEditor: View {
                 ParticipantsField(
                     people: store.allPeople,
                     selected: $participants,
-                    roles: $roles,
-                    known: store.usedProjectRoles)
+                    roles: $roles)
 
                 NotesField(text: $notes, title: "Description")
             }
@@ -726,17 +724,31 @@ struct RoleAssignmentField: View {
     /// Role per entity. Entries for unselected ids are kept, so removing something and
     /// adding it back keeps the role it had.
     @Binding var roles: [EntityID: String]
-    /// Roles already used in the vault, offered as shortcuts.
-    let known: [String]
 
     @State private var search = ""
     @State private var isSearchFocused = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text(label)
-                .font(Theme.Font.caption)
-                .foregroundStyle(Theme.textMuted)
+            // The role column gets its own header, since an empty input beside a name says
+            // nothing about what goes in it. Only once there are rows to head, and pinned to
+            // the same width as the field below so the two stay aligned.
+            HStack(spacing: Theme.Spacing.small) {
+                Text(label)
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.textMuted)
+
+                if !selectedOptions.isEmpty {
+                    Spacer(minLength: 0)
+                    Text("Role")
+                        .font(Theme.Font.caption)
+                        .foregroundStyle(Theme.textMuted)
+                        .frame(width: Theme.Width.roleField, alignment: .leading)
+                        // Matches the field's own horizontal padding, so the header sits
+                        // over the text it labels rather than over the box's edge.
+                        .padding(.horizontal, Theme.Spacing.small)
+                }
+            }
 
             if options.isEmpty {
                 Text(emptyMessage)
@@ -778,8 +790,7 @@ struct RoleAssignmentField: View {
             RoleField(
                 role: Binding(
                     get: { roles[option.id] ?? "" },
-                    set: { roles[option.id] = $0 }),
-                known: known)
+                    set: { roles[option.id] = $0 }))
         }
     }
 
@@ -842,7 +853,6 @@ struct ParticipantsField: View {
     let people: [Person]
     @Binding var selected: Set<EntityID>
     @Binding var roles: [EntityID: String]
-    let known: [String]
 
     var body: some View {
         RoleAssignmentField(
@@ -853,8 +863,7 @@ struct ParticipantsField: View {
             prompt: "Search people",
             emptyMessage: "No people in the vault yet — add some and you can staff this here.",
             selected: $selected,
-            roles: $roles,
-            known: known)
+            roles: $roles)
     }
 }
 
@@ -863,7 +872,6 @@ struct ProjectMembershipsField: View {
     let projects: [Project]
     @Binding var selected: Set<EntityID>
     @Binding var roles: [EntityID: String]
-    let known: [String]
 
     var body: some View {
         RoleAssignmentField(
@@ -872,70 +880,47 @@ struct ProjectMembershipsField: View {
             prompt: "Search projects",
             emptyMessage: "No projects in the vault yet.",
             selected: $selected,
-            roles: $roles,
-            known: known)
+            roles: $roles)
     }
 }
 
-/// A free-text role with the vault's existing vocabulary behind a chevron.
+/// A role on a membership: plain free text, nothing else.
 ///
-/// Same reasoning as ``LabelField``: typing is the primary action and the suggestions are a
-/// shortcut, so this is a plain field rather than a picker. The menu only appears once
-/// something has been typed before, so a fresh vault shows no empty affordance.
+/// No suggestion menu, unlike ``LabelField``. A relation label is a closed vocabulary you
+/// reuse across the whole vault, but a role is what one person does on one project, and it
+/// is nearly always typed fresh — the chevron sat there promising a shortcut that mostly
+/// offered someone else's job title. The "Role" header above the column says what the field
+/// is for, which is what the chevron was really doing.
 struct RoleField: View {
     @Binding var role: String
-    let known: [String]
 
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        HStack(spacing: Theme.Spacing.xs) {
-            TextField("", text: $role)
-                .textFieldStyle(.plain)
-                .font(Theme.Font.body)
-                .foregroundStyle(Theme.textNormal)
-                .placeholder("Role", isVisible: role.isEmpty)
-                .focused($isFocused)
-                .frame(width: 130)
-                .padding(.horizontal, Theme.Spacing.small)
-                .padding(.vertical, 4)
-                .background(Theme.bgPrimary)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.Radius.medium)
-                        .stroke(
-                            isFocused ? Theme.accent : Theme.border,
-                            lineWidth: Theme.hairline)
-                )
-                // The border, the padding and the placeholder are all drawn *outside* the
-                // `TextField` itself, so only a click on the glyph line reached the input —
-                // the field read as dead. Claiming the whole drawn box and focusing it by
-                // hand makes every part of what looks like the field behave like it.
-                .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
-                .onTapGesture { isFocused = true }
-                .textCursor()
-
-            if !suggestions.isEmpty {
-                Menu {
-                    ForEach(suggestions, id: \.self) { suggestion in
-                        Button(suggestion) { role = suggestion }
-                    }
-                } label: {
-                    Image(systemName: "chevron.down")
-                        .font(Theme.Font.caption)
-                        .foregroundStyle(Theme.textFaint)
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .clickableCursor()
-                .help("Roles you've used before")
-            }
-        }
-    }
-
-    private var suggestions: [String] {
-        known.filter { $0 != role }
+        TextField("", text: $role)
+            .textFieldStyle(.plain)
+            .font(Theme.Font.body)
+            .foregroundStyle(Theme.textNormal)
+            .placeholder("Role", isVisible: role.isEmpty)
+            .focused($isFocused)
+            .frame(width: Theme.Width.roleField)
+            .padding(.horizontal, Theme.Spacing.small)
+            .padding(.vertical, 4)
+            .background(Theme.bgPrimary)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.Radius.medium)
+                    .stroke(
+                        isFocused ? Theme.accent : Theme.border,
+                        lineWidth: Theme.hairline)
+            )
+            // The border, the padding and the placeholder are all drawn *outside* the
+            // `TextField` itself, so only a click on the glyph line reached the input —
+            // the field read as dead. Claiming the whole drawn box and focusing it by
+            // hand makes every part of what looks like the field behave like it.
+            .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
+            .onTapGesture { isFocused = true }
+            .textCursor()
     }
 }
 

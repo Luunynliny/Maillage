@@ -119,6 +119,13 @@ public enum Theme {
     /// the width it claims and nudge the label beside it.
     public static let chevron: CGFloat = 10
 
+    /// Fixed widths, for a column that has to line up with the header above it.
+    public enum Width {
+        /// The role input in a ``RoleAssignmentField`` row. Shared with the "Role" header,
+        /// so the two cannot drift apart.
+        public static let roleField: CGFloat = 130
+    }
+
     /// Fixed heights, for surfaces that must not grow to whatever their content wants.
     public enum Height {
         /// The tallest an unfolded details section may get before it scrolls. A subject with

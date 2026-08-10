@@ -142,8 +142,10 @@ These are invariants, not preferences — the tests enforce most of them.
   migrates the next time it is saved.
 - **A project role lives on the person's project entry**, never on the project. An entry is a
   bare `"[[id]]"` until a role is set, then a `to:`/`role:` mapping — so adding a role rewrites
-  one person's file and nothing else. Free text, and the vocabulary offered back is derived from
-  use (`VaultStore.usedProjectRoles`), like relation labels.
+  one person's file and nothing else. Plain free text, entered in a bare `RoleField` — unlike a
+  relation label, a role is what one person does on one project and is nearly always typed
+  fresh, so there is no suggestion menu. `VaultStore.usedProjectRoles` still derives the
+  vocabulary and is tested, but nothing in the UI reads it.
 - **Membership is edited in the editor sheets, never inline in a pane.** Both ends offer it —
   `ProjectEditor` staffs a project, `PersonEditor` picks a person's projects — and both apply on
   save, so an abandoned sheet writes nothing. `VaultStore.setParticipants(ofProject:to:)` takes
