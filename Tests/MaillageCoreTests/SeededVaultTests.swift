@@ -3,19 +3,23 @@ import Testing
 
 @testable import MaillageCore
 
-/// Reads the hand-written vault at `~/Documents/Maillage` if it exists, proving the
+/// Reads the hand-written example vault at `~/Documents/Maillage` if it exists, proving the
 /// app agrees with the format documented for humans editing files directly.
+///
+/// The vault maps the Futurama cast — three employers, five projects, one placeholder — chosen
+/// so every centre pane has something to draw: an org with people on no project, a project
+/// with a member who has no role, and a relation crossing employers.
 ///
 /// Skipped when there is no vault, so the suite stays green on a clean machine.
 @MainActor
 @Suite("Seeded vault")
 struct SeededVaultTests {
-    @Test("Loads the hand-written seed vault with derived backlinks")
+    @Test("Loads the hand-written example vault with derived backlinks")
     func loadsSeedVault() throws {
         let location = VaultLocation.default
         try #require(
             FileManager.default.fileExists(
-                atPath: location.fileURL(kind: .person, id: "marie-dupont").path),
+                atPath: location.fileURL(kind: .person, id: "philip-fry").path),
             "no seeded vault present")
 
         let store = VaultStore(location: location)
@@ -23,27 +27,52 @@ struct SeededVaultTests {
 
         #expect(store.snapshot.issues.isEmpty)
 
-        let marie = try #require(store.snapshot.people["marie-dupont"])
-        #expect(marie.displayName == "Marie Dupont")
-        #expect(marie.email == "marie@example.com")
-        // Her file still carries the retired plural `organizations:` key, so this doubles as
-        // proof the tolerant decode works on a real hand-written file.
-        #expect(marie.organization?.id == "acme-corp")
-        #expect(marie.relations.count == 2)
-        #expect(marie.body == "Met at the Paris conference.")
+        let fry = try #require(store.snapshot.people["philip-fry"])
+        #expect(fry.displayName == "Philip Fry")
+        #expect(fry.email == "fry@planetexpress.com")
+        #expect(fry.organization?.id == "planet-express")
+        #expect(fry.relations.count == 4)
 
-        // Jean stores nothing, yet sees Marie's relation as a backlink.
-        let jean = try #require(store.snapshot.people["jean-martin"])
-        #expect(jean.relations.isEmpty)
-        #expect(store.backlinks(for: "jean-martin") == [Backlink(from: "marie-dupont", label: "manager of")])
+        // Leela stores one relation to Fry's four, yet sees his as a backlink — the inversion
+        // is derived, and nothing was written to her file.
+        let leela = try #require(store.snapshot.people["turanga-leela"])
+        #expect(leela.relations.count == 2)
+        #expect(
+            store.backlinks(for: "turanga-leela") == [
+                Backlink(from: "lord-nibbler", label: "adopted by"),
+                Backlink(from: "philip-fry", label: "fiancé of"),
+                Backlink(from: "zapp-brannigan", label: "ex-lover of"),
+            ])
 
-        // The placeholder has no name but still shows a usable label.
-        let placeholder = try #require(store.snapshot.people["_head-of-aa"])
+        // The placeholder has no name but still shows a usable label, and is the target of a
+        // relation — the case placeholders exist for.
+        let placeholder = try #require(store.snapshot.people["_head-of-legal-at-momcorp"])
         #expect(placeholder.placeholder)
-        #expect(placeholder.displayName == "Head of AA")
+        #expect(placeholder.displayName == "Head of Legal at MomCorp")
 
-        #expect(store.members(ofOrganization: "acme-corp").map(\.id) == ["jean-martin", "marie-dupont"])
-        #expect(store.projects(inOrganization: "acme-corp").map(\.id) == ["maillage"])
-        #expect(store.members(ofProject: "maillage").map(\.id) == ["marie-dupont"])
+        #expect(
+            store.members(ofOrganization: "planet-express").map(\.id) == [
+                "amy-wong", "bender-rodriguez", "hermes-conrad", "hubert-farnsworth",
+                "john-zoidberg", "lord-nibbler", "philip-fry", "turanga-leela",
+            ])
+        #expect(
+            store.projects(inOrganization: "planet-express").map(\.id) == [
+                "dark-matter-supply", "ship-refit", "slurm-factory-delivery",
+            ])
+
+        // Fry's `ship-refit` entry is a bare `"[[id]]"` rather than a `to:`/`role:` mapping, so
+        // the roster has to render a member with no role beside the three that have one.
+        let refit = store.participants(ofProject: "ship-refit")
+        #expect(refit.map(\.person.id) == ["amy-wong", "bender-rodriguez", "philip-fry", "turanga-leela"])
+        #expect(refit.map(\.role) == ["Engineer", "Bending", nil, "Pilot"])
+
+        // Zoidberg is on staff and on nothing else, which is what the board's "On no project"
+        // card is for.
+        #expect(store.snapshot.people["john-zoidberg"]?.projects.isEmpty == true)
+
+        // Logos are files, so every entity that has one is discovered by scanning `assets/`.
+        #expect(store.logoIDs[.person]?.contains("philip-fry") == true)
+        #expect(store.logoIDs[.organization]?.contains("planet-express") == true)
+        #expect(store.logo(kind: .person, id: "philip-fry") != nil)
     }
 }
