@@ -53,7 +53,10 @@ public struct Wikilink: Hashable, Codable, Sendable {
     public static func slugify(_ input: String) -> String {
         let folded =
             input
-            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .init(identifier: "en_US"))
+            .folding(
+                options: [.diacriticInsensitive, .caseInsensitive],
+                locale: .init(identifier: "en_US")
+            )
             .lowercased()
 
         var out = ""

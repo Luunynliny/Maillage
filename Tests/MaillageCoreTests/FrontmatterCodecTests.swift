@@ -136,7 +136,10 @@ struct FrontmatterCodecTests {
             ---
             """
         let (decoded, _) = try FrontmatterCodec.decode(Person.self, from: file)
-        #expect(decoded.projects == [ProjectMembership(to: "maillage"), ProjectMembership(to: "atlas", role: "Reviewer")])
+        #expect(
+            decoded.projects == [
+                ProjectMembership(to: "maillage"), ProjectMembership(to: "atlas", role: "Reviewer"),
+            ])
     }
 
     /// Adding the role field must not churn every file that has no roles in it.
@@ -144,7 +147,9 @@ struct FrontmatterCodecTests {
     func writesRolelessMembershipBare() throws {
         let person = Person(
             id: "marie-dupont",
-            projects: [ProjectMembership(to: "maillage"), ProjectMembership(to: "atlas", role: "Lead")])
+            projects: [
+                ProjectMembership(to: "maillage"), ProjectMembership(to: "atlas", role: "Lead"),
+            ])
         let file = try FrontmatterCodec.encode(person, body: "")
 
         #expect(file.contains("- '[[maillage]]'"))

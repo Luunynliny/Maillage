@@ -111,7 +111,8 @@ struct EntityLogoTests {
 
         let fm = FileManager.default
         #expect(
-            !fm.fileExists(atPath: root.appendingPathComponent("assets/people/jean-martin.png").path))
+            !fm.fileExists(
+                atPath: root.appendingPathComponent("assets/people/jean-martin.png").path))
         #expect(
             fm.fileExists(
                 atPath: root.appendingPathComponent("assets/people/jean-martin-renamed.png").path))

@@ -563,8 +563,9 @@ struct RelationEditor: View {
     private func save() {
         let resolvedTarget: EntityID?
         if isCreatingPlaceholder {
-            resolvedTarget = store.createPerson(
-                descriptor: newPlaceholderDescriptor, placeholder: true)?.id
+            resolvedTarget =
+                store.createPerson(
+                    descriptor: newPlaceholderDescriptor, placeholder: true)?.id
         } else {
             resolvedTarget = targetID
         }
@@ -1023,7 +1024,9 @@ struct LogoField: View {
             .dropDestination(for: URL.self) { urls, _ in
                 guard let url = urls.first else { return false }
                 return convert(url)
-            } isTargeted: { isTargeted = $0 }
+            } isTargeted: {
+                isTargeted = $0
+            }
     }
 
     @ViewBuilder
@@ -1072,7 +1075,8 @@ struct LogoField: View {
 
     private var caption: String {
         if let failure { return failure }
-        return "Any image. It's cropped to a square and stored at \(ImageSquarer.side)×\(ImageSquarer.side)."
+        return
+            "Any image. It's cropped to a square and stored at \(ImageSquarer.side)×\(ImageSquarer.side)."
     }
 
     private func choose() {
@@ -1165,7 +1169,8 @@ struct NotesField: View {
                 // first glyph, so the placeholder sits exactly where the caret does.
                 .placeholder(
                     placeholder, isVisible: text.isEmpty, alignment: .topLeading,
-                    inset: Theme.Spacing.xs)
+                    inset: Theme.Spacing.xs
+                )
                 .padding(Theme.Spacing.small)
                 .frame(height: 80)
                 .background(Theme.bgPrimary)

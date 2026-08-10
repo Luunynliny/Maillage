@@ -107,8 +107,9 @@ struct OrganizationBubblesView: View {
                 EntityAvatar(
                     kind: .organization, id: id,
                     size: bubble.radius * 0.62,
-                    tint: bubble.color)
-                    .padding(.bottom, Theme.Spacing.xs)
+                    tint: bubble.color
+                )
+                .padding(.bottom, Theme.Spacing.xs)
             }
 
             Text("\(bubble.headcount)")

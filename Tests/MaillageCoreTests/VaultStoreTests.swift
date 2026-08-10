@@ -184,7 +184,9 @@ struct VaultStoreTests {
         let marieFile = try String(
             contentsOf: root.appendingPathComponent("people/marie-dupont.md"), encoding: .utf8)
         #expect(marieFile.contains("[[jean-martin-renamed]]"))
-        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("people/jean-martin.md").path))
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: root.appendingPathComponent("people/jean-martin.md").path))
     }
 
     @Test("Renaming an organization rewrites membership links")
@@ -553,8 +555,12 @@ struct VaultStoreTests {
         #expect(store.backlinks(for: "alice-bernard").count == 1)
 
         // Old placeholder file replaced by the named one.
-        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("people/_head-of-aa.md").path))
-        #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("people/alice-bernard.md").path))
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: root.appendingPathComponent("people/_head-of-aa.md").path))
+        #expect(
+            FileManager.default.fileExists(
+                atPath: root.appendingPathComponent("people/alice-bernard.md").path))
     }
 
     // MARK: Deletion

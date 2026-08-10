@@ -70,7 +70,10 @@ struct SeededVaultTests {
         // Fry's `ship-refit` entry is a bare `"[[id]]"` rather than a `to:`/`role:` mapping, so
         // the roster has to render a member with no role beside the three that have one.
         let refit = store.participants(ofProject: "ship-refit")
-        #expect(refit.map(\.person.id) == ["amy-wong", "bender-rodriguez", "philip-fry", "turanga-leela"])
+        #expect(
+            refit.map(\.person.id) == [
+                "amy-wong", "bender-rodriguez", "philip-fry", "turanga-leela",
+            ])
         #expect(refit.map(\.role) == ["Engineer", "Bending", nil, "Pilot"])
 
         // Zoidberg is on staff and on nothing else, which is what the board's "On no project"

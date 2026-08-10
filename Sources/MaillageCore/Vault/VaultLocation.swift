@@ -10,7 +10,8 @@ public struct VaultLocation: Hashable, Sendable {
 
     /// The default vault: `~/Documents/Maillage`.
     public static var `default`: VaultLocation {
-        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+        let documents =
+            FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Documents")
         return VaultLocation(root: documents.appendingPathComponent("Maillage", isDirectory: true))
     }

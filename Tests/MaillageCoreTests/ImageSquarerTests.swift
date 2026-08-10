@@ -77,7 +77,8 @@ struct ImageSquarerTests {
             ImageSquarer.squarePNG(from: solid(width: 300, height: 300, color: .red)))
         let result = try #require(NSBitmapImageRep(data: data))
 
-        let sample = try #require(result.colorAt(x: ImageSquarer.side / 2, y: ImageSquarer.side / 2))
+        let sample = try #require(
+            result.colorAt(x: ImageSquarer.side / 2, y: ImageSquarer.side / 2))
         let converted = try #require(sample.usingColorSpace(.sRGB))
         #expect(converted.redComponent > 0.85)
         #expect(converted.greenComponent < 0.2)

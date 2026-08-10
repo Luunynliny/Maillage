@@ -148,16 +148,17 @@ struct CenterPaneHeader: View {
                 // the window. So: measure, then take the smaller of the two.
                 ScrollView {
                     EntityDetails(
-                        entity: entity, selection: $selection, editorRequest: $editorRequest)
-                        .padding(.horizontal, Theme.Spacing.large)
-                        .padding(.bottom, Theme.Spacing.large)
-                        .background {
-                            GeometryReader { geometry in
-                                Color.clear.onChange(of: geometry.size.height, initial: true) {
-                                    contentHeight = geometry.size.height
-                                }
+                        entity: entity, selection: $selection, editorRequest: $editorRequest
+                    )
+                    .padding(.horizontal, Theme.Spacing.large)
+                    .padding(.bottom, Theme.Spacing.large)
+                    .background {
+                        GeometryReader { geometry in
+                            Color.clear.onChange(of: geometry.size.height, initial: true) {
+                                contentHeight = geometry.size.height
                             }
                         }
+                    }
                 }
                 .frame(height: min(contentHeight, Theme.Height.detailsMax))
                 // Until the first measurement lands, `contentHeight` is 0 and the section has

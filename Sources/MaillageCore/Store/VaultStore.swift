@@ -197,15 +197,21 @@ public final class VaultStore {
     // MARK: Lookup
 
     public var allPeople: [Person] {
-        snapshot.people.values.sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
+        snapshot.people.values.sorted {
+            $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
+        }
     }
 
     public var allOrganizations: [Organization] {
-        snapshot.organizations.values.sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
+        snapshot.organizations.values.sorted {
+            $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
+        }
     }
 
     public var allProjects: [Project] {
-        snapshot.projects.values.sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
+        snapshot.projects.values.sorted {
+            $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
+        }
     }
 
     public var allEntities: [AnyEntity] {
