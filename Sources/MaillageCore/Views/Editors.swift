@@ -106,8 +106,8 @@ struct PersonEditor: View {
     /// `nil` when creating.
     let existing: Person?
     /// Whether the sheet opens in placeholder mode. Only the starting position of the
-    /// toggle: ⌘⇧N opens with it on, the sidebar's "+" with it off, and either can be
-    /// flipped without closing the sheet.
+    /// toggle: File ▸ New Unnamed Person opens with it on, the sidebar's "+" with it off, and
+    /// either can be flipped without closing the sheet.
     let isPlaceholder: Bool
     /// True when filling in the name of an existing placeholder.
     let isResolving: Bool

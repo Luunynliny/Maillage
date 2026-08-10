@@ -3,10 +3,10 @@ import SwiftUI
 /// Left pane: every entity grouped by kind, each section headed by a "+" that creates one and
 /// a chevron that folds it away.
 ///
-/// No filter box: narrowing the vault is the ⌘K palette's job, and a search field here only
+/// No filter box: narrowing the vault is the command palette's job, and a search field here only
 /// duplicated it while pushing the vault's contents down the pane. The create buttons sit on
 /// the sections rather than in one menu, so the kind being made is implied by where you
-/// clicked. Unnamed people are rare enough to stay on ⌘⇧N alone.
+/// clicked. Unnamed people are rare enough to stay in the File menu alone.
 public struct SidebarView: View {
     @Environment(VaultStore.self) private var store
     @Binding var selection: EntityID?
@@ -72,16 +72,11 @@ public struct SidebarView: View {
     /// The whole band is the target, not just the six letters, and it stays clickable while
     /// nothing is selected — going where you already are is harmless, and a hit target that
     /// disappears depending on state is worse than a no-op.
-    ///
-    /// The ⓘ beside the name lists the app's keyboard shortcuts on hover (``ShortcutsHint``).
-    /// Here because this is the one band that is on screen whatever is selected, and next to the
-    /// app's name because what it describes is the app rather than the vault below it.
     private var header: some View {
-        HStack(spacing: Theme.Spacing.xs) {
+        HStack {
             Text("maillage")
                 .font(Theme.Font.heading)
                 .foregroundStyle(Theme.textNormal)
-            ShortcutsHint()
             Spacer()
         }
         .padding(Theme.Spacing.medium)

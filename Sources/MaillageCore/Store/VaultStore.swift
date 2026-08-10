@@ -73,8 +73,9 @@ public final class VaultStore {
             try location.createSkeletonIfNeeded()
             snapshot = try reader.load()
             rebuildBacklinks()
-            // Reload means the files may have changed underneath us — ⌘R exists precisely for
-            // editing the vault in Finder or Obsidian — so decoded logos can't be trusted.
+            // Reload means the files may have changed underneath us — Reload Vault exists
+            // precisely for editing the vault in Finder or Obsidian — so decoded logos can't
+            // be trusted.
             logoImages.removeAll()
             rebuildLogoIDs()
             lastError = nil

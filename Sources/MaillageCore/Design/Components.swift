@@ -376,7 +376,8 @@ public struct SidebarRow: View {
         // No focus ring. Selection in this sidebar is drawn by `rowBackground`, and AppKit's
         // blue ring on whichever row happens to be first responder is a second, competing
         // claim — on launch it landed on the top row while a different row was actually
-        // selected, so two rows looked chosen. Rows are reached by clicking or through ⌘K.
+        // selected, so two rows looked chosen. Rows are reached by clicking, or through the
+        // command palette.
         .focusable(false)
         .onHover { isHovering = $0 }
         .clickableCursor()
@@ -766,7 +767,7 @@ public struct AddButton: View {
         .buttonStyle(.plain)
         // No focus ring: this is the first focusable control in the sidebar, so on launch
         // AppKit gave it a blue ring that read as a selected row. It's reached by clicking,
-        // never by tabbing — the keyboard route to creating something is ⌘N.
+        // never by tabbing — the other route to creating something is the File menu.
         .focusable(false)
         .onHover { isHovering = $0 }
         .clickableCursor()

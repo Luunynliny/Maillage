@@ -18,8 +18,8 @@ public struct RootView: View {
     @State private var isPaletteVisible = false
     @State private var isPickingVault = false
     /// Whether the centre pane's details section is unfolded. Held here rather than in
-    /// ``CenterPaneHeader`` so the ⌥⌘0 menu command can reach it; the header folds it back
-    /// shut on every change of subject.
+    /// ``CenterPaneHeader`` so the View menu's Show/Hide Details item can reach it; the header
+    /// folds it back shut on every change of subject.
     @State private var isDetailVisible = false
 
     public init() {}
@@ -265,17 +265,17 @@ private struct DismissibleMessage: View {
 
 // MARK: - Menu plumbing
 
-/// Lets the app's ⌘N menu command reach the window that owns `editorRequest`.
+/// Lets the File menu's New Person item reach the window that owns `editorRequest`.
 public struct EditorRequestFocusKey: FocusedValueKey {
     public typealias Value = Binding<EditorRequest?>
 }
 
-/// Same idea for ⌘K.
+/// Same idea for Jump to Anything.
 public struct PaletteFocusKey: FocusedValueKey {
     public typealias Value = Binding<Bool>
 }
 
-/// Same idea for ⌥⌘0, the detail column's toggle.
+/// Same idea for Show/Hide Details.
 public struct DetailVisibleFocusKey: FocusedValueKey {
     public typealias Value = Binding<Bool>
 }

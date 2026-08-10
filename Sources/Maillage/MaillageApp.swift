@@ -18,50 +18,47 @@ struct MaillageApp: App {
                 .frame(minWidth: 900, minHeight: 560)
         }
         .windowToolbarStyle(.unified)
+        // Menu items only, with no `keyboardShortcut` on any of them. The app had a full set of
+        // key equivalents and they were removed deliberately: the shortcuts didn't work in
+        // practice, and a key that is advertised — in a menu item's right-hand column or
+        // anywhere else — and then doesn't fire is worse than no key at all, because it teaches
+        // someone a gesture and then makes them doubt their own keyboard.
+        //
+        // So these menus are the only route to these actions, alongside the clicks in the UI:
+        // the sidebar's "+" per section, the centre pane's pencil, its chevron for the details.
+        // Every one of them is reachable by pointer, which is why dropping the keys costs no
+        // function.
         .commands {
-            // Every item's title and keys come from ``AppShortcut``, which the sidebar's ⓘ also
-            // lists — so the panel advertising a shortcut and the item that rings it cannot say
-            // different things.
             CommandGroup(replacing: .newItem) {
-                command(.newPerson) { editorRequest = .newPerson }
-                command(.newPlaceholder) { editorRequest = .newPlaceholder }
+                Button("New Person…") { editorRequest = .newPerson }
+                Button("New Unnamed Person…") { editorRequest = .newPlaceholder }
                 Divider()
-                command(.newOrganization) { editorRequest = .newOrganization }
-                command(.newProject) { editorRequest = .newProject }
+                Button("New Organization…") { editorRequest = .newOrganization }
+                Button("New Project…") { editorRequest = .newProject }
             }
 
             CommandGroup(after: .textEditing) {
-                command(.palette) { isPaletteVisible = true }
+                Button("Jump to Anything…") { isPaletteVisible = true }
             }
 
             // Beside the system's "Show Sidebar" item: both reveal a body of information the
-            // window is otherwise hiding. ⌥⌘0 pairs with the ⌃⌘S macOS gives the sidebar.
-            // Kept even though the details now fold out of the centre pane's own header
-            // rather than being a column, because the chevron is the only other way in and
-            // a keyboard route shouldn't disappear because the geometry changed.
+            // window is otherwise hiding. Kept even though the details now fold out of the
+            // centre pane's own header rather than being a column, because a menu route
+            // shouldn't disappear because the geometry changed.
             CommandGroup(after: .sidebar) {
-                // Named for the state it will produce, unlike the hint's single entry, which has
-                // no window to ask.
+                // Named for the state it will produce, which a menu item can do because it can
+                // ask the focused window what that state currently is.
                 Button(isDetailVisible == false ? "Show Details" : "Hide Details") {
                     isDetailVisible?.toggle()
                 }
-                .keyboardShortcut(
-                    AppShortcut.toggleDetails.keyEquivalent,
-                    modifiers: AppShortcut.toggleDetails.modifiers)
                 .disabled(isDetailVisible == nil)
 
                 Divider()
-                command(.reload) { store.load() }
+                Button("Reload Vault") { store.load() }
                 Button("Reveal Vault in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([store.location.root])
                 }
             }
         }
-    }
-
-    /// A menu item titled and keyed by `shortcut`.
-    private func command(_ shortcut: AppShortcut, action: @escaping () -> Void) -> some View {
-        Button(shortcut.menuTitle, action: action)
-            .keyboardShortcut(shortcut.keyEquivalent, modifiers: shortcut.modifiers)
     }
 }

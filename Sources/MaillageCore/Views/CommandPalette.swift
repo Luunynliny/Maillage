@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// ⌘K jump-to-anything, in the spirit of Obsidian's quick switcher.
+/// Jump-to-anything, in the spirit of Obsidian's quick switcher. Opened from Edit ▸ Jump to
+/// Anything; the app declares no key equivalents.
 ///
 /// Matching is a subsequence test rather than a substring one, so "mdp" finds
 /// "Marie Dupont". Results are ranked so tighter matches float to the top.
@@ -65,7 +66,9 @@ struct CommandPalette: View {
                 Text("No matches")
                     .font(Theme.Font.body)
                     .foregroundStyle(Theme.textMuted)
-                Text("Press ⌘N to create a new person.")
+                // Names the route that exists. It used to say "Press ⌘N", which stopped being
+                // true when the app's key equivalents were removed.
+                Text("Add one with the + beside PEOPLE, or the File menu.")
                     .font(Theme.Font.caption)
                     .foregroundStyle(Theme.textFaint)
             }

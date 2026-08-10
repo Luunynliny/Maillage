@@ -141,11 +141,6 @@ public enum Theme {
         /// ``EntityLink`` allows on purpose: wrapping a name is better than truncating it when
         /// the name is the identification.
         public static let rosterEmployer: CGFloat = 190
-        /// The ``AppShortcut`` list the sidebar's ⓘ opens. Fixed rather than sized to its
-        /// content, because a popover that sizes itself lands a different width for every row
-        /// added — and the panel is read as two columns, which needs the gap between them to be
-        /// the same on every line.
-        public static let shortcutsHint: CGFloat = 250
     }
 
     /// Fixed heights, for surfaces that must not grow to whatever their content wants.
@@ -166,7 +161,7 @@ public enum Theme {
     /// shorter than the type next to it reads as a smudge on a label rather than as a picture of
     /// something, which is the failure these sizes exist to avoid.
     public enum Avatar {
-        /// Rows: the sidebar, the ⌘K palette, the editors' option lists. Every one of those is a
+        /// Rows: the sidebar, the command palette, the editors' option lists. Every one of those is a
         /// list as long as the vault, where a taller row costs entries visible at once.
         public static let row: CGFloat = 20
         /// A table row that exists to be read *across*: ``ProjectRosterView``'s participant and

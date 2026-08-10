@@ -55,7 +55,7 @@ pointed at Xcode; if a fresh machine errors out, run
 ```
 App/Info.plist                       bundle id, version, NSAudioCaptureUsageDescription
 maillage.xcodeproj/                  committed; shared Maillage scheme
-Sources/Maillage/MaillageApp.swift   @main, WindowGroup, menu commands (⌘N, ⌘K, ⌘R)
+Sources/Maillage/MaillageApp.swift   @main, WindowGroup, menu commands (no key equivalents)
 Sources/MaillageCore/
 ├── Design/     Theme.swift (tokens), Components.swift (Card, Pill, EntityAvatar, EntityLink, SidebarRow, …)
 ├── Model/      Entity, Person, Organization, Project, Relation, ProjectMembership, Wikilink, CalendarDay
@@ -186,6 +186,13 @@ These are invariants, not preferences — the tests enforce most of them.
   import, where someone chose it and can pick another.
 - **Placeholder people** are for "you should meet the head of AA" — no name, a `descriptor`, and
   an `_` filename prefix. Resolving one renames the file and relinks.
+- **No keyboard shortcuts.** The app declares no `keyboardShortcut` anywhere, and no UI text
+  names a key. It had a full set — ⌘N, ⌘K, ⌘R, ⌥⌘0 — and they were removed because they didn't
+  work in practice: a key printed in a menu's right-hand column that then doesn't fire is worse
+  than no key, since it teaches a gesture and then makes someone doubt their keyboard. Every
+  action stays reachable by pointer (the sidebar's per-section "+", the centre pane's pencil and
+  chevron) and by menu item, so nothing was lost with them. Don't add one back without checking
+  it actually fires in the running app.
 
 <!-- rtk-instructions v2 -->
 # RTK (Rust Token Killer) - Token-Optimized Commands
