@@ -8,7 +8,9 @@ on:
   workflow_dispatch:
 
 concurrency:
-  # One run per branch: a force-push mid-review shouldn't leave two runs racing to report.
+  # One run per branch: a force-push mid-review shouldn't leave two runs racing to report. The
+  # release job opts out of this group — see its own `concurrency`, since cancelling a publish is
+  # not the same kind of harmless as cancelling a test run.
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
@@ -31,10 +33,24 @@ env:
   # release can introduce rules the config has never been checked against and turn CI red on a
   # commit that changed nothing.
   SWIFTLINT_VERSION: "0.65.0"
+  # The release tooling is pinned in package-lock.json; this only fixes the runtime it runs on.
+  NODE_VERSION: "22"
 
+# The pipeline is a chain, cheapest gate first, so a failure costs the least it can and the reason
+# is never buried under an unrelated one:
+#
+#     quality ┐
+#     commits ├─→ test ─→ package ─→ release   (release: push to main only)
+#     branch  ┘
+#
+# The first three need no build and report in under a minute; `test` compiles the package;
+# `package` produces the real signed `.app`; `release` versions, tags and publishes it. Nothing
+# downstream starts until everything upstream is green.
 jobs:
-  # Split from the tests on purpose: neither check needs a build, so they report in well under a
-  # minute, and a misplaced brace doesn't wait behind a compile to tell you about itself.
+  # ---------------------------------------------------------------------------------------------
+  # Stage 1 — three checks that need no build, so they run together and report almost immediately.
+  # ---------------------------------------------------------------------------------------------
+
   quality:
     name: Format & lint
     runs-on: macos-26
@@ -70,12 +86,91 @@ jobs:
         run: $SWIFTLINT lint --strict --reporter github-actions-logging
 
       # The two build systems describe the same sources and nothing else notices when their
-      # versions drift apart. See the script's header for what each check is protecting.
+      # versions drift apart. Also guards that `App/Info.plist` still defers to MARKETING_VERSION,
+      # which is what lets a release stamp its own version. See the script's header.
       - name: Check build parity
         run: ./Scripts/check-build-parity.sh
 
+  # Conventional Commits are load-bearing here, not a style preference: merges into `main` are
+  # squash-only, so the PR title becomes the single commit on `main` and is the only thing
+  # `@semantic-release/commit-analyzer` reads to decide the next version. A `chore:` title
+  # releases nothing; a non-conventional one releases nothing and says why nowhere.
+  commits:
+    name: Commit messages
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # commitlint walks the range base..HEAD, which needs the history, not a shallow tip.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      # The one that decides the release. Passed through the environment rather than interpolated
+      # into the script: a PR title is untrusted input, and `${{ }}` inside `run:` is substituted
+      # before the shell ever sees it, so a title containing backticks would execute.
+      - name: Lint the PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          echo "Title: $PR_TITLE"
+          printf '%s' "$PR_TITLE" | npx --no-install commitlint
+
+      # Advisory in effect but worth failing on: these are the messages that are still cheap to
+      # reword, and a branch whose commits are conventional produces a usable title by default.
+      - name: Lint the commits in this PR
+        run: |
+          npx --no-install commitlint \
+            --from ${{ github.event.pull_request.base.sha }} \
+            --to ${{ github.event.pull_request.head.sha }}
+
+  # Cosmetic for the release itself — nothing reads a branch name — but it keeps the branch and the
+  # commit type it will produce in step, so the PR title is usually already correct.
+  branch-name:
+    name: Branch name
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the branch is named type/slug
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          # The two long-lived branches are exempt, and `develop` is not a hypothetical: a
+          # develop → main PR is how a release ships, and it would fail every other rule here.
+          if [[ "$BRANCH" == "main" || "$BRANCH" == "develop" ]]; then
+            echo "ok: $BRANCH (long-lived branch)"
+            exit 0
+          fi
+          # Same vocabulary as commitlint's types — see commitlint.config.js.
+          pattern='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)/[a-z0-9._/-]+$'
+          if [[ "$BRANCH" =~ $pattern ]]; then
+            echo "ok: $BRANCH"
+            exit 0
+          fi
+          echo "::error::Branch '$BRANCH' is not named <type>/<slug>."
+          echo "Allowed types: build chore ci docs feat fix perf refactor revert style test"
+          echo "The slug is lowercase letters, digits, dots, dashes, underscores or slashes."
+          echo "Example: feat/organization-board"
+          exit 1
+
+  # ---------------------------------------------------------------------------------------------
+  # Stage 2 — the tests, once the cheap checks agree there is something worth compiling.
+  # ---------------------------------------------------------------------------------------------
+
   test:
     name: Tests
+    needs: [quality, commits, branch-name]
+    # `commits` and `branch-name` are skipped on `push`, and a skipped need would otherwise skip
+    # this job too. `!failure() && !cancelled()` treats skipped as fine and blocks on red.
+    if: ${{ !failure() && !cancelled() }}
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
@@ -93,23 +188,104 @@ jobs:
       - name: Run tests
         run: swift test
 
-  # Separate from `test` because it checks something the package build cannot: that the app
-  # target, its `Info.plist` and the embedded framework still produce a real `.app`. Breakage
-  # here is usually project-file breakage, which `swift test` passes straight through — and the
-  # `.app` is the only artifact you can actually run.
-  build:
+  # ---------------------------------------------------------------------------------------------
+  # Stage 3 — build the artifact that actually ships. Replaces the old `build` job, which only
+  # asked whether the app compiled: this asks whether it compiles, signs, and packages, and keeps
+  # the result. Compiling twice per push to keep both would buy nothing.
+  # ---------------------------------------------------------------------------------------------
+
+  package:
     name: Build app bundle
+    needs: test
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
-      # Signing is ad-hoc locally and impossible on a runner with no Developer ID, so it is
-      # disabled outright: this step asks whether the app compiles, links and embeds its
-      # framework, not whether it could ship.
+      # Signed ad-hoc, which needs no Developer ID and so works on a runner. The version is left
+      # at the project's own MARKETING_VERSION here — only `release` knows the real one, and it
+      # rebuilds nothing: it restamps this exact bundle. See Scripts/build-app.sh.
       - name: Build Maillage.app
+        run: ./Scripts/build-app.sh
+
+      # A DMG built on a PR is thrown away, but building one is the only way to know the packaging
+      # works before it is a release's problem. Version is a placeholder, hence the odd number.
+      - name: Smoke-test packaging
         run: |
-          xcodebuild build \
-            -project maillage.xcodeproj \
-            -scheme Maillage \
-            -destination 'platform=macOS' \
-            CODE_SIGNING_ALLOWED=NO
+          set -euo pipefail
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
+            dist/Maillage.app/Contents/Info.plist)
+          ./Scripts/make-dmg.sh dist/Maillage.app "$version"
+
+      # The .zip, not the .app: upload-artifact zips what it is given, and a plain zip drops the
+      # symlinks and signature inside MaillageCore.framework. `ditto` made this one, and `release`
+      # unpacks it with `ditto` too, so the bundle survives the trip intact.
+      - name: Upload the app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: Maillage-app
+          path: dist/Maillage.app.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------------------------
+  # Stage 4 — publish. Only on a push to `main`, which given squash-only merges means "a PR was
+  # merged". Computes the version from the commits, restamps the bundle from `package` with it,
+  # wraps it in a DMG, tags, and creates the GitHub release.
+  # ---------------------------------------------------------------------------------------------
+
+  release:
+    name: Release
+    needs: package
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    # Deliberately NOT the workflow's `ci-${{ github.ref }}` group, whose `cancel-in-progress`
+    # would be actively dangerous here: semantic-release creates and pushes the tag *before*
+    # calling the publish plugins and has no rollback, so a cancel landing in that window leaves a
+    # tag on `main` with no release attached and no commits left for the next run to analyze.
+    # Queue releases instead of racing them.
+    concurrency:
+      group: release-main
+      cancel-in-progress: false
+    permissions:
+      contents: write # create the release, push the tag
+      issues: write # comment on released issues
+      pull-requests: write # comment on released PRs
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # semantic-release needs every commit and tag since the last release to work out the
+          # bump, and the credentials to push the new tag.
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Download the app bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: Maillage-app
+          path: artifact
+
+      # ditto, matching how `package` archived it: preserves the framework's symlinks and the
+      # ad-hoc signature that `unzip` would quietly destroy.
+      - name: Unpack the app bundle
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          ditto -x -k artifact/Maillage.app.zip dist
+          codesign --verify --deep --strict dist/Maillage.app
+
+      # Stamps the computed version into the bundle from `package` rather than rebuilding it: a
+      # second xcodebuild would cost minutes and, worse, could produce a different binary than the
+      # one the pipeline just tested. Only Info.plist changes, so the bundle is re-signed after.
+      #
+      # This is also why `prepareCmd` can simply wrap dist/Maillage.app — by then it is versioned.
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx --no-install semantic-release
