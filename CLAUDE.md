@@ -74,10 +74,16 @@ one command rather than reading the workflow.
 | `make lint` | SwiftLint — needs `brew install swiftlint` |
 | `make parity` | Just the two-build-system check |
 
-Both quality tools are **pinned**: the runner uses Xcode 16.4 (so `swift format`'s rules can't
-change under the repo) on `macos-15`, and SwiftLint by release version. `macos-14` cannot be used
-— it is deprecated and tops out at Xcode 15.4, which is Swift 5.10, and `Package.swift` declares
-`swift-tools-version: 6.0`.
+Both quality tools are **pinned**: the runner uses Xcode 26.6 (so `swift format`'s rules can't
+change under the repo) on `macos-26`, and SwiftLint by release version.
+
+**Keep the CI pin in step with the local Xcode.** `swift format` ships with the toolchain, so it
+is not a dependency CI installs — it is whatever Xcode the runner selects. Pin CI *older* than the
+machine that runs `make format` and the two disagree by construction: the local formatter rewrites
+files, CI's judges them by different rules, and `.swift-format` keys the local one understands can
+be ones CI has never heard of. That is a config the older tool rejects outright, and a rejected
+config fails *every* file at once — which reads like the whole codebase is misformatted rather than
+like a version skew.
 
 Watch out for:
 
