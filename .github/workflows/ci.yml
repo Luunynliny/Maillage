@@ -241,7 +241,12 @@ jobs:
   release:
     name: Release
     needs: package
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # `!failure() && !cancelled()` for the same reason `package` needs it: a custom `if` doesn't
+    # exempt this job from GitHub's default "every job in the transitive needs chain must have
+    # succeeded" gate. `commits` and `branch-name`, two hops up via `package` → `test`, are
+    # skipped on every push — main's included — which without this guard skips `release` too,
+    # regardless of the event/ref check below ever being reached.
+    if: ${{ !failure() && !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     runs-on: macos-26
     # Deliberately NOT the workflow's `ci-${{ github.ref }}` group, whose `cancel-in-progress`
     # would be actively dangerous here: semantic-release creates and pushes the tag *before*
