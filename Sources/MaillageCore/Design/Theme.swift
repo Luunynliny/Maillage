@@ -127,10 +127,11 @@ public enum Theme {
         /// An ``OrganizationBoardView`` card. Every card is the same width whatever it holds, so
         /// the board reads as a row of equals rather than as a ranking by name length.
         ///
-        /// Grew with ``Theme/Avatar/card``: the title shares its line with the logo and the
-        /// status, so a bigger logo is width taken straight off the name — at 240 "Dark Matter
-        /// Supply" started wrapping, which cost a line of card height to save none.
-        public static let boardCard: CGFloat = 252
+        /// Grew with ``Theme/Avatar/card``, and by exactly as much: the title shares its line
+        /// with the logo and the status, so a bigger logo is width taken straight off the name —
+        /// at 240 "Dark Matter Supply" started wrapping, which cost a line of card height to
+        /// save none.
+        public static let boardCard: CGFloat = 260
         /// A ``ProjectRosterView`` row's role column, and the heading over it.
         public static let rosterRole: CGFloat = 150
         /// Its employer column. Wider than the role beside it because this cell carries a logo
@@ -160,9 +161,8 @@ public enum Theme {
     /// shorter than the type next to it reads as a smudge on a label rather than as a picture of
     /// something, which is the failure these sizes exist to avoid.
     public enum Avatar {
-        /// Rows: the sidebar, the ⌘K palette, the editors' option lists, and a person on a
-        /// board card. Every one of those is a list as long as the vault, where a taller row
-        /// costs entries visible at once.
+        /// Rows: the sidebar, the ⌘K palette, the editors' option lists. Every one of those is a
+        /// list as long as the vault, where a taller row costs entries visible at once.
         public static let row: CGFloat = 20
         /// A table row that exists to be read *across*: ``ProjectRosterView``'s participant and
         /// employer columns.
@@ -183,12 +183,17 @@ public enum Theme {
         public static let header: CGFloat = 40
         /// A board card's title: the project the card is about.
         ///
-        /// Matched to the 15pt heading it leads rather than to the people listed under it, so the
-        /// card has one mark that identifies it and a column of smaller ones that fill it. At 16
-        /// the project's own logo was the same size as its members', which flattened the card
-        /// into an undifferentiated list — and it sat below the cap height of the name it
-        /// belonged to.
-        public static let card: CGFloat = 26
+        /// The board's job is "which projects, staffed by whom", and both halves of that are
+        /// answered by a picture — so this is sized to be recognised across a pane rather than to
+        /// fit tightly against its own heading. It stays a step above ``cardMember`` so a card
+        /// still reads as one subject over a list, which is the thing a single size destroyed.
+        public static let card: CGFloat = 34
+        /// A person listed on a board card.
+        ///
+        /// Its own token rather than ``row``, which the sidebar and the palette also read: those
+        /// are vault-length lists where height is the scarce thing, while a card holds a project's
+        /// worth of people and can afford faces you can tell apart without reading the names.
+        public static let cardMember: CGFloat = 26
         /// The editors' logo well, where the image is the subject rather than a marker.
         public static let well: CGFloat = 64
     }

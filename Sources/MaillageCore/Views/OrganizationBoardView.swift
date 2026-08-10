@@ -70,9 +70,9 @@ struct OrganizationBoardView: View {
             } label: {
                 HStack(spacing: Theme.Spacing.small) {
                     // The card's own subject, so it leads at ``Theme/Avatar/card`` while the
-                    // people under it sit at ``Theme/Avatar/row``. One big mark and a column of
-                    // small ones is what makes a card scannable as "this project, these people";
-                    // at one size the title dissolved into its own list.
+                    // people under it sit at ``Theme/Avatar/cardMember``. One big mark and a
+                    // column of slightly smaller ones is what makes a card scannable as "this
+                    // project, these people"; at one size the title dissolved into its own list.
                     EntityAvatar(
                         kind: .project, id: project.id, size: Theme.Avatar.card)
                     Text(project.displayName)
@@ -141,6 +141,7 @@ struct OrganizationBoardView: View {
                     title: person.displayName,
                     kind: .person,
                     id: person.id,
+                    size: Theme.Avatar.cardMember,
                     isPlaceholder: person.placeholder
                 ) {
                     selection = person.id
@@ -159,8 +160,8 @@ struct OrganizationBoardView: View {
                     .foregroundStyle(Theme.textMuted)
                     // Indented to start where the name does, past the avatar — the role belongs
                     // to the person above it, and a hanging indent is what says so. Reads the
-                    // same token ``EntityLink`` defaults to, so the two cannot drift apart.
-                    .padding(.leading, Theme.Avatar.row + Theme.Spacing.xs)
+                    // same token the row's ``EntityLink`` is given, so the two cannot drift apart.
+                    .padding(.leading, Theme.Avatar.cardMember + Theme.Spacing.xs)
             }
         }
     }
