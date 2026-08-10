@@ -1,3 +1,4 @@
+import AppKit
 import MaillageCore
 import SwiftUI
 
@@ -5,6 +6,37 @@ import SwiftUI
 struct MaillageApp: App {
     /// One store per app run — every view reads and writes the vault through it.
     @State private var store = VaultStore()
+
+    /// Forces the process to be an ordinary foreground app.
+    ///
+    /// Only matters when the binary is run **without** its `.app` bundle, which is what
+    /// `swift run` and the SwiftPM scheme in Xcode produce: with no `Info.plist` to read,
+    /// AppKit leaves the activation policy at `.prohibited`, and a measurement of the two
+    /// cases is unambiguous —
+    ///
+    /// ```
+    /// bundle-less:            policy=2 isActive=false keyWindow=false
+    /// bundle-less + .regular: policy=0 isActive=true  keyWindow=true
+    /// ```
+    ///
+    /// An app that is never *active* does not own the cursor, so every `NSCursor.push` in
+    /// ``HoverCursor`` is silently discarded and no control shows a hand — the whole
+    /// clickable-cursor system looks deleted while being perfectly intact. The same absence
+    /// keeps the window from taking key, so text inputs don't focus either.
+    ///
+    /// Harmless in the bundled `Maillage.app`, whose `Info.plist` already yields `.regular`;
+    /// this is a no-op there. Kept so the package build is usable rather than subtly broken,
+    /// since `swift run` is the fast path and its failure mode looks like an app bug.
+    private let activation = ForegroundActivation()
+
+    /// Runs `setActivationPolicy` once, at init, before any window is ordered front.
+    private final class ForegroundActivation {
+        init() {
+            if NSApplication.shared.activationPolicy() != .regular {
+                NSApplication.shared.setActivationPolicy(.regular)
+            }
+        }
+    }
 
     /// Bound from the focused window so menu commands can open its sheets.
     @FocusedBinding(\.editorRequest) private var editorRequest

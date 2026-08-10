@@ -40,6 +40,11 @@ Watch out for:
   was never written for it.
 - **Dependency versions are declared twice** — `Package.swift` and `project.pbxproj`. Bump both
   together or the two build paths compile against different code.
+- **Pick the `Maillage` scheme, not the lowercase `maillage` one.** The latter is SwiftPM's, and
+  it produces a bare executable with no `Info.plist` — so AppKit leaves the activation policy at
+  `.prohibited`, the app never becomes active, and an inactive app owns neither the cursor nor the
+  key window: no control shows a hand and no text field takes focus. `MaillageApp` now forces
+  `.regular` at init so that build is usable too, but the bundled scheme is still the one to run.
 - Signing is manual and ad-hoc (`CODE_SIGN_IDENTITY = "-"`), because this machine has no
   Developer ID. The App Sandbox is **off**, so the vault stays a plain readable folder; there is
   no entitlements file yet. The audio phase will need one (`App/Maillage.entitlements`, referenced
