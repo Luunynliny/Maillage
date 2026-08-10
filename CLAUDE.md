@@ -125,6 +125,9 @@ Watch out for:
 - **No check is *required* yet.** The repo is private on a free plan, so branch protection returns
   403 (`Upgrade to GitHub Pro or make this repository public`). Every gate above is advisory until
   the repo goes public or Pro — a red PR can still be merged. That is a real gap, not an oversight.
+  Once either is true, mark `Format & lint`, `Commit messages`, `Branch name`, `Tests` and
+  `Build app bundle` required on `main`. Not `Release`: it only runs *after* a merge, so requiring
+  it would block every PR on a job that cannot run yet.
 
 ## Releasing
 
@@ -146,7 +149,20 @@ The bump comes from the commit type: `fix:` → patch, `feat:` → minor, `feat!
 `refactor:`) releases **nothing** — which is correct, and also the most common reason a merge lands
 and no release appears.
 
+Counting starts from **`v0.1.0`, an annotated tag on `main`'s initial commit with no release
+attached**. It exists only to give the first run a baseline: with no previous tag anywhere,
+semantic-release publishes `1.0.0`, and the app is not a 1.0. Don't delete it, and don't expect a
+release page for it.
+
 Preview any of this before merging with `make release-dry`.
+
+The repository settings this depends on are already set, and all three matter:
+
+| Setting → | Value | Because |
+|---|---|---|
+| Merge commits / rebase merging | **off** | Only squashing puts one conventional commit on `main` |
+| Squash commit title | **PR title** | The title CI lints is the one that gets parsed. `COMMIT_OR_PR_TITLE` silently uses the *commit's* subject on a one-commit PR |
+| Squash commit message | **blank** | See below — a PR body is prose, and `commit-analyzer` reads a commit body as data |
 
 Watch out for:
 
@@ -154,6 +170,11 @@ Watch out for:
   single commit on `main` and is the only thing `commit-analyzer` reads. A perfectly conventional
   branch under a `chore:` PR title ships nothing. Re-enabling merge commits changes what gets
   parsed — every commit, not the title — and makes the notes unreadable.
+- **Leave the squash message blank; never `PR_BODY`.** A commit *body* is parsed, not quoted: a
+  `BREAKING CHANGE:` line anywhere in it forces a major release, and anything shaped like
+  `thing#ref` becomes a "closes" link. PR #1's body documents Obsidian's `[[id#heading]]` syntax,
+  which with `PR_BODY` set made the release notes claim to close issue `id#heading` — a repository
+  that does not exist. Prose written for people should not be able to decide a version number.
 - **The version has exactly one source: `MARKETING_VERSION`.** `App/Info.plist` must keep
   `$(MARKETING_VERSION)`; the app target sets `GENERATE_INFOPLIST_FILE = NO`, so a literal there
   *wins silently* over the version the release passes in, and ships an app whose About window
