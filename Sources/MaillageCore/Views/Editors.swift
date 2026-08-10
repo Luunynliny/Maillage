@@ -228,7 +228,7 @@ struct PersonEditor: View {
     }
 
     private func save() {
-        let orgLink = organizations.sorted().first.map(Wikilink.init)
+        let orgLink = organizations.min().map(Wikilink.init)
         // `nilIfBlank`, so a role cleared in the field is dropped rather than written as "".
         let memberships = projects.sorted().map {
             ProjectMembership(to: $0, role: projectRoles[$0]?.nilIfBlank)
@@ -429,7 +429,7 @@ struct ProjectEditor: View {
     }
 
     private func save() {
-        let orgLink = organizations.sorted().first.map(Wikilink.init)
+        let orgLink = organizations.min().map(Wikilink.init)
         // Sorted so the writes are deterministic, which keeps them diffable in git.
         let roster = participants.sorted().map { (person: $0, role: roles[$0]?.nilIfBlank) }
 

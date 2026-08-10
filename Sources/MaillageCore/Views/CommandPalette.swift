@@ -184,14 +184,15 @@ struct CommandPalette: View {
                 score: score)
         }
 
-        return candidates
-            .sorted {
-                $0.score != $1.score
-                    ? $0.score > $1.score
-                    : $0.title.localizedStandardCompare($1.title) == .orderedAscending
-            }
-            .prefix(30)
-            .map { $0 }
+        return Array(
+            candidates
+                .sorted {
+                    $0.score != $1.score
+                        ? $0.score > $1.score
+                        : $0.title.localizedStandardCompare($1.title) == .orderedAscending
+                }
+                .prefix(30)
+        )
     }
 
     /// Subsequence match with a score, or `nil` if the needle doesn't fit.

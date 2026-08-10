@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  # One run per branch: a force-push mid-review shouldn't leave two runs racing to report.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # `macos-15`, not `macos-14`: the 14 image is deprecated and tops out at Xcode 15.4, which is
+  # Swift 5.10 — too old for this package either way, since `Package.swift` declares
+  # `swift-tools-version: 6.0` and `swift format` only ships with the toolchain from Swift 6.
+  #
+  # Pinned to a specific Xcode rather than `latest-stable` so a runner image update can't change
+  # the compiler — or the formatter's default rules — under the project without a commit that
+  # says so. 16.4 is the current default on `macos-15`.
+  DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+  # Matches the version this repo's `.swiftlint.yml` was verified against. Unpinned, a new
+  # release can introduce rules the config has never been checked against and turn CI red on a
+  # commit that changed nothing.
+  SWIFTLINT_VERSION: "0.65.0"
+
+jobs:
+  # Split from the tests on purpose: neither check needs a build, so they report in well under a
+  # minute, and a misplaced brace doesn't wait behind a compile to tell you about itself.
+  quality:
+    name: Format & lint
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+
+      # `swift format` ships with the toolchain, so there is nothing to install and nothing that
+      # can drift: the formatter is whatever the pinned Xcode provides. Config in `.swift-format`.
+      - name: Check formatting
+        run: swift format lint --recursive --strict Sources Tests
+
+      # From the release artifact rather than Homebrew, which would silently upgrade.
+      - name: Install SwiftLint ${{ env.SWIFTLINT_VERSION }}
+        run: |
+          set -euo pipefail
+          curl -fsSL -o swiftlint.zip \
+            "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/SwiftLintBinary.artifactbundle.zip"
+          unzip -q swiftlint.zip -d swiftlint-bundle
+          binary="$(find swiftlint-bundle -type f -name swiftlint -path '*macos*' | head -1)"
+          chmod +x "$binary"
+          echo "SWIFTLINT=$PWD/$binary" >> "$GITHUB_ENV"
+          "$binary" version
+
+      # `--strict` because this config produces zero violations today: every rule left enabled is
+      # one the codebase actually satisfies, so a warning here is a regression, not background
+      # noise to be scrolled past.
+      - name: SwiftLint
+        run: $SWIFTLINT lint --strict --reporter github-actions-logging
+
+      # The two build systems describe the same sources and nothing else notices when their
+      # versions drift apart. See the script's header for what each check is protecting.
+      - name: Check build parity
+        run: ./Scripts/check-build-parity.sh
+
+  test:
+    name: Tests
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache SwiftPM dependencies
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      # The SwiftPM path, which is the fast one: ~0.2s for the suite, against ~80s through
+      # Xcode's test runner. The seeded-vault suite skips itself here rather than failing, since
+      # a runner has no `~/Documents/Maillage` — see `SeededVaultTests`.
+      - name: Run tests
+        run: swift test
+
+  # Separate from `test` because it checks something the package build cannot: that the app
+  # target, its `Info.plist` and the embedded framework still produce a real `.app`. Breakage
+  # here is usually project-file breakage, which `swift test` passes straight through — and the
+  # `.app` is the only artifact you can actually run.
+  build:
+    name: Build app bundle
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # Signing is ad-hoc locally and impossible on a runner with no Developer ID, so it is
+      # disabled outright: this step asks whether the app compiles, links and embeds its
+      # framework, not whether it could ship.
+      - name: Build Maillage.app
+        run: |
+          xcodebuild build \
+            -project maillage.xcodeproj \
+            -scheme Maillage \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO

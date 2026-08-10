@@ -296,4 +296,3 @@ extension FocusedValues {
         set { self[DetailVisibleFocusKey.self] = newValue }
     }
 }
-

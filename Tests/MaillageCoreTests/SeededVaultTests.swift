@@ -10,18 +10,25 @@ import Testing
 /// so every centre pane has something to draw: an org with people on no project, a project
 /// with a member who has no role, and a relation crossing employers.
 ///
-/// Skipped when there is no vault, so the suite stays green on a clean machine.
+/// Skipped when there is no vault, so the suite stays green on a clean machine — CI included,
+/// which never has one.
+///
+/// The skip is a `.enabled(if:)` trait rather than a `#require` in the body on purpose: a failed
+/// `#require` *fails* the test, it does not skip it, so guarding this way is what actually keeps
+/// a machine without a vault green.
 @MainActor
 @Suite("Seeded vault")
 struct SeededVaultTests {
-    @Test("Loads the hand-written example vault with derived backlinks")
+    /// Whether the hand-written vault is present. Evaluated once, before the test runs, because
+    /// a trait's condition has to be answerable without the test body.
+    static let hasSeededVault = FileManager.default.fileExists(
+        atPath: VaultLocation.default.fileURL(kind: .person, id: "philip-fry").path)
+
+    @Test(
+        "Loads the hand-written example vault with derived backlinks",
+        .enabled(if: hasSeededVault, "no seeded vault at ~/Documents/Maillage"))
     func loadsSeedVault() throws {
         let location = VaultLocation.default
-        try #require(
-            FileManager.default.fileExists(
-                atPath: location.fileURL(kind: .person, id: "philip-fry").path),
-            "no seeded vault present")
-
         let store = VaultStore(location: location)
         store.load()
 

@@ -26,7 +26,7 @@ Two build systems describe the same sources, deliberately. Pick by what you're d
 
 | Task | Use | Why |
 |---|---|---|
-| Tests, quick compile check | `rtk swift test` | ~0.1s. Xcode's runner takes ~80s for the same 43 tests |
+| Tests, quick compile check | `rtk swift test` | ~0.2s. Xcode's runner takes ~80s for the same 91 tests |
 | Running, debugging, breakpoints | `open maillage.xcodeproj` → scheme **Maillage** → ⌘R | Only path that produces a real `.app` |
 
 `maillage.xcodeproj` has two targets mirroring the package: `MaillageCore.framework` and
@@ -55,9 +55,56 @@ Both tools need Xcode's toolchain rather than Command Line Tools. `xcode-select`
 pointed at Xcode; if a fresh machine errors out, run
 `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`.
 
+## CI
+
+`.github/workflows/ci.yml` runs on every push and PR to `main` and `develop`, in three parallel
+jobs. `make check` runs the same things locally, in the same order — reproduce a red check with
+one command rather than reading the workflow.
+
+| Job | Runs | Guards |
+|---|---|---|
+| Format & lint | `swift format lint`, SwiftLint, `Scripts/check-build-parity.sh` | Needs no build, so it reports in under a minute |
+| Tests | `swift test` | The 91 tests, via the fast path |
+| Build app bundle | `xcodebuild -scheme Maillage` with signing off | That the project file, `Info.plist` and embedded framework still produce a real `.app` — breakage `swift test` passes straight through |
+
+| Target | What it does |
+|---|---|
+| `make check` | Everything CI runs |
+| `make format` | Rewrites sources to match `.swift-format` (CI only *checks*) |
+| `make lint` | SwiftLint — needs `brew install swiftlint` |
+| `make parity` | Just the two-build-system check |
+
+Both quality tools are **pinned**: the runner uses Xcode 16.4 (so `swift format`'s rules can't
+change under the repo) on `macos-15`, and SwiftLint by release version. `macos-14` cannot be used
+— it is deprecated and tops out at Xcode 15.4, which is Swift 5.10, and `Package.swift` declares
+`swift-tools-version: 6.0`.
+
+Watch out for:
+
+- **`swift format` owns layout; SwiftLint owns semantics, and the split is load-bearing.** The two
+  genuinely disagree — `swift format` adds trailing commas to multiline literals that SwiftLint's
+  `trailing_comma` removes, and puts a lone `{` on its own line after a wrapped signature, which
+  `opening_brace` calls a violation. Every layout rule is therefore *disabled* in `.swiftlint.yml`
+  rather than tuned. Re-enable one and `make format` and `make lint` will each undo the other's
+  work forever. Add layout preferences to `.swift-format`, never to `.swiftlint.yml`.
+- **`.swift-format` must keep `"indentation": { "spaces": 4 }`.** The tool's default is 2, which
+  disagrees with every file here — dropping the key reports ~7,000 violations that are all the
+  config's fault.
+- **SwiftLint runs `--strict`**, so a *warning* fails the build. That is deliberate: the config
+  reports zero violations today, so anything it prints is new. Both configs carry a comment for
+  every rule relaxed and why (`identifier_name` allows `to`, the frontmatter key; `large_tuple`
+  allows the derived `(person:role:)` pair).
+- **A skipped test needs `.enabled(if:)`, not `#require`.** A failed `#require` *fails* the test;
+  it does not skip it. `SeededVaultTests` reads the real `~/Documents/Maillage` and must skip
+  where there is none, which is every CI run.
+
 ## Layout
 
 ```
+.github/workflows/ci.yml             format & lint, tests, app build
+.swift-format / .swiftlint.yml       layout / semantics — see CI for why they're split
+Makefile                             make check runs the pipeline locally
+Scripts/check-build-parity.sh        the two build systems must agree on versions
 App/Info.plist                       bundle id, version, NSAudioCaptureUsageDescription
 maillage.xcodeproj/                  committed; shared Maillage scheme
 Sources/Maillage/MaillageApp.swift   @main, WindowGroup, menu commands (no key equivalents)
@@ -66,7 +113,9 @@ Sources/MaillageCore/
 ├── Model/      Entity, Person, Organization, Project, Relation, ProjectMembership, Wikilink, CalendarDay
 ├── Vault/      VaultLocation, FrontmatterCodec, VaultReader, VaultWriter, ImageSquarer
 ├── Store/      VaultStore — single source of truth
-└── Views/      RootView, SidebarView, CenterPane, DetailView, Editors, CommandPalette, VaultPicker
+└── Views/      RootView, SidebarView, CenterPane, EntityDetails, GraphGeometry, Editors,
+                CommandPalette, VaultPicker, and the four subject views (EgoGraphView,
+                OrganizationBubblesView, OrganizationBoardView, ProjectRosterView)
 ```
 
 The centre pane picks its representation from what's selected, since each selection is a different
