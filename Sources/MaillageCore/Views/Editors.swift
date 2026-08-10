@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// What the app should present as a sheet. Driven from the sidebar, detail pane and
@@ -126,6 +127,8 @@ struct PersonEditor: View {
     @State private var projectRoles: [EntityID: String] = [:]
     /// Live placeholder state, seeded from ``isPlaceholder`` on appear.
     @State private var isBlank = false
+    /// Staged, applied in ``save()`` — see ``LogoChange``.
+    @State private var logo: LogoChange = .unchanged
 
     var body: some View {
         EditorSheet(
@@ -160,6 +163,10 @@ struct PersonEditor: View {
                     FormField("Email", placeholder: "marie@example.com", text: $email)
                 }
 
+                // Offered even for a placeholder: you may have a face before you have a name,
+                // and it's the same file either way — resolving carries it across.
+                LogoField(kind: .person, existingID: existing?.id, change: $logo)
+
                 // Offered in both modes: what someone does is often the first thing you
                 // learn about them, and for a placeholder it's the one thing you know.
                 FormField("Role", placeholder: "Head of Engineering", text: $role)
@@ -169,7 +176,7 @@ struct PersonEditor: View {
                     label: "Organization",
                     options: store.allOrganizations.map { ($0.id, $0.displayName) },
                     selected: $organizations,
-                    color: Theme.organizationColor,
+                    kind: .organization,
                     prompt: "Search organizations",
                     limit: 1)
 
@@ -235,14 +242,17 @@ struct PersonEditor: View {
                 person.body = notes
                 _ = store.update(person)
 
-                if let resolved = store.resolvePlaceholder(
+                // Applied to whichever id the person ends up under: resolving renames the file,
+                // and `VaultWriter.rename` moves any logo with it — so writing to the old slug
+                // first and letting the rename carry it would work too, but staging it here
+                // keeps one code path for all three outcomes.
+                let resolved = store.resolvePlaceholder(
                     person.id,
                     firstname: firstname,
                     lastname: lastname,
                     email: email)
-                {
-                    onSaved(resolved.id)
-                }
+                store.apply(logo, kind: .person, id: resolved?.id ?? person.id)
+                if let resolved { onSaved(resolved.id) }
             } else {
                 person.firstname = firstname.nilIfBlank
                 person.lastname = lastname.nilIfBlank
@@ -252,7 +262,10 @@ struct PersonEditor: View {
                 person.organization = orgLink
                 person.projects = memberships
                 person.body = notes
-                if store.update(person) { onSaved(person.id) }
+                if store.update(person) {
+                    store.apply(logo, kind: .person, id: person.id)
+                    onSaved(person.id)
+                }
             }
         } else if let created = store.createPerson(
             // Only the fields the current mode shows: text typed before the toggle was
@@ -267,6 +280,8 @@ struct PersonEditor: View {
             projects: memberships,
             body: notes)
         {
+            // Only now is there an id to name the file after.
+            store.apply(logo, kind: .person, id: created.id)
             onSaved(created.id)
         }
         dismiss()
@@ -285,6 +300,8 @@ struct OrganizationEditor: View {
     @State private var name = ""
     @State private var domain = ""
     @State private var notes = ""
+    /// Staged, applied in ``save()`` — see ``LogoChange``.
+    @State private var logo: LogoChange = .unchanged
 
     var body: some View {
         EditorSheet(
@@ -297,6 +314,7 @@ struct OrganizationEditor: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
                 FormField("Name", placeholder: "Acme Corp", text: $name)
                 FormField("Domain", placeholder: "acme.com", text: $domain)
+                LogoField(kind: .organization, existingID: existing?.id, change: $logo)
                 NotesField(text: $notes)
             }
         }
@@ -313,10 +331,14 @@ struct OrganizationEditor: View {
             org.name = name
             org.domain = domain.nilIfBlank
             org.body = notes
-            if store.update(org) { onSaved(org.id) }
+            if store.update(org) {
+                store.apply(logo, kind: .organization, id: org.id)
+                onSaved(org.id)
+            }
         } else if let created = store.createOrganization(
             name: name, domain: domain, body: notes)
         {
+            store.apply(logo, kind: .organization, id: created.id)
             onSaved(created.id)
         }
         dismiss()
@@ -340,6 +362,8 @@ struct ProjectEditor: View {
     /// The intended roster. Applied on save, so an abandoned sheet changes nobody's file.
     @State private var participants: Set<EntityID> = []
     @State private var roles: [EntityID: String] = [:]
+    /// Staged, applied in ``save()`` — see ``LogoChange``.
+    @State private var logo: LogoChange = .unchanged
 
     var body: some View {
         EditorSheet(
@@ -365,12 +389,14 @@ struct ProjectEditor: View {
                     .labelsHidden()
                 }
 
+                LogoField(kind: .project, existingID: existing?.id, change: $logo)
+
                 // One owner at a time, so picking a second replaces the first.
                 MultiSelectField(
                     label: "Organization",
                     options: store.allOrganizations.map { ($0.id, $0.displayName) },
                     selected: $organizations,
-                    color: Theme.organizationColor,
+                    kind: .organization,
                     prompt: "Search organizations",
                     limit: 1)
 
@@ -414,12 +440,14 @@ struct ProjectEditor: View {
             project.body = notes
             if store.update(project) {
                 store.setParticipants(ofProject: project.id, to: roster)
+                store.apply(logo, kind: .project, id: project.id)
                 onSaved(project.id)
             }
         } else if let created = store.createProject(
             name: name, status: status, organization: orgLink, body: notes)
         {
             store.setParticipants(ofProject: created.id, to: roster)
+            store.apply(logo, kind: .project, id: created.id)
             onSaved(created.id)
         }
         dismiss()
@@ -488,7 +516,8 @@ struct RelationEditor: View {
                                 ForEach(candidates) { person in
                                     SidebarRow(
                                         title: person.displayName,
-                                        dotColor: Theme.color(for: person),
+                                        kind: .person,
+                                        id: person.id,
                                         isSelected: targetID == person.id,
                                         isPlaceholder: person.placeholder
                                     ) {
@@ -595,7 +624,9 @@ struct MultiSelectField: View {
     let label: String
     let options: [(id: EntityID, title: String)]
     @Binding var selected: Set<EntityID>
-    let color: Color
+    /// What is being picked. Supplies the pills' colour *and* lets each option row show that
+    /// entity's logo — one value instead of a colour, so the two can't disagree.
+    let kind: EntityKind
     /// Shown under the search field when nothing is typed yet.
     var prompt: String = "Search to add"
     /// How many can be held at once, or `nil` for no ceiling.
@@ -618,7 +649,7 @@ struct MultiSelectField: View {
                 if !selectedOptions.isEmpty {
                     FlowLayout(spacing: Theme.Spacing.xs) {
                         ForEach(selectedOptions, id: \.id) { option in
-                            Pill(option.title, color: color, icon: "xmark") {
+                            Pill(option.title, color: Theme.color(for: kind), icon: "xmark") {
                                 selected.remove(option.id)
                             }
                         }
@@ -654,7 +685,8 @@ struct MultiSelectField: View {
                     ForEach(matches, id: \.id) { option in
                         SidebarRow(
                             title: option.title,
-                            dotColor: color,
+                            kind: kind,
+                            id: option.id,
                             isSelected: false
                         ) {
                             pick(option.id)
@@ -715,7 +747,10 @@ struct MultiSelectField: View {
 /// unsaved editor must not reach the vault.
 struct RoleAssignmentField: View {
     /// Everything pickable, in display order.
-    let options: [(id: EntityID, title: String, color: Color, isPlaceholder: Bool)]
+    let options: [(id: EntityID, title: String, isPlaceholder: Bool)]
+    /// What is being picked — one kind per field, since a project is staffed with people and a
+    /// person is assigned projects. Drives both the pills' colour and each row's avatar.
+    let kind: EntityKind
     let label: String
     let prompt: String
     /// Shown in place of the control when there is nothing to pick.
@@ -777,11 +812,11 @@ struct RoleAssignmentField: View {
     }
 
     /// One pick: what it is, the role on it, and a way off the list.
-    private func row(_ option: (id: EntityID, title: String, color: Color, isPlaceholder: Bool))
+    private func row(_ option: (id: EntityID, title: String, isPlaceholder: Bool))
         -> some View
     {
         HStack(spacing: Theme.Spacing.small) {
-            Pill(option.title, color: option.color, icon: "xmark") {
+            Pill(option.title, color: colour(option), icon: "xmark") {
                 selected.remove(option.id)
             }
 
@@ -808,7 +843,8 @@ struct RoleAssignmentField: View {
                     ForEach(matches, id: \.id) { option in
                         SidebarRow(
                             title: option.title,
-                            dotColor: option.color,
+                            kind: kind,
+                            id: option.id,
                             isSelected: false,
                             isPlaceholder: option.isPlaceholder
                         ) {
@@ -830,15 +866,21 @@ struct RoleAssignmentField: View {
     }
 
     /// In `options` order, so rows don't reshuffle as roles are typed.
-    private var selectedOptions: [(id: EntityID, title: String, color: Color, isPlaceholder: Bool)] {
+    private var selectedOptions: [(id: EntityID, title: String, isPlaceholder: Bool)] {
         options.filter { selected.contains($0.id) }
     }
 
-    private var matches: [(id: EntityID, title: String, color: Color, isPlaceholder: Bool)] {
+    private var matches: [(id: EntityID, title: String, isPlaceholder: Bool)] {
         options.filter {
             !selected.contains($0.id)
                 && (search.isEmpty || $0.title.localizedCaseInsensitiveContains(search))
         }
+    }
+
+    /// A placeholder person stays desaturated, as ``Theme/color(for:)-(Person)`` does — the pill
+    /// is the only place that distinction survived once the colour left the tuple.
+    private func colour(_ option: (id: EntityID, title: String, isPlaceholder: Bool)) -> Color {
+        option.isPlaceholder ? Theme.placeholderColor : Theme.color(for: kind)
     }
 
     private func addFirstMatch() {
@@ -856,9 +898,8 @@ struct ParticipantsField: View {
 
     var body: some View {
         RoleAssignmentField(
-            options: people.map {
-                ($0.id, $0.displayName, Theme.color(for: $0), $0.placeholder)
-            },
+            options: people.map { ($0.id, $0.displayName, $0.placeholder) },
+            kind: .person,
             label: "People",
             prompt: "Search people",
             emptyMessage: "No people in the vault yet — add some and you can staff this here.",
@@ -875,12 +916,190 @@ struct ProjectMembershipsField: View {
 
     var body: some View {
         RoleAssignmentField(
-            options: projects.map { ($0.id, $0.displayName, Theme.projectColor, false) },
+            options: projects.map { ($0.id, $0.displayName, false) },
+            kind: .project,
             label: "Projects",
             prompt: "Search projects",
             emptyMessage: "No projects in the vault yet.",
             selected: $selected,
             roles: $roles)
+    }
+}
+
+// MARK: - Logo field
+
+/// What the sheet should do to the entity's logo when it is saved.
+///
+/// A value rather than an immediate write, for the same reason membership is: an abandoned sheet
+/// must leave the vault untouched. It is also forced by fact — while creating, there is no id to
+/// write a logo *for* until `createPerson`/`createOrganization`/`createProject` has returned one.
+enum LogoChange: Equatable {
+    case unchanged
+    /// Already squared 512×512 PNG data, converted at pick time.
+    case replaced(Data)
+    case removed
+}
+
+extension VaultStore {
+    /// Commits what a ``LogoField`` staged. Lives here rather than on the store, so the store
+    /// stays unaware of a type that only exists to defer one of its own writes.
+    func apply(_ change: LogoChange, kind: EntityKind, id: EntityID) {
+        switch change {
+        case .unchanged: break
+        case .replaced(let data): setLogo(kind: kind, id: id, pngData: data)
+        case .removed: removeLogo(kind: kind, id: id)
+        }
+    }
+}
+
+/// Picks the image that stands for an entity, shared by the three editors.
+///
+/// Converts at pick time rather than at save, so the preview is the actual cropped result
+/// instead of a promise about it — the crop discards the ends of a wide image, and seeing that
+/// before committing is the difference between a choice and a surprise.
+struct LogoField: View {
+    @Environment(VaultStore.self) private var store
+
+    let kind: EntityKind
+    /// `nil` while creating, when there is no stored logo to start from.
+    let existingID: EntityID?
+    @Binding var change: LogoChange
+
+    /// What went wrong with the last pick. Shown beside the field, since a file that won't
+    /// convert is about *this* control and not the sheet as a whole.
+    @State private var failure: String?
+    @State private var isTargeted = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Text("Logo")
+                .font(Theme.Font.caption)
+                .foregroundStyle(Theme.textMuted)
+
+            HStack(spacing: Theme.Spacing.medium) {
+                preview
+
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    HStack(spacing: Theme.Spacing.small) {
+                        SecondaryButton("Choose Image…", icon: "photo", action: choose)
+
+                        // Only offered when there is something to clear: with no logo it would
+                        // be a button that does nothing, which the cursor rule forbids
+                        // promising. `.removed` on a creating sheet is unreachable for the same
+                        // reason — there is nothing there to remove.
+                        if hasSomethingToRemove {
+                            SecondaryButton("Remove", icon: "trash") {
+                                change = .removed
+                                failure = nil
+                            }
+                        }
+                    }
+
+                    Text(caption)
+                        .font(Theme.Font.caption)
+                        .foregroundStyle(failure == nil ? Theme.textFaint : Theme.projectColor)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    /// The round well. Doubles as the drop target, so dragging a file onto the picture you are
+    /// replacing works — the gesture the image itself invites.
+    private var preview: some View {
+        stagedOrStored
+            .frame(width: Theme.Avatar.well, height: Theme.Avatar.well)
+            .overlay {
+                Circle().strokeBorder(
+                    isTargeted ? Theme.accent : Theme.border,
+                    lineWidth: isTargeted ? 2 : Theme.hairline)
+            }
+            .contentShape(Circle())
+            .onTapGesture(perform: choose)
+            .clickableCursor()
+            .help("Choose an image for this \(kind.rawValue)")
+            .dropDestination(for: URL.self) { urls, _ in
+                guard let url = urls.first else { return false }
+                return convert(url)
+            } isTargeted: { isTargeted = $0 }
+    }
+
+    @ViewBuilder
+    private var stagedOrStored: some View {
+        switch change {
+        case .replaced(let data):
+            if let image = NSImage(data: data) {
+                Image(nsImage: image)
+                    .resizable()
+                    .clipShape(Circle())
+            } else {
+                glyphWell
+            }
+        case .removed:
+            glyphWell
+        case .unchanged:
+            if let existingID {
+                // The store's own avatar, so the well shows exactly what the rest of the app
+                // shows — including its glyph fallback when there is no logo yet.
+                EntityAvatar(kind: kind, id: existingID, size: Theme.Avatar.well)
+            } else {
+                glyphWell
+            }
+        }
+    }
+
+    /// The empty state, drawn without the store because a staged removal must show as empty
+    /// even while the file is still on disk.
+    private var glyphWell: some View {
+        Circle()
+            .fill(Theme.color(for: kind).opacity(0.15))
+            .overlay {
+                Image(systemName: kind.symbolName)
+                    .font(.system(size: Theme.Avatar.well * 0.46))
+                    .foregroundStyle(Theme.color(for: kind))
+            }
+    }
+
+    private var hasSomethingToRemove: Bool {
+        switch change {
+        case .replaced: true
+        case .removed: false
+        case .unchanged: existingID.map { store.hasLogo(kind: kind, id: $0) } ?? false
+        }
+    }
+
+    private var caption: String {
+        if let failure { return failure }
+        return "Any image. It's cropped to a square and stored at \(ImageSquarer.side)×\(ImageSquarer.side)."
+    }
+
+    private func choose() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = ImageSquarer.readableTypes
+        panel.prompt = "Use This Image"
+        panel.message = "Pick an image. It will be cropped to a square."
+        if panel.runModal() == .OK, let url = panel.url {
+            _ = convert(url)
+        }
+    }
+
+    /// Returns whether the file was usable, which is also what `dropDestination` wants — a
+    /// rejected drop should animate back rather than silently vanish.
+    @discardableResult
+    private func convert(_ url: URL) -> Bool {
+        do {
+            change = .replaced(try ImageSquarer.squarePNG(contentsOf: url))
+            failure = nil
+            return true
+        } catch {
+            failure = error.localizedDescription
+            return false
+        }
     }
 }
 

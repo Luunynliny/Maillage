@@ -69,9 +69,8 @@ struct OrganizationBoardView: View {
                 selection = project.id
             } label: {
                 HStack(spacing: Theme.Spacing.small) {
-                    Circle()
-                        .fill(Theme.projectColor)
-                        .frame(width: Theme.entityDot, height: Theme.entityDot)
+                    EntityAvatar(
+                        kind: .project, id: project.id, size: Theme.Avatar.card)
                     Text(project.displayName)
                         .font(Theme.Font.heading)
                         .foregroundStyle(Theme.textNormal)

@@ -97,9 +97,10 @@ struct CenterPaneHeader: View {
                 HStack(spacing: Theme.Spacing.small) {
                     DisclosureChevron(isExpanded: isDetailVisible)
 
-                    Circle()
-                        .fill(Theme.color(for: entity))
-                        .frame(width: Theme.entityDot, height: Theme.entityDot)
+                    EntityAvatar(
+                        kind: entity.kind, id: entity.id,
+                        size: Theme.Avatar.header,
+                        isPlaceholder: isPlaceholder)
 
                     VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                         Text(entity.displayName)

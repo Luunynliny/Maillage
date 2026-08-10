@@ -89,10 +89,10 @@ struct CommandPalette: View {
     private func row(_ item: Item, isHighlighted: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: Theme.Spacing.small) {
-                Circle()
-                    .strokeBorder(item.color, lineWidth: item.isPlaceholder ? 1.5 : 0)
-                    .background(Circle().fill(item.isPlaceholder ? Color.clear : item.color))
-                    .frame(width: Theme.entityDot, height: Theme.entityDot)
+                EntityAvatar(
+                    kind: item.kind, id: item.id,
+                    size: Theme.Avatar.row,
+                    isPlaceholder: item.isPlaceholder)
 
                 Text(item.title)
                     .font(Theme.Font.body)
@@ -142,10 +142,13 @@ struct CommandPalette: View {
         let id: EntityID
         let title: String
         let subtitle: String?
-        let kindLabel: String
-        let color: Color
+        /// The kind itself, not just its label: the row's avatar needs it to find the logo, and
+        /// deriving the label from it keeps the two from drifting.
+        let kind: EntityKind
         let isPlaceholder: Bool
         let score: Int
+
+        var kindLabel: String { kind.displayName }
     }
 
     private func results(for query: String) -> [Item] {
@@ -173,8 +176,7 @@ struct CommandPalette: View {
                 id: entity.id,
                 title: entity.displayName,
                 subtitle: subtitle,
-                kindLabel: entity.kind.displayName,
-                color: Theme.color(for: entity),
+                kind: entity.kind,
                 isPlaceholder: person?.placeholder == true,
                 score: score)
         }

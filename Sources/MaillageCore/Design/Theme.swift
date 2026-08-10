@@ -133,10 +133,26 @@ public enum Theme {
         public static let detailsMax: CGFloat = 340
     }
 
-    /// The dot that marks an entity's kind, wherever one appears. One size everywhere:
-    /// it means the same thing in a sidebar row as on a board card or a palette result,
-    /// so it shouldn't change size between them.
+    /// The dot that marks a kind where no entity is being named — the "On no project" card's
+    /// hollow ring. Entities themselves get an ``Avatar``, which can carry a logo.
     public static let entityDot: CGFloat = 8
+
+    /// The circle that stands for one entity: its logo, or its kind's glyph until it has one.
+    ///
+    /// Three sizes rather than one, unlike the dot this replaced. A dot carries no detail, so
+    /// one size fit everywhere; a logo has to be big enough to recognise, and how much room
+    /// there is differs — a title band can afford more than a scrolling list of rows, and a
+    /// board card packs many into a narrow column.
+    public enum Avatar {
+        /// Rows: the sidebar, the ⌘K palette, the editors' option lists.
+        public static let row: CGFloat = 20
+        /// The centre pane's title band, beside a 15pt heading.
+        public static let header: CGFloat = 28
+        /// Beside a project's name on an organization board card.
+        public static let card: CGFloat = 16
+        /// The editors' logo well, where the image is the subject rather than a marker.
+        public static let well: CGFloat = 64
+    }
 
     // MARK: Typography
 

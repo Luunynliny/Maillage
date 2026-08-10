@@ -50,6 +50,18 @@ extension EntityKind {
         case .project: "Description"
         }
     }
+
+    /// The glyph an entity of this kind wears until it has a logo of its own.
+    ///
+    /// Filled variants, because they are drawn small and inside a tinted disc — an outline
+    /// glyph at 20pt reads as a thin scribble against the fill behind it.
+    public var symbolName: String {
+        switch self {
+        case .person: "person.fill"
+        case .organization: "building.2.fill"
+        case .project: "folder.fill"
+        }
+    }
 }
 
 /// Type-erased entity, used by the sidebar, command palette and graph so they can

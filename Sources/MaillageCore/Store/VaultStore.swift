@@ -1,5 +1,38 @@
+import AppKit
 import Foundation
 import Observation
+
+/// Decoded logos, kept out of ``VaultStore``'s observable storage.
+///
+/// A view asks for a logo *while* it renders, and filling a memo on an `@Observable` property
+/// during a render is a mutation SwiftUI is entitled to loop on. A plain reference type is
+/// invisible to observation, so caching a decode can't invalidate the view that triggered it —
+/// what a view *does* observe is ``VaultStore/logoIDs``, which changes only when a logo is
+/// actually added or removed.
+@MainActor
+private final class LogoCache {
+    /// `nil` values are cached too: a file that won't decode should be attempted once, not on
+    /// every frame of a scroll.
+    private var images: [String: NSImage?] = [:]
+
+    private func key(_ kind: EntityKind, _ id: EntityID) -> String { "\(kind.rawValue)/\(id)" }
+
+    func image(kind: EntityKind, id: EntityID, load: () -> NSImage?) -> NSImage? {
+        let key = key(kind, id)
+        if let cached = images[key] { return cached }
+        let loaded = load()
+        images[key] = loaded
+        return loaded
+    }
+
+    func invalidate(kind: EntityKind, id: EntityID) {
+        images.removeValue(forKey: key(kind, id))
+    }
+
+    func removeAll() {
+        images.removeAll()
+    }
+}
 
 /// Single source of truth for the loaded vault.
 ///
@@ -16,11 +49,16 @@ public final class VaultStore {
     /// Inverted relation index, rebuilt whenever the snapshot changes.
     public private(set) var backlinkIndex: [EntityID: [Backlink]] = [:]
 
+    /// Which entities have a logo, per kind — derived from the files in `assets/`, never from
+    /// frontmatter. Observable, so a row redraws the moment one is set or removed.
+    public private(set) var logoIDs: [EntityKind: Set<EntityID>] = [:]
+
     /// Set when a save or load fails, for display in the UI.
     public var lastError: String?
 
     private var reader: VaultReader
     private var writer: VaultWriter
+    private let logoImages = LogoCache()
 
     public init(location: VaultLocation = .default) {
         self.location = location
@@ -35,6 +73,10 @@ public final class VaultStore {
             try location.createSkeletonIfNeeded()
             snapshot = try reader.load()
             rebuildBacklinks()
+            // Reload means the files may have changed underneath us — ⌘R exists precisely for
+            // editing the vault in Finder or Obsidian — so decoded logos can't be trusted.
+            logoImages.removeAll()
+            rebuildLogoIDs()
             lastError = nil
         } catch {
             lastError = error.localizedDescription
@@ -73,6 +115,82 @@ public final class VaultStore {
     /// Relations pointing *at* `id`, derived from other people's files.
     public func backlinks(for id: EntityID) -> [Backlink] {
         backlinkIndex[id] ?? []
+    }
+
+    private func rebuildLogoIDs() {
+        var index: [EntityKind: Set<EntityID>] = [:]
+        for kind in EntityKind.allCases {
+            index[kind] = writer.logoIDs(kind: kind)
+        }
+        logoIDs = index
+    }
+
+    // MARK: Logos
+
+    /// Whether this entity has a logo on disk.
+    ///
+    /// Reads the observable index rather than touching the filesystem, so it's cheap enough for
+    /// a view body and a change to it redraws the row.
+    public func hasLogo(kind: EntityKind, id: EntityID) -> Bool {
+        logoIDs[kind]?.contains(id) == true
+    }
+
+    /// This entity's logo, decoded and memoized, or `nil` if it has none.
+    ///
+    /// Returns `nil` rather than throwing on a file that won't decode: a corrupt PNG in the
+    /// vault means the avatar falls back to its glyph, which is the display-side reading of
+    /// *a malformed file is an issue, not a crash*. Import is where a bad image is reported,
+    /// because that's where someone chose it and can pick another.
+    public func logo(kind: EntityKind, id: EntityID) -> NSImage? {
+        guard hasLogo(kind: kind, id: id) else { return nil }
+        return logoImages.image(kind: kind, id: id) {
+            NSImage(contentsOf: location.logoURL(kind: kind, id: id))
+        }
+    }
+
+    /// Converts an image file and stores it as this entity's logo.
+    ///
+    /// Throws what ``ImageSquarer`` throws, so an editor can name the file that failed. A write
+    /// failure lands in ``lastError`` like every other, and returns `false`.
+    @discardableResult
+    public func setLogo(kind: EntityKind, id: EntityID, from url: URL) -> Bool {
+        do {
+            try setLogo(kind: kind, id: id, pngData: ImageSquarer.squarePNG(contentsOf: url))
+            return true
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
+    /// Stores already-squared PNG data — what a ``LogoField`` holds after a pick, so the bytes
+    /// behind the preview are the bytes that get written.
+    @discardableResult
+    public func setLogo(kind: EntityKind, id: EntityID, pngData: Data) -> Bool {
+        do {
+            try writer.writeLogo(pngData, kind: kind, id: id)
+            logoImages.invalidate(kind: kind, id: id)
+            logoIDs[kind, default: []].insert(id)
+            lastError = nil
+            return true
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
+    @discardableResult
+    public func removeLogo(kind: EntityKind, id: EntityID) -> Bool {
+        do {
+            try writer.deleteLogo(kind: kind, id: id)
+            logoImages.invalidate(kind: kind, id: id)
+            logoIDs[kind]?.remove(id)
+            lastError = nil
+            return true
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
     }
 
     // MARK: Lookup
@@ -371,6 +489,11 @@ public final class VaultStore {
     public func delete(kind: EntityKind, id: EntityID) -> Bool {
         do {
             try writer.delete(kind: kind, id: id)
+            // The logo goes with the entity. Left behind it would be an orphan file that a
+            // later entity reusing the id would silently inherit as its own avatar.
+            try writer.deleteLogo(kind: kind, id: id)
+            logoImages.invalidate(kind: kind, id: id)
+            logoIDs[kind]?.remove(id)
 
             switch kind {
             case .person: snapshot.people.removeValue(forKey: id)
@@ -428,6 +551,14 @@ public final class VaultStore {
         do {
             snapshot = try writer.rename(kind: kind, from: oldID, to: newID, in: snapshot)
             rebuildBacklinks()
+            // `rename` moved the logo file with the markdown; catch the index up to it. Both
+            // keys are touched because the image is the same one under a new name — this is
+            // also the path `resolvePlaceholder` takes, where `_head-of-aa` becomes a real slug.
+            logoImages.invalidate(kind: kind, id: oldID)
+            logoImages.invalidate(kind: kind, id: newID)
+            if logoIDs[kind]?.remove(oldID) != nil {
+                logoIDs[kind, default: []].insert(newID)
+            }
             lastError = nil
             return newID
         } catch {

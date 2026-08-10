@@ -94,6 +94,17 @@ struct OrganizationBubblesView: View {
     /// than a smaller one.
     private func label(_ bubble: BubblePacking.Bubble) -> some View {
         VStack(spacing: 0) {
+            // Only for a real employer: the grey bucket is "no organization", which has no
+            // logo to show and no id to look one up by. Sized off the bubble so it stays
+            // smaller than the count — the headcount is still what this view is read for.
+            if let id = bubble.id {
+                EntityAvatar(
+                    kind: .organization, id: id,
+                    size: bubble.radius * 0.4,
+                    tint: bubble.color)
+                    .padding(.bottom, Theme.Spacing.xs)
+            }
+
             Text("\(bubble.headcount)")
                 .font(Theme.Font.title)
                 .foregroundStyle(Theme.textNormal)

@@ -28,23 +28,57 @@ public struct VaultWriter {
     public func write<T: Entity & Encodable>(_ entity: T) throws {
         let contents = try FrontmatterCodec.encode(entity, body: entity.body)
         let url = location.fileURL(kind: entity.kind, id: entity.id)
-        try writeAtomically(contents, to: url)
+        try writeAtomically(Data(contents.utf8), to: url)
     }
 
-    private func writeAtomically(_ contents: String, to url: URL) throws {
+    /// Takes `Data` rather than a `String` so logos go through the same swap as markdown: an
+    /// interrupted save can no more leave half a PNG behind than half a profile.
+    private func writeAtomically(_ data: Data, to url: URL) throws {
         let fm = FileManager.default
         try fm.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
 
         let temp = url.deletingLastPathComponent()
             .appendingPathComponent(".\(url.lastPathComponent).tmp-\(UUID().uuidString)")
-        try Data(contents.utf8).write(to: temp, options: .atomic)
+        try data.write(to: temp, options: .atomic)
 
         if fm.fileExists(atPath: url.path) {
             _ = try fm.replaceItemAt(url, withItemAt: temp)
         } else {
             try fm.moveItem(at: temp, to: url)
         }
+    }
+
+    // MARK: Logos
+
+    /// Stores `data` — already squared PNG, from ``ImageSquarer`` — as this entity's logo.
+    public func writeLogo(_ data: Data, kind: EntityKind, id: EntityID) throws {
+        try writeAtomically(data, to: location.logoURL(kind: kind, id: id))
+    }
+
+    /// Removes an entity's logo. A no-op when there isn't one, like ``delete(kind:id:)``.
+    public func deleteLogo(kind: EntityKind, id: EntityID) throws {
+        let url = location.logoURL(kind: kind, id: id)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        try FileManager.default.removeItem(at: url)
+    }
+
+    /// Which entities of `kind` have a logo, read from the asset directory.
+    ///
+    /// The file's presence *is* the fact — there is no `logo:` frontmatter key to consult — so
+    /// this scan is how a logo becomes known, exactly as backlinks are derived rather than
+    /// stored. Dropping a PNG in by hand therefore works.
+    public func logoIDs(kind: EntityKind) -> Set<EntityID> {
+        guard
+            let contents = try? FileManager.default.contentsOfDirectory(
+                at: location.assetsDirectory(for: kind),
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants])
+        else { return [] }
+        return Set(
+            contents
+                .filter { $0.pathExtension.lowercased() == "png" }
+                .map { $0.deletingPathExtension().lastPathComponent })
     }
 
     // MARK: Identity
@@ -127,7 +161,23 @@ public struct VaultWriter {
         }
         try FileManager.default.removeItem(at: oldURL)
 
-        // 2. Repoint every inbound reference.
+        // 2. Carry the logo across. The filename is the identity and a logo is named after it,
+        // so leaving it behind would orphan the file and silently blank the avatar.
+        let oldLogo = location.logoURL(kind: kind, id: oldID)
+        if FileManager.default.fileExists(atPath: oldLogo.path) {
+            let newLogo = location.logoURL(kind: kind, id: newID)
+            try FileManager.default.createDirectory(
+                at: newLogo.deletingLastPathComponent(), withIntermediateDirectories: true)
+            // A file already sitting at the destination would make `moveItem` throw and abort a
+            // rename that has already moved the markdown. It can only be a leftover, since the
+            // guard above proved no entity holds `newID`.
+            if FileManager.default.fileExists(atPath: newLogo.path) {
+                try FileManager.default.removeItem(at: newLogo)
+            }
+            try FileManager.default.moveItem(at: oldLogo, to: newLogo)
+        }
+
+        // 3. Repoint every inbound reference.
         for (id, var person) in updated.people {
             var touched = false
 

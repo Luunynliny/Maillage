@@ -106,14 +106,18 @@ struct EgoGraphView: View {
     private func nodeView(_ node: GraphNode, isSubject: Bool) -> some View {
         let isLit = hovered == nil || hovered == node.id || isSubject
 
-        return Circle()
-            .fill(node.isHollow ? Theme.bgPrimary : node.color)
-            .overlay {
-                Circle().strokeBorder(
-                    isSubject ? Theme.textNormal : (node.isHollow ? node.color : Theme.bgPrimary),
-                    lineWidth: isSubject ? 2.5 : 1.5)
-            }
-            .frame(width: node.radius * 2, height: node.radius * 2)
+        // The employer hue reaches the node two ways at once, because a logo covers the fill:
+        // as the disc behind a glyph when there's no logo, and as the ring around it either
+        // way. Without the ring, giving everyone a logo would erase the clustering the ring
+        // order is built on. The subject's ring is the text colour instead — it says "this is
+        // who you asked about", which outranks their employer here.
+        return EntityAvatar(
+            kind: .person, id: node.id,
+            size: node.radius * 2,
+            isPlaceholder: node.isHollow,
+            tint: node.color,
+            fill: .solid,
+            ring: isSubject ? Theme.textNormal : node.color)
             .overlay(alignment: .top) {
                 Text(node.label)
                     .font(isSubject ? Theme.Font.heading : Theme.Font.caption)
@@ -233,8 +237,13 @@ struct EgoSpoke: Hashable {
 /// neighbours is part of the layout rather than the view's job, because it's the invariant
 /// that matters here: one dot must mean one person, however many relations reach them.
 struct EgoLayout {
-    static let subjectRadius: CGFloat = 11
-    static let neighbourRadius: CGFloat = 7
+    /// Big enough to read a logo in. At the 11pt/7pt these were when the nodes were plain dots,
+    /// an avatar had ~14pt across to work with, which is a few pixels of a face — the image was
+    /// there but told you nothing. Doubling them is the whole reason the logos are worth putting
+    /// on this view; ``ringRadius(in:horizontal:vertical:floor:)`` keeps the ring itself clear of
+    /// the rim, so the larger nodes cost no names.
+    static let subjectRadius: CGFloat = 18
+    static let neighbourRadius: CGFloat = 14
     /// Room left either side of the ring. Wider than it is tall because a name is horizontal
     /// text: a neighbour at three o'clock needs half their name's width clear of the rim, not
     /// a line's height.

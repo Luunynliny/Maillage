@@ -57,9 +57,9 @@ App/Info.plist                       bundle id, version, NSAudioCaptureUsageDesc
 maillage.xcodeproj/                  committed; shared Maillage scheme
 Sources/Maillage/MaillageApp.swift   @main, WindowGroup, menu commands (⌘N, ⌘K, ⌘R)
 Sources/MaillageCore/
-├── Design/     Theme.swift (tokens), Components.swift (Card, Pill, SidebarRow, …)
+├── Design/     Theme.swift (tokens), Components.swift (Card, Pill, EntityAvatar, SidebarRow, …)
 ├── Model/      Entity, Person, Organization, Project, Relation, ProjectMembership, Wikilink, CalendarDay
-├── Vault/      VaultLocation, FrontmatterCodec, VaultReader, VaultWriter
+├── Vault/      VaultLocation, FrontmatterCodec, VaultReader, VaultWriter, ImageSquarer
 ├── Store/      VaultStore — single source of truth
 └── Views/      RootView, SidebarView, CenterPane, DetailView, Editors, CommandPalette, VaultPicker
 ```
@@ -86,6 +86,9 @@ The app target is a thin `@main` shell; everything testable lives in `MaillageCo
 ```
 people/marie-dupont.md      organizations/acme-corp.md
 people/_head-of-aa.md       projects/maillage.md          .maillage/config.yaml
+
+assets/people/marie-dupont.png          assets/organizations/acme-corp.png
+assets/projects/maillage.png
 ```
 
 ```markdown
@@ -125,8 +128,10 @@ These are invariants, not preferences — the tests enforce most of them.
   one applies `clickableCursor()` itself (text inputs `textCursor()`), so a new button is
   clickable-looking by construction. Pass `clickableCursor(false)` when a control is only
   sometimes clickable — a disabled button or an action-less `Pill` — since a hand promises a
-  click that does nothing. The graph is the exception and resolves per-point with
-  `onContinuousHover`, because one `Canvas` holds every node.
+  click that does nothing. In the two graphs the `Canvas` draws only the edges and every node is
+  its own SwiftUI view, so each node carries its own `.onHover` and `.clickableCursor` — attached
+  *before* `.position`, since `.position` returns a pane-sized view and anything interactive on
+  its result claims the whole pane.
 - **A text input's box is bigger than its `TextField`.** Padding, border and placeholder are
   drawn around it, so a click near the edge misses the input and the field reads as dead.
   Whatever draws the box also claims it: `contentShape` plus `onTapGesture` setting the field's
@@ -151,15 +156,29 @@ These are invariants, not preferences — the tests enforce most of them.
   save, so an abandoned sheet writes nothing. `VaultStore.setParticipants(ofProject:to:)` takes
   the whole intended roster and writes only the people whose entry actually changed. Detail and
   centre panes are display-only.
+- **A logo is a file, not a field.** `assets/<kind>/<id>.png`, and its presence *is* the fact —
+  `VaultStore.logoIDs` is derived by scanning `assets/` at load, like backlinks and membership, so
+  there is no `logo:` key that can point at a deleted file and dropping a PNG in via Finder works.
+  Partitioned by kind because ids only collide *across* kinds (`availableID` checks one folder, so
+  `people/acme.md` and `projects/acme.md` can coexist). Always 512×512 centre-cropped PNG from
+  `ImageSquarer`, which is the single place the format, the size and the crop are decided —
+  anything macOS can decode goes in, including SVG, and PNG is the only lossless format with
+  alpha it can write. Every circle standing for an entity is an `EntityAvatar`, which falls back
+  to the kind's SF Symbol on a disc in the kind's `Theme` hue, so colour coding survives as the
+  default. Picked in the editors and applied **on save**, like membership.
 - **The filename is the identity.** `id` is the filename slug and the only link target;
   frontmatter `id` disagreeing with the filename loses. Renaming therefore *must* go through
-  `VaultWriter.rename`, which rewrites every inbound `[[id]]`.
+  `VaultWriter.rename`, which rewrites every inbound `[[id]]` and moves the logo with the
+  markdown — including when `resolvePlaceholder` turns `_head-of-aa` into a real slug.
 - **Dates are `CalendarDay`, never `Date`.** Yams serializes `Date` as a UTC timestamp, which
   shifts the day backward for anyone east of UTC. `CalendarDay` writes `'yyyy-MM-dd'`.
 - **Writes are atomic** (temp file + `replaceItemAt`) and go through `VaultStore`, so memory and
-  disk never diverge.
+  disk never diverge. Assets included: `VaultWriter.writeAtomically` takes `Data`, so an
+  interrupted save can no more leave half a PNG than half a profile.
 - **A malformed file is an issue, not a crash.** `VaultReader` collects `VaultLoadIssue`s and
-  loads everything else; the sidebar surfaces them.
+  loads everything else; the sidebar surfaces them. A logo that won't decode returns `nil` from
+  `VaultStore.logo(kind:id:)` and the avatar falls back to its glyph — a bad image is reported at
+  import, where someone chose it and can pick another.
 - **Placeholder people** are for "you should meet the head of AA" — no name, a `descriptor`, and
   an `_` filename prefix. Resolving one renames the file and relinks.
 

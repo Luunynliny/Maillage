@@ -33,26 +33,19 @@ public struct SidebarView: View {
                         rows: store.allPeople.map {
                             Row(
                                 id: $0.id, title: $0.displayName,
-                                color: Theme.color(for: $0),
                                 isPlaceholder: $0.placeholder)
                         })
 
                     section(
                         kind: .organization,
                         rows: store.allOrganizations.map {
-                            Row(
-                                id: $0.id, title: $0.displayName,
-                                color: Theme.organizationColor,
-                                isPlaceholder: false)
+                            Row(id: $0.id, title: $0.displayName, isPlaceholder: false)
                         })
 
                     section(
                         kind: .project,
                         rows: store.allProjects.map {
-                            Row(
-                                id: $0.id, title: $0.displayName,
-                                color: Theme.projectColor,
-                                isPlaceholder: false)
+                            Row(id: $0.id, title: $0.displayName, isPlaceholder: false)
                         })
                 }
                 .padding(.horizontal, Theme.Spacing.small)
@@ -98,10 +91,11 @@ public struct SidebarView: View {
 
     // MARK: Sections
 
+    /// No colour: the row's avatar derives its own from the kind of the section it's in, and
+    /// from whether the entity has a logo — which only the store knows.
     private struct Row: Identifiable {
         let id: EntityID
         let title: String
-        let color: Color
         let isPlaceholder: Bool
     }
 
@@ -154,7 +148,8 @@ public struct SidebarView: View {
                 ForEach(rows) { row in
                     SidebarRow(
                         title: row.title,
-                        dotColor: row.color,
+                        kind: kind,
+                        id: row.id,
                         isSelected: selection == row.id,
                         isPlaceholder: row.isPlaceholder
                     ) {
