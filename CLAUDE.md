@@ -57,7 +57,7 @@ App/Info.plist                       bundle id, version, NSAudioCaptureUsageDesc
 maillage.xcodeproj/                  committed; shared Maillage scheme
 Sources/Maillage/MaillageApp.swift   @main, WindowGroup, menu commands (⌘N, ⌘K, ⌘R)
 Sources/MaillageCore/
-├── Design/     Theme.swift (tokens), Components.swift (Card, Pill, EntityAvatar, SidebarRow, …)
+├── Design/     Theme.swift (tokens), Components.swift (Card, Pill, EntityAvatar, EntityLink, SidebarRow, …)
 ├── Model/      Entity, Person, Organization, Project, Relation, ProjectMembership, Wikilink, CalendarDay
 ├── Vault/      VaultLocation, FrontmatterCodec, VaultReader, VaultWriter, ImageSquarer
 ├── Store/      VaultStore — single source of truth
@@ -166,6 +166,11 @@ These are invariants, not preferences — the tests enforce most of them.
   alpha it can write. Every circle standing for an entity is an `EntityAvatar`, which falls back
   to the kind's SF Symbol on a disc in the kind's `Theme` hue, so colour coding survives as the
   default. Picked in the editors and applied **on save**, like membership.
+- **A link to an entity is an `EntityLink`, not a `Pill`.** Avatar plus name, underlined on hover.
+  A pill's tinted capsule was both the affordance *and* the identification; a logo identifies
+  better, and two capsules per row crowded out the role beside them — which on a roster is what
+  the pane is read for. `Pill` stays for what isn't an entity: relation labels, and the removable
+  tokens in the editors.
 - **The filename is the identity.** `id` is the filename slug and the only link target;
   frontmatter `id` disagreeing with the filename loses. Renaming therefore *must* go through
   `VaultWriter.rename`, which rewrites every inbound `[[id]]` and moves the logo with the

@@ -129,7 +129,13 @@ struct OrganizationBoardView: View {
     private func memberRow(_ person: Person, role: String?, isOutsider: Bool) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: Theme.Spacing.xs) {
-                Pill(person.displayName, color: Theme.color(for: person)) {
+                EntityLink(
+                    title: person.displayName,
+                    kind: .person,
+                    id: person.id,
+                    size: Theme.Avatar.card,
+                    isPlaceholder: person.placeholder
+                ) {
                     selection = person.id
                 }
                 if isOutsider {
@@ -144,7 +150,9 @@ struct OrganizationBoardView: View {
                 Text(role)
                     .font(Theme.Font.caption)
                     .foregroundStyle(Theme.textMuted)
-                    .padding(.leading, Theme.Spacing.small)
+                    // Indented to start where the name does, past the avatar — the role belongs
+                    // to the person above it, and a hanging indent is what says so.
+                    .padding(.leading, Theme.Avatar.card + Theme.Spacing.xs)
             }
         }
     }

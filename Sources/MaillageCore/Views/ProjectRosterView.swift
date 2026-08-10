@@ -71,7 +71,12 @@ struct ProjectRosterView: View {
     private func row(_ person: Person, role: String?) -> some View {
         HStack(spacing: Theme.Spacing.medium) {
             HStack(spacing: 0) {
-                Pill(person.displayName, color: Theme.color(for: person)) {
+                EntityLink(
+                    title: person.displayName,
+                    kind: .person,
+                    id: person.id,
+                    isPlaceholder: person.placeholder
+                ) {
                     selection = person.id
                 }
                 Spacer(minLength: 0)
@@ -95,16 +100,13 @@ struct ProjectRosterView: View {
         if let employer = person.organization,
             let name = store.displayName(for: employer.id)
         {
-            Button {
+            // Its logo too, not only the participant's: in a column of employers the logo is
+            // the fastest way to see that three of them work for the same one, which is what
+            // the column is there to tell you. Blue text alone said "organization", which the
+            // heading already says.
+            EntityLink(title: name, kind: .organization, id: employer.id) {
                 selection = employer.id
-            } label: {
-                Text(name)
-                    .font(Theme.Font.body)
-                    .foregroundStyle(Theme.organizationColor)
-                    .lineLimit(1)
             }
-            .buttonStyle(.plain)
-            .clickableCursor()
         } else {
             Text("—")
                 .font(Theme.Font.body)
