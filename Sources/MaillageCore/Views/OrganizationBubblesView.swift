@@ -14,6 +14,22 @@ import SwiftUI
 /// which switches the pane to ``OrganizationBoardView`` — the bubbles are the entry point to
 /// the other views, not a dead end.
 struct OrganizationBubblesView: View {
+    /// The share of a bubble's radius its logo claims.
+    ///
+    /// A share rather than a fixed size, so a two-person company and a twenty-person one each
+    /// get a mark in proportion to the circle it sits in — the bubble's *area* is the headcount,
+    /// and a logo that ignored that would fight the one thing the view is read for.
+    static let logoShare: CGFloat = 0.72
+    /// …but not below this, whatever the share works out to.
+    ///
+    /// The floor is the correction to sizing a logo the way the headcount is sized. A number
+    /// scales without limit — "2" is still "2" at nine points — where a wordmark has an absolute
+    /// threshold under which it is a grey smudge, and no share of a small circle can be above it.
+    /// So the smallest bubbles stop being proportional and just stay legible; they are also the
+    /// ones with the fewest people, so the least is lost by letting the mark run a little large
+    /// for its circle.
+    static let logoFloor: CGFloat = 34
+
     @Environment(VaultStore.self) private var store
     @Binding var selection: EntityID?
 
@@ -97,16 +113,12 @@ struct OrganizationBubblesView: View {
             // Only for a real employer: the grey bucket is "no organization", which has no
             // logo to show and no id to look one up by.
             //
-            // Sized off the bubble rather than fixed, so a two-person company and a
-            // twenty-person one each get a mark in proportion to the circle it sits in. The
-            // share is set by what a wordmark needs to be legible at — at 0.4 the smallest
-            // bubbles rendered "momcorp" a handful of pixels tall, which is a blur where a
-            // logo should be. Still well under the count's own height, so the headcount stays
-            // what the view is read for.
+            // Proportional to the bubble but never below ``logoFloor`` — see both for why the
+            // share alone was the wrong rule for a picture.
             if let id = bubble.id {
                 EntityAvatar(
                     kind: .organization, id: id,
-                    size: bubble.radius * 0.62,
+                    size: max(bubble.radius * Self.logoShare, Self.logoFloor),
                     tint: bubble.color)
                     .padding(.bottom, Theme.Spacing.xs)
             }
@@ -137,9 +149,14 @@ struct OrganizationBubblesView: View {
 /// what makes "Acme is the big one in the middle" stay true between launches, and it's why
 /// this is a struct the tests can drive without a window.
 struct BubblePacking {
-    /// Radius for a company you know one person at. Below this a circle stops being able to
-    /// hold a two-digit number and a name.
-    static let minRadius: CGFloat = 44
+    /// Radius for a company you know one person at. Below this a circle stops being able to hold
+    /// what goes inside it: a logo, a two-digit number and a name on up to two lines.
+    ///
+    /// Raised when the logo arrived. At 44 it was measured for the number and the name only, and
+    /// a mark at ``OrganizationBubblesView/logoFloor`` pushed the pair of them down against the
+    /// rim — `minimumScaleFactor` then shrank the headcount to fit, so the smallest companies
+    /// showed the smallest count, which reads as *fewer people* rather than as a smaller circle.
+    static let minRadius: CGFloat = 58
     /// Ceiling, so one large employer can't swallow the pane before scaling even starts.
     static let maxRadius: CGFloat = 150
     /// Clear space guaranteed between two circles' rims, before scaling.

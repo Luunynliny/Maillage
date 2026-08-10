@@ -49,16 +49,28 @@ struct BubblePackingTests {
         #expect(packing.bubbles.dropLast().allSatisfy { $0.id != nil })
     }
 
-    @Test("Puts the largest company at the centre")
-    func largestIsCentred() throws {
-        let packing = BubblePacking(groups: groups([1, 7, 3]), in: pane)
+    /// "Acme is the big one in the middle" — stated as *what the packing actually guarantees*,
+    /// which is that the largest circle is placed first and every other one spirals around it.
+    ///
+    /// Not "the largest is nearest the pane centre", which this test used to assert. That is a
+    /// side effect of the arrangement's shape rather than an invariant: ``BubblePacking/fit`` says
+    /// it centres the packing's *bounding box*, and with a few similar-sized companies the box's
+    /// middle can land nearer a smaller circle than the biggest one. The old assertion held for
+    /// `[1, 7, 3]` and failed for `[3, 2, 1]` and `[4, 4, 1]` at the same time — so it was
+    /// passing on the example rather than on the rule.
+    @Test(
+        "Surrounds the largest company with the rest",
+        arguments: [[1, 7, 3], [3, 2, 1], [4, 4, 1], [1, 2, 3, 4], [12, 5, 3, 1, 1]])
+    func largestIsSurrounded(headcounts: [Int]) throws {
+        let packing = BubblePacking(groups: groups(headcounts), in: pane)
         let biggest = try #require(packing.bubbles.max { $0.headcount < $1.headcount })
-        let paneCentre = CGPoint(x: pane.width / 2, y: pane.height / 2)
 
-        // Every other circle grew around it, so it sits nearest the middle of the pane.
-        for bubble in packing.bubbles where bubble.headcount < biggest.headcount {
+        for bubble in packing.bubbles where bubble.id != biggest.id {
+            // Wholly outside it — the spiral steps out from the first circle's rim, so nothing
+            // later can encroach on the one the arrangement is built around.
             #expect(
-                biggest.center.distance(to: paneCentre) < bubble.center.distance(to: paneCentre))
+                bubble.center.distance(to: biggest.center) >= biggest.radius + bubble.radius - 0.001
+            )
         }
     }
 
@@ -194,5 +206,22 @@ struct BubblePackingTests {
     @Test("Handles an empty vault without crashing")
     func emptyInput() throws {
         #expect(BubblePacking(groups: [], in: pane).bubbles.isEmpty)
+    }
+
+    /// The smallest bubble has to be able to hold what the view draws in it: a logo at the floor,
+    /// the headcount, and up to two lines of name. If it can't, `minimumScaleFactor` shrinks the
+    /// count — and a company shown with a smaller number reads as having fewer people in it.
+    @Test("Leaves the smallest bubble room for a logo and its text")
+    func smallestBubbleFitsItsContents() throws {
+        let logo = max(
+            BubblePacking.minRadius * OrganizationBubblesView.logoShare,
+            OrganizationBubblesView.logoFloor)
+        // The label column is inscribed in the circle, so this is the height available to it.
+        let available = BubblePacking.minRadius * 2
+
+        // 22pt count + two 11pt caption lines, at the line heights AppKit gives them, plus the
+        // gap under the logo.
+        let text: CGFloat = 27 + 14 * 2 + Theme.Spacing.xs
+        #expect(logo + text <= available)
     }
 }
