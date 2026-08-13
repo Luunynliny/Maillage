@@ -214,16 +214,33 @@ public final class VaultStore {
         }
     }
 
+    /// Most recent first, unlike the other three: a meeting list is read as "what's
+    /// happened lately", not browsed alphabetically the way a roster of names is. A meeting
+    /// with no date yet — mid-recording, or hand-seeded incompletely — sorts last rather
+    /// than vanishing or claiming the top of a list it has no claim to.
+    public var allMeetings: [Meeting] {
+        snapshot.meetings.values.sorted {
+            switch ($0.date, $1.date) {
+            case (let left?, let right?): return left == right ? $0.id > $1.id : left > right
+            case (nil, nil): return $0.id > $1.id
+            case (nil, _): return false
+            case (_, nil): return true
+            }
+        }
+    }
+
     public var allEntities: [AnyEntity] {
         allPeople.map(AnyEntity.person)
             + allOrganizations.map(AnyEntity.organization)
             + allProjects.map(AnyEntity.project)
+            + allMeetings.map(AnyEntity.meeting)
     }
 
     public func entity(id: EntityID) -> AnyEntity? {
         if let person = snapshot.people[id] { return .person(person) }
         if let org = snapshot.organizations[id] { return .organization(org) }
         if let project = snapshot.projects[id] { return .project(project) }
+        if let meeting = snapshot.meetings[id] { return .meeting(meeting) }
         return nil
     }
 
@@ -283,6 +300,23 @@ public final class VaultStore {
     /// Projects owned by an organization.
     public func projects(inOrganization organizationID: EntityID) -> [Project] {
         allProjects.filter { $0.organization == Wikilink(organizationID) }
+    }
+
+    /// A person's meeting history — every meeting that lists them as an attendee, most
+    /// recent first. What ``EntityDetails`` shows on a person's own pane; the payoff this
+    /// whole entity exists for.
+    public func meetings(withPerson personID: EntityID) -> [Meeting] {
+        allMeetings.filter { meeting in meeting.attendees.contains { $0.id == personID } }
+    }
+
+    /// Meetings held with an organization.
+    public func meetings(inOrganization organizationID: EntityID) -> [Meeting] {
+        allMeetings.filter { $0.organization?.id == organizationID }
+    }
+
+    /// Meetings held about a project.
+    public func meetings(onProject projectID: EntityID) -> [Meeting] {
+        allMeetings.filter { $0.project?.id == projectID }
     }
 
     /// Every relation label already in use, most-used first.
@@ -391,6 +425,29 @@ public final class VaultStore {
         return persist(project) ? project : nil
     }
 
+    /// Creates a meeting, id-prefixed with its date so files sort chronologically in Finder
+    /// or Obsidian the same way ``allMeetings`` sorts them in the app — `2026-08-13-acme-standup`,
+    /// not `acme-standup`. `writer.availableID` takes that prefix literally, ahead of the
+    /// slugified title, exactly as it already does for a placeholder person's leading `_`.
+    @discardableResult
+    public func createMeeting(
+        title: String,
+        date: CalendarDay = .today(),
+        duration: Int? = nil,
+        language: String? = nil,
+        organization: Wikilink? = nil,
+        project: Wikilink? = nil,
+        attendees: [Wikilink] = [],
+        body: String = ""
+    ) -> Meeting? {
+        let id = writer.availableID(for: title, kind: .meeting, prefix: "\(date)-")
+        let meeting = Meeting(
+            id: id, title: title, date: date, duration: duration, language: language,
+            organization: organization, project: project, attendees: attendees,
+            created: .today(), body: body)
+        return persist(meeting) ? meeting : nil
+    }
+
     // MARK: Updating
 
     @discardableResult
@@ -401,6 +458,9 @@ public final class VaultStore {
 
     @discardableResult
     public func update(_ project: Project) -> Bool { persist(project) }
+
+    @discardableResult
+    public func update(_ meeting: Meeting) -> Bool { persist(meeting) }
 
     /// Adds a one-way labeled relation from `sourceID` to `targetID`.
     ///
@@ -506,6 +566,7 @@ public final class VaultStore {
             case .person: snapshot.people.removeValue(forKey: id)
             case .organization: snapshot.organizations.removeValue(forKey: id)
             case .project: snapshot.projects.removeValue(forKey: id)
+            case .meeting: snapshot.meetings.removeValue(forKey: id)
             }
 
             for (personID, var person) in snapshot.people {
@@ -537,6 +598,31 @@ public final class VaultStore {
                     project.organization = nil
                     snapshot.projects[projectID] = project
                     try writer.write(project)
+                }
+            }
+
+            // Nothing links *to* a meeting, so deleting one needs no scrub of its own — but
+            // deleting a person, organization or project has to reach every meeting that
+            // named them, the same as it already reaches every person's relations above.
+            if kind == .person || kind == .organization || kind == .project {
+                for (meetingID, var meeting) in snapshot.meetings {
+                    var touched = false
+                    if kind == .person, meeting.attendees.contains(where: { $0.id == id }) {
+                        meeting.attendees.removeAll { $0.id == id }
+                        touched = true
+                    }
+                    if kind == .organization, meeting.organization?.id == id {
+                        meeting.organization = nil
+                        touched = true
+                    }
+                    if kind == .project, meeting.project?.id == id {
+                        meeting.project = nil
+                        touched = true
+                    }
+                    if touched {
+                        snapshot.meetings[meetingID] = meeting
+                        try writer.write(meeting)
+                    }
                 }
             }
 
@@ -583,6 +669,7 @@ public final class VaultStore {
             case let person as Person: snapshot.people[person.id] = person
             case let org as Organization: snapshot.organizations[org.id] = org
             case let project as Project: snapshot.projects[project.id] = project
+            case let meeting as Meeting: snapshot.meetings[meeting.id] = meeting
             default: break
             }
             rebuildBacklinks()

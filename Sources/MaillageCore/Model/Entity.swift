@@ -6,6 +6,7 @@ public enum EntityKind: String, Codable, CaseIterable, Sendable {
     case person
     case organization
     case project
+    case meeting
 
     /// Vault subdirectory for this kind.
     public var directoryName: String {
@@ -13,6 +14,7 @@ public enum EntityKind: String, Codable, CaseIterable, Sendable {
         case .person: "people"
         case .organization: "organizations"
         case .project: "projects"
+        case .meeting: "meetings"
         }
     }
 
@@ -21,6 +23,17 @@ public enum EntityKind: String, Codable, CaseIterable, Sendable {
         case .person: "People"
         case .organization: "Organizations"
         case .project: "Projects"
+        case .meeting: "Meetings"
+        }
+    }
+
+    /// Whether this kind keeps a logo in `assets/`. False only for ``meeting``: a
+    /// conversation has no picture of its own, so ``VaultLocation/createSkeletonIfNeeded()``
+    /// skips making it an asset folder, and every meeting avatar falls back to its glyph.
+    public var supportsLogo: Bool {
+        switch self {
+        case .person, .organization, .project: true
+        case .meeting: false
         }
     }
 }
@@ -48,6 +61,12 @@ extension EntityKind {
         switch self {
         case .person, .organization: "Notes"
         case .project: "Description"
+        // Unused in practice: ``MeetingView`` renders a meeting's body itself, and
+        // ``EntityDetails`` skips its generic body block for this kind precisely so the
+        // generated "## Summary"/"## Transcript" markdown is never dumped as raw text
+        // *and* rendered properly in the same pane. Kept for exhaustiveness and for whatever
+        // reads a meeting's body generically next.
+        case .meeting: "Transcript"
         }
     }
 
@@ -60,6 +79,7 @@ extension EntityKind {
         case .person: "person.fill"
         case .organization: "building.2.fill"
         case .project: "folder.fill"
+        case .meeting: "calendar"
         }
     }
 }
@@ -70,12 +90,14 @@ public enum AnyEntity: Identifiable, Hashable, Sendable {
     case person(Person)
     case organization(Organization)
     case project(Project)
+    case meeting(Meeting)
 
     public var id: EntityID {
         switch self {
         case .person(let p): p.id
         case .organization(let o): o.id
         case .project(let p): p.id
+        case .meeting(let m): m.id
         }
     }
 
@@ -84,6 +106,7 @@ public enum AnyEntity: Identifiable, Hashable, Sendable {
         case .person: .person
         case .organization: .organization
         case .project: .project
+        case .meeting: .meeting
         }
     }
 
@@ -92,6 +115,7 @@ public enum AnyEntity: Identifiable, Hashable, Sendable {
         case .person(let p): p.displayName
         case .organization(let o): o.displayName
         case .project(let p): p.displayName
+        case .meeting(let m): m.displayName
         }
     }
 
@@ -100,6 +124,7 @@ public enum AnyEntity: Identifiable, Hashable, Sendable {
         case .person(let p): p.body
         case .organization(let o): o.body
         case .project(let p): p.body
+        case .meeting(let m): m.body
         }
     }
 

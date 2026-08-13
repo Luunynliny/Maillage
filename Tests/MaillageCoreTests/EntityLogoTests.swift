@@ -216,17 +216,27 @@ struct EntityLogoTests {
         #expect(first.tiffRepresentation != second.tiffRepresentation)
     }
 
-    @Test("A vault skeleton includes an asset folder per kind")
+    @Test("A vault skeleton includes an asset folder per logo-supporting kind")
     func createsAssetDirectories() throws {
         let (_, root) = try makeStore()
         defer { cleanUp(root) }
 
-        for kind in EntityKind.allCases {
+        for kind in EntityKind.allCases where kind.supportsLogo {
             let directory = root.appendingPathComponent("assets/\(kind.directoryName)")
             var isDirectory: ObjCBool = false
             #expect(
                 FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory))
             #expect(isDirectory.boolValue)
         }
+    }
+
+    @Test("A kind with no logos of its own gets no asset folder")
+    func skipsAssetDirectoryForMeetings() throws {
+        let (_, root) = try makeStore()
+        defer { cleanUp(root) }
+
+        #expect(!EntityKind.meeting.supportsLogo)
+        let directory = root.appendingPathComponent("assets/meetings")
+        #expect(!FileManager.default.fileExists(atPath: directory.path))
     }
 }
