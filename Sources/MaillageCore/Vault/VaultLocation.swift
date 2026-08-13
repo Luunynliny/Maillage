@@ -48,6 +48,20 @@ public struct VaultLocation: Hashable, Sendable {
             .appendingPathComponent("config.yaml")
     }
 
+    /// Where a meeting's in-progress audio lives while it's being recorded and transcribed:
+    /// `.maillage/recordings/<meeting-id>/`. App-private and inside the vault for the same
+    /// reason as ``configFileURL``, and per-meeting rather than one flat folder so deleting a
+    /// meeting's audio is deleting one directory, never a filter over a shared one.
+    ///
+    /// Nothing here survives past transcription — see the design doc's audio-retention
+    /// promise — so unlike ``assetsDirectory(for:)`` this is never created eagerly by
+    /// ``createSkeletonIfNeeded()``; it exists only from the moment a recording starts.
+    public func recordingsDirectory(forMeeting id: EntityID) -> URL {
+        root.appendingPathComponent(".maillage", isDirectory: true)
+            .appendingPathComponent("recordings", isDirectory: true)
+            .appendingPathComponent(id, isDirectory: true)
+    }
+
     /// Creates the vault root, the three entity directories, their asset folders, and
     /// `.maillage/`. Safe to call repeatedly.
     public func createSkeletonIfNeeded() throws {
