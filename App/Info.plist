@@ -35,6 +35,10 @@
 	     Audio process taps, which macOS refuses without this key present. -->
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>maillage records meeting audio so it can attach notes to the people you spoke with.</string>
+	<!-- Declared ahead of use, alongside NSAudioCaptureUsageDescription above: the meeting
+	     recorder also captures the microphone, which macOS refuses without this key present. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>maillage records your microphone during a meeting so it can attach notes to the people you spoke with.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<!-- Opt out of the macOS 26 design language. It gives every window a ~24pt corner

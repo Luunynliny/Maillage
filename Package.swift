@@ -1,9 +1,16 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
+//
+// Bumped from 6.0 solely because `.macOS(.v26)` below is gated on PackageDescription 6.2 — this
+// is the manifest API version, unrelated to `.swiftLanguageMode(.v5)` on the targets below, which
+// governs how the *sources* compile and is unaffected by this line.
 import PackageDescription
 
 let package = Package(
     name: "maillage",
-    platforms: [.macOS(.v14)],
+    // v26: the meeting-recording feature needs FoundationModels for the on-device meeting
+    // summary, which ships only from macOS 26. See
+    // docs/superpowers/specs/2026-08-13-meeting-recording-design.md.
+    platforms: [.macOS(.v26)],
     products: [
         .executable(name: "maillage", targets: ["Maillage"]),
         .library(name: "MaillageCore", targets: ["MaillageCore"]),
