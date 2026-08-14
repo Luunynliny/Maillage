@@ -8,7 +8,7 @@ as a force-directed graph clustered by employer.
 
 | Piece | Choice |
 |---|---|
-| Language | Swift 6 (`.swiftLanguageMode(.v5)`), SwiftUI, macOS 14+ |
+| Language | Swift 6 (`.swiftLanguageMode(.v5)`), SwiftUI, macOS 26+ |
 | Build | Two paths — SwiftPM for tests, `maillage.xcodeproj` for running (see Building) |
 | State | `@Observable` + `@MainActor` `VaultStore`, injected via `.environment(store)` |
 | Tests | Swift Testing (`@Test`, `@Suite`, `#expect`, `#require`) — **not** XCTest |
@@ -16,6 +16,13 @@ as a force-directed graph clustered by employer.
 
 Swift is a hard requirement: a later phase captures macOS system audio via Core Audio process
 taps, which has no cross-platform equivalent.
+
+The floor is macOS 26 for `FoundationModels`, which the meeting-recording feature uses for an
+on-device summary — see
+[docs/superpowers/specs/2026-08-13-meeting-recording-design.md](docs/superpowers/specs/2026-08-13-meeting-recording-design.md).
+`Package.swift`'s `swift-tools-version` is `6.2` for the same reason: `.macOS(.v26)` is gated on
+that manifest API version. That is unrelated to `.swiftLanguageMode(.v5)` above, which governs how
+the *sources* compile and does not move with it.
 
 **Open source first.** Every dependency added must be OSS with a permissive license, noted in
 the table above with its license.
@@ -40,6 +47,9 @@ Watch out for:
   was never written for it.
 - **Dependency versions are declared twice** — `Package.swift` and `project.pbxproj`. Bump both
   together or the two build paths compile against different code.
+- **The deployment target is declared twice too** — `.macOS(.vNN)` in `Package.swift` and every
+  `MACOSX_DEPLOYMENT_TARGET` in `project.pbxproj`. Bump both together, or one build path silently
+  accepts API the other's minimum OS doesn't have. `Scripts/check-build-parity.sh` compares them.
 - **Pick the `Maillage` scheme, not the lowercase `maillage` one.** The latter is SwiftPM's, and
   it produces a bare executable with no `Info.plist` — so AppKit leaves the activation policy at
   `.prohibited`, the app never becomes active, and an inactive app owns neither the cursor nor the
