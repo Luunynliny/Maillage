@@ -56,6 +56,9 @@ public struct VaultLocation: Hashable, Sendable {
             try fm.createDirectory(at: directory(for: kind), withIntermediateDirectories: true)
             // Made eagerly alongside the entity directory, so the vault's shape is visible in
             // Finder before anything is in it and a write never has to create its own parent.
+            // Skipped for a kind with no logos of its own — an empty `assets/meetings/` next
+            // to two folders that actually hold something would just be Finder clutter.
+            guard kind.supportsLogo else { continue }
             try fm.createDirectory(
                 at: assetsDirectory(for: kind), withIntermediateDirectories: true)
         }

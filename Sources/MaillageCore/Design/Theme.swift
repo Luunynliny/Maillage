@@ -43,6 +43,10 @@ public enum Theme {
     public static let personColor = adaptive(dark: 0x8B_6CEF, light: 0x7C_5CE0)
     public static let organizationColor = adaptive(dark: 0x4E_A8DE, light: 0x2F_86C4)
     public static let projectColor = adaptive(dark: 0xE8_9E4C, light: 0xD1_7F26)
+    /// Green, the one hue free of the other three and of the People graph's cluster
+    /// palette — a meeting is neither a person, a company nor a project, and shouldn't
+    /// borrow the colour of any of them.
+    public static let meetingColor = adaptive(dark: 0x6C_B86C, light: 0x3E_8E3E)
     /// Placeholder people — deliberately desaturated to read as "not yet known".
     public static let placeholderColor = adaptive(dark: 0x7A_7A8C, light: 0x92_95A3)
 
@@ -51,6 +55,7 @@ public enum Theme {
         case .person: personColor
         case .organization: organizationColor
         case .project: projectColor
+        case .meeting: meetingColor
         }
     }
 

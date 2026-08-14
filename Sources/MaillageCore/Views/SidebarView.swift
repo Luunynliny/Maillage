@@ -47,6 +47,12 @@ public struct SidebarView: View {
                         rows: store.allProjects.map {
                             Row(id: $0.id, title: $0.displayName, isPlaceholder: false)
                         })
+
+                    section(
+                        kind: .meeting,
+                        rows: store.allMeetings.map {
+                            Row(id: $0.id, title: $0.displayName, isPlaceholder: false)
+                        })
                 }
                 .padding(.horizontal, Theme.Spacing.small)
                 .padding(.vertical, Theme.Spacing.medium)

@@ -17,12 +17,14 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/jpsim/Yams", from: "5.1.0"),
+        .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.1"),
     ],
     targets: [
         .target(
             name: "MaillageCore",
             dependencies: [
-                .product(name: "Yams", package: "Yams")
+                .product(name: "Yams", package: "Yams"),
+                .product(name: "MarkdownUI", package: "swift-markdown-ui"),
             ],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),

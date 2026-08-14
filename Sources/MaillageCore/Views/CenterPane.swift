@@ -2,8 +2,8 @@ import SwiftUI
 
 /// The middle pane, which answers the question implied by what's selected.
 ///
-/// Four representations rather than one graph with filters, because each selection is a
-/// different question and none of the four answers fits another's shape:
+/// Five representations rather than one graph with filters, because each selection is a
+/// different question and none of the five answers fits another's shape:
 ///
 /// - **Nothing** — ``OrganizationBubblesView``, one circle per employer sized by headcount.
 ///   "What does my network look like?" is a question about companies, and drawing every person
@@ -16,13 +16,16 @@ import SwiftUI
 ///   somebody else's network.
 /// - **A project** — ``ProjectRosterView``, its participants and their roles. A role wants a
 ///   column, not an edge label at 11pt.
+/// - **A meeting** — ``MeetingView``, its summary and transcript. Neither a graph nor a
+///   roster: what happened in one conversation is read top to bottom, in order, once.
 ///
-/// None of the four is simulated — the two graphs lay out from computed geometry and the two
-/// boards from a stack — so each looks the same every time you open it. "Acme is the big one"
-/// stays true between launches.
+/// None of the first four is simulated — the two graphs lay out from computed geometry and the
+/// two boards from a stack — so each looks the same every time you open it. "Acme is the big
+/// one" stays true between launches. A meeting has no such layout to preserve: it is what was
+/// said, in the order it was said.
 ///
 /// The mode follows the selection with no switch of its own: the sidebar section you
-/// clicked already says which of the four you meant.
+/// clicked already says which of the five you meant.
 struct CenterPane: View {
     @Environment(VaultStore.self) private var store
     @Binding var selection: EntityID?
@@ -48,6 +51,10 @@ struct CenterPane: View {
             case .person(let person):
                 EgoGraphView(
                     person: person, selection: $selection,
+                    editorRequest: $editorRequest, isDetailVisible: $isDetailVisible)
+            case .meeting(let meeting):
+                MeetingView(
+                    meeting: meeting, selection: $selection,
                     editorRequest: $editorRequest, isDetailVisible: $isDetailVisible)
             // Nothing selected: the bubbles are the only view that stands on its own without a
             // subject, and they're where you click through to the other three.

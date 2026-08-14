@@ -41,7 +41,7 @@ struct CommandPalette: View {
                 .font(Theme.Font.paletteQuery)
                 .foregroundStyle(Theme.textNormal)
                 .placeholder(
-                    "Jump to a person, organization or project…",
+                    "Jump to a person, organization, project or meeting…",
                     isVisible: query.isEmpty, font: Theme.Font.paletteQuery
                 )
                 .focused($isFieldFocused)
