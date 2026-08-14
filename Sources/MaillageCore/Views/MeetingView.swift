@@ -1,3 +1,4 @@
+import MarkdownUI
 import SwiftUI
 
 /// A conversation, read top to bottom: who was there, the summary, then the transcript.
@@ -8,8 +9,9 @@ import SwiftUI
 ///
 /// The summary and the transcript are two different trust levels of the same body: the
 /// transcript is what ``TranscriptCodec`` guarantees round-trips exactly, the summary is
-/// whatever a later phase's model wrote above it and is shown as-is, unparsed, the same way
-/// a person's notes are — plain text, not rendered markdown.
+/// whatever a later phase's model wrote above it — headings, bullets, bold/italic emphasis
+/// (see the design doc's `MeetingSummary` example) — and is rendered as markdown via
+/// MarkdownUI rather than hand-parsed, the same as the vault file reads in Obsidian.
 struct MeetingView: View {
     @Environment(VaultStore.self) private var store
 
@@ -83,15 +85,15 @@ struct MeetingView: View {
     // MARK: Summary
 
     /// The preamble ``TranscriptCodec`` split off — an eventual "## Summary" section, written
-    /// by a later phase. Shown as plain text, like a person's notes: it is generated prose to
-    /// read, not a form to render fields from.
+    /// by a later phase. `Markdown` is MarkdownUI's own block-plus-inline renderer, styled by
+    /// ``MarkdownUI/Theme/maillage`` so it draws from ``Theme`` rather than the library's
+    /// defaults.
     private var summaryCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
             SectionHeader("Summary")
             Card {
-                Text(preamble)
-                    .font(Theme.Font.body)
-                    .foregroundStyle(Theme.textNormal)
+                Markdown(preamble)
+                    .markdownTheme(.maillage)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -150,5 +152,56 @@ struct MeetingView: View {
         let people = "\(count) \(count == 1 ? "attendee" : "attendees")"
         guard let date = meeting.date else { return people }
         return "\(people) · \(date.description)"
+    }
+}
+
+extension MarkdownUI.Theme {
+    /// MarkdownUI's block and inline styles, redirected to ``Theme`` tokens instead of the
+    /// library's own defaults — the same reasoning as every other view in the app: reference
+    /// ``Theme``, never a literal. One heading size: the design doc's generated summaries only
+    /// ever use a single level (`### Decisions`), and ``Theme/Font`` only defines one heading
+    /// style to begin with.
+    static let maillage = MarkdownUI.Theme()
+        .text {
+            ForegroundColor(Theme.textNormal)
+        }
+        .strong {
+            FontWeight(.semibold)
+        }
+        .emphasis {
+            FontStyle(.italic)
+        }
+        .code {
+            FontFamilyVariant(.monospaced)
+        }
+        .link {
+            ForegroundColor(Theme.accent)
+        }
+        .heading1(body: headingBody)
+        .heading2(body: headingBody)
+        .heading3(body: headingBody)
+        .heading4(body: headingBody)
+        .heading5(body: headingBody)
+        .heading6(body: headingBody)
+        .paragraph { configuration in
+            configuration.label
+                .font(Theme.Font.body)
+                .markdownMargin(top: .zero, bottom: Theme.Spacing.small)
+        }
+        .listItem { configuration in
+            configuration.label
+                .font(Theme.Font.body)
+                .markdownMargin(top: Theme.Spacing.xs)
+        }
+        .bulletedListMarker { _ in
+            Text("•")
+                .font(Theme.Font.body)
+                .foregroundStyle(Theme.textFaint)
+        }
+
+    private static func headingBody(_ configuration: BlockConfiguration) -> some View {
+        configuration.label
+            .font(Theme.Font.heading)
+            .markdownMargin(top: Theme.Spacing.medium, bottom: Theme.Spacing.small)
     }
 }
