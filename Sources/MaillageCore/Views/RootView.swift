@@ -97,11 +97,7 @@ public struct RootView: View {
             ProjectEditor(existing: nil) { selection = $0 }
 
         case .newMeeting:
-            DismissibleMessage(
-                title: "Recording isn't wired up yet",
-                message:
-                    "A meeting is created by recording it, which arrives in a later phase. "
-                    + "For now, add one to the vault by hand — see the meetings/ folder.")
+            RecordingSheet { selection = $0 }
 
         case .edit(let id):
             switch store.entity(id: id) {
