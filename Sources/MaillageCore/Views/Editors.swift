@@ -8,6 +8,10 @@ public enum EditorRequest: Identifiable, Hashable {
     case newPlaceholder
     case newOrganization
     case newProject
+    /// The sidebar's Meetings "+". There is no `MeetingEditor` yet — a meeting is created by
+    /// recording one, which a later phase wires up here — so this currently opens a short
+    /// explanation rather than a sheet that edits anything. See ``RootView``.
+    case newMeeting
     case edit(EntityID)
     case addRelation(EntityID)
     case resolvePlaceholder(EntityID)
@@ -19,6 +23,7 @@ public enum EditorRequest: Identifiable, Hashable {
         case .newPlaceholder: "new-placeholder"
         case .newOrganization: "new-organization"
         case .newProject: "new-project"
+        case .newMeeting: "new-meeting"
         case .edit(let id): "edit-\(id)"
         case .addRelation(let id): "relation-\(id)"
         case .resolvePlaceholder(let id): "resolve-\(id)"
@@ -33,6 +38,7 @@ public enum EditorRequest: Identifiable, Hashable {
         case .person: .newPerson
         case .organization: .newOrganization
         case .project: .newProject
+        case .meeting: .newMeeting
         }
     }
 }

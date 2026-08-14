@@ -24,9 +24,16 @@ struct EntityDetails: View {
                 OrganizationDetailBody(organization: org, selection: $selection)
             case .project(let project):
                 ProjectDetailBody(project: project, selection: $selection)
+            case .meeting(let meeting):
+                MeetingDetailBody(meeting: meeting, selection: $selection)
             }
 
-            if !entity.body.isEmpty {
+            // Skipped for a meeting: `entity.body` there is the generated "## Summary"/
+            // "## Transcript" markdown, which `MeetingView` already renders properly further
+            // down the pane. Dumping it here too would be the same content twice — once
+            // parsed, once as a page of raw "**" and "##" — for something that, unlike a
+            // person's notes, nobody typed by hand to read as prose.
+            if entity.kind != .meeting, !entity.body.isEmpty {
                 VStack(alignment: .leading, spacing: Theme.Spacing.small) {
                     SectionHeader(entity.bodyTitle)
                     Text(entity.body)
@@ -56,6 +63,8 @@ private struct PersonDetailBody: View {
             }
 
             membershipSection
+
+            meetingsSection
 
             // Outgoing: stored on this person's own file.
             VStack(alignment: .leading, spacing: Theme.Spacing.small) {
@@ -172,6 +181,37 @@ private struct PersonDetailBody: View {
                                 )
                             },
                             selection: $selection)
+                    }
+                }
+            }
+        }
+    }
+
+    /// When you last spoke with this person, most recent first — the reason the meeting
+    /// entity exists at all. Rows carry the date beside the link because, unlike a relation
+    /// or a project role, a meeting's *when* is exactly as much the point as its *what*.
+    private var meetingsSection: some View {
+        let meetings = store.meetings(withPerson: person.id)
+        return VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+            SectionHeader("Meetings", trailing: meetings.isEmpty ? nil : "\(meetings.count)")
+            if meetings.isEmpty {
+                Text("No meetings recorded yet.")
+                    .font(Theme.Font.caption)
+                    .foregroundStyle(Theme.textFaint)
+            } else {
+                ForEach(meetings) { meeting in
+                    HStack(spacing: Theme.Spacing.small) {
+                        EntityLink(
+                            title: meeting.displayName, kind: .meeting, id: meeting.id
+                        ) {
+                            selection = meeting.id
+                        }
+                        Spacer(minLength: Theme.Spacing.small)
+                        if let date = meeting.date {
+                            Text(date.description)
+                                .font(Theme.Font.caption)
+                                .foregroundStyle(Theme.textFaint)
+                        }
                     }
                 }
             }
@@ -343,6 +383,56 @@ private struct ProjectDetailBody: View {
         ]
         if let created = project.created {
             items.append(.init("Added", value: created.description))
+        }
+        return items
+    }
+}
+
+// MARK: - Meeting
+
+/// A meeting's metadata and who/what it was with — date, duration, language, then the
+/// organization and project it belongs to. Attendees are deliberately not repeated here:
+/// ``MeetingView`` shows them as ``EntityLink``s in its own always-visible body, which is
+/// where a meeting's pane is actually read for who was there, so this fold would otherwise
+/// say the same thing twice.
+private struct MeetingDetailBody: View {
+    let meeting: Meeting
+    @Binding var selection: EntityID?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.large) {
+            if !metadata.isEmpty {
+                MetadataList(metadata)
+            }
+
+            if let owner = meeting.organization {
+                VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                    SectionHeader("Organization")
+                    WrappingPills(
+                        links: [owner], color: Theme.organizationColor, selection: $selection)
+                }
+            }
+
+            if let project = meeting.project {
+                VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+                    SectionHeader("Project")
+                    WrappingPills(
+                        links: [project], color: Theme.projectColor, selection: $selection)
+                }
+            }
+        }
+    }
+
+    private var metadata: [MetadataList.Item] {
+        var items: [MetadataList.Item] = []
+        if let date = meeting.date {
+            items.append(.init("Date", value: date.description))
+        }
+        if let duration = meeting.formattedDuration {
+            items.append(.init("Duration", value: duration, isMonospaced: true))
+        }
+        if let language = meeting.language {
+            items.append(.init("Language", value: language, isMonospaced: true))
         }
         return items
     }
