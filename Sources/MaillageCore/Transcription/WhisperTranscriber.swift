@@ -20,6 +20,7 @@ public final class WhisperTranscriber: Transcriber, @unchecked Sendable {
         let options = DecodingOptions(
             language: language,
             detectLanguage: false,
+            skipSpecialTokens: true,
             wordTimestamps: true,
             promptTokens: promptTokens,
             chunkingStrategy: .vad
