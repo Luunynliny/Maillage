@@ -158,6 +158,11 @@ public final class MeetingRecorder {
             try? FileManager.default.removeItem(at: directory)
         } catch {
             state = .failed(error.localizedDescription)
+            // The recording sheet is long gone by the time transcription fails or succeeds, so
+            // `state` alone is never observed — route through the same banner `VaultStore` already
+            // shows for a failed save or load, rather than adding a second, parallel error surface.
+            let name = store.displayName(for: meetingID) ?? meetingID
+            store.lastError = "Couldn't transcribe \"\(name)\": \(error.localizedDescription)"
         }
     }
 }
