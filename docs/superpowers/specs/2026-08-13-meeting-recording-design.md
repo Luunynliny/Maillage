@@ -10,7 +10,9 @@ a person and see every meeting you've had with them.
 Three constraints shape every choice below:
 
 - **Everything runs on the machine.** No audio, no transcript, no summary crosses the network. Model
-  *weights* are fetched once from Hugging Face on first run; content never is.
+  *weights* are fetched from Hugging Face at **build time** by `Scripts/fetch-whisper-model.sh` and
+  embedded in the app bundle — nothing is fetched, and no network is needed, at runtime. Content
+  never crosses the network, on any run.
 - **The recording is deleted** as soon as both tracks transcribe. The transcript is the artefact.
 - **Code-switching is a first-class requirement, not a nicety.** You speak French with English
   technical vocabulary in the same sentence. A transcriber that forces one language per meeting is
@@ -26,7 +28,7 @@ indicator is a requirement rather than a polish item.
 
 | Decision | Choice |
 |---|---|
-| Transcription | **WhisperKit** (MIT, argmax inc.), CoreML, multilingual `large-v3`. One model, shared vocabulary — English terms inside French sentences stay English |
+| Transcription | **WhisperKit** (MIT, argmax inc.), CoreML, multilingual `openai_whisper-small` (216MB, quantized) — the smallest variant with usable multilingual/code-switching accuracy, embedded in the app at build time rather than downloaded. One model, shared vocabulary — English terms inside French sentences stay English |
 | macOS floor | **Raised 14 → 26**, for `FoundationModels` only. Gives a free on-device summary LLM instead of a second multi-GB download |
 | Meeting storage | A **4th `EntityKind`**, `meetings/<id>.md`, reusing `FrontmatterCodec`, `VaultReader`/`VaultWriter`, the sidebar, the palette, `[[id]]` linking |
 | Meeting fields | title, date, duration, language, attendees, organization, project |
@@ -173,10 +175,13 @@ track that opens with a few seconds of silence or cross-talk before anyone actua
 window is the only signal the whole meeting's language, and therefore the whole prompt, gets built
 from.
 
-`WhisperModelStore` owns first-run model download with visible progress, and the model choice, read
-from `.maillage/config.yaml` (default `large-v3`). It must handle "download interrupted" by resuming
-or discarding cleanly — a half-downloaded CoreML model that loads and produces garbage is the worst
-failure mode available.
+`WhisperModelStore` resolves the model bundled inside the running app and loads it. There is no
+download-progress UI to build and no partial-download recovery to design: `Scripts/fetch-whisper-model.sh`
+fetches the model once at **build time** (cached in `.whisperkit-model-cache/`, never committed —
+see the "Fetch WhisperKit Model" build phase in `maillage.xcodeproj`), so at runtime the model is
+either present in the signed bundle, in which case loading it cannot meaningfully fail from
+anything this type controls, or the bundle itself is broken, which is a build problem, not a
+runtime one.
 
 `TranscriptMerger` interleaves the two tracks' segments by start time into one chronological
 transcript, labelling mic segments `You` and system segments with the sole attendee's name when there
@@ -306,14 +311,17 @@ which matters because the process tap is the single most failure-prone piece her
 **Phase 4 — transcription.** Add WhisperKit to `Package.swift` **and** `project.pbxproj` (versions are
 declared twice in this repo; bump them together), and to CLAUDE.md's dependency table with its MIT
 licence. `WhisperTranscriber`, `LanguageDetector`, `WhisperModelStore`, `VocabularyPrompt`,
-`PromptEchoFilter`, `TranscriptMerger`, audio deletion, the orphan sweep.
+`PromptEchoFilter`, `TranscriptMerger`, audio deletion, the orphan sweep — plus
+`Scripts/fetch-whisper-model.sh` and the "Fetch WhisperKit Model" Xcode build phase that embeds the
+model at build time, so nothing downloads at runtime.
 
-**Calibrate on a real code-switched recording**, measuring four things separately so a bad result
-points at a cause: (a) `large-v3` vs. a smaller variant — tech-term accuracy against transcription
-time, recorded as the config default; (b) the vocabulary prompt on vs. off, to confirm it earns its
-complexity; (c) whether the prompt reaches windows past the first; (d) whether `LanguageDetector`'s
+**Calibrate on a real code-switched recording**, measuring three things separately so a bad result
+points at a cause: (a) the vocabulary prompt on vs. off, to confirm it earns its
+complexity; (b) whether the prompt reaches windows past the first; (c) whether `LanguageDetector`'s
 one-shot pass correctly identifies the meeting's dominant language when the recording opens with
-silence or cross-talk, since that result now gates building the prompt at all. Ends with the real
+silence or cross-talk, since that result now gates building the prompt at all. `openai_whisper-small`
+is a fixed, already-decided choice at this point (the smallest variant with usable multilingual
+accuracy), not a runtime knob to calibrate against a config default. Ends with the real
 feature working.
 
 **Phase 5 — the summary.** `TranscriptChunker`, `FoundationModelsSummarizer`, the summary card.

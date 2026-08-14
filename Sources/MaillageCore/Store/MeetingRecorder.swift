@@ -112,8 +112,7 @@ public final class MeetingRecorder {
             let micURL = directory.appendingPathComponent("mic.wav")
             let systemURL = directory.appendingPathComponent("system.wav")
 
-            let variant = VaultConfig.whisperModel(at: store.location)
-            let whisperKit = try await WhisperModelStore(variant: variant).loadWhisperKit()
+            let whisperKit = try await WhisperModelStore().loadWhisperKit()
             let language = try await LanguageDetector(whisperKit: whisperKit)
                 .detect(micTrackAt: micURL)
 

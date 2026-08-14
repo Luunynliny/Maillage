@@ -1,35 +1,34 @@
 import Foundation
 import WhisperKit
 
-/// Owns first-run model download and load. The model variant (default `large-v3`) is resolved
-/// by the caller from `.maillage/config.yaml` via ``VaultConfig`` — this type stays free of YAML
-/// parsing, and only knows the variant string it was asked for.
+/// Resolves the WhisperKit model bundled inside the running app and loads it.
 ///
-/// "Download interrupted" is handled by never loading what didn't finish, rather than by
-/// resuming or cleaning up a partial download ourselves: `WhisperKit(modelFolder:)` is only ever
-/// constructed after `WhisperKit.download` returns successfully, so a half-downloaded CoreML
-/// model — which would load and produce garbage rather than fail loudly, the worst failure mode
-/// available — is never constructed in the first place. A failed download simply throws;
-/// retrying calls `download` again, which resumes or redoes its own snapshot.
+/// The model — `openai_whisper-small`, the smallest WhisperKit variant with usable multilingual
+/// and code-switching accuracy — is fetched at *build* time by `Scripts/fetch-whisper-model.sh`
+/// (see the "Fetch WhisperKit Model" build phase in `maillage.xcodeproj`) and lands at
+/// `Maillage.app/Contents/Resources/WhisperKitModel/openai_whisper-small_216MB`. Never downloaded
+/// at runtime: there is no network dependency, no progress to report, and no partial-download
+/// failure mode to guard against — the model is either present in the signed bundle, in which
+/// case loading it cannot meaningfully fail from anything this type controls, or the bundle
+/// itself is broken, which is a build problem, not a runtime one.
 public final class WhisperModelStore {
-    private let variant: String
-    private let downloadBase: URL?
+    public init() {}
 
-    public init(variant: String, downloadBase: URL? = nil) {
-        self.variant = variant
-        self.downloadBase = downloadBase
-    }
-
-    /// - Parameter onProgress: Download fraction complete, `0...1`. Loading the downloaded model
-    ///   has no incremental progress of its own to report, so this only fires during download.
-    public func loadWhisperKit(
-        onProgress: @escaping @Sendable (Double) -> Void = { _ in }
-    ) async throws -> WhisperKit {
-        let modelFolder = try await WhisperKit.download(
-            variant: variant, downloadBase: downloadBase
-        ) { progress in
-            onProgress(progress.fractionCompleted)
+    public func loadWhisperKit() async throws -> WhisperKit {
+        guard
+            let modelFolder = Bundle.main.resourceURL?
+                .appendingPathComponent("WhisperKitModel/openai_whisper-small_216MB")
+        else {
+            throw WhisperModelStoreError.bundledModelMissing
         }
-        return try await WhisperKit(modelFolder: modelFolder.path, load: true)
+        return try await WhisperKit(modelFolder: modelFolder.path, load: true, download: false)
+    }
+}
+
+public enum WhisperModelStoreError: Error, LocalizedError {
+    case bundledModelMissing
+
+    public var errorDescription: String? {
+        "The WhisperKit model isn't in this build — run Scripts/fetch-whisper-model.sh and rebuild."
     }
 }

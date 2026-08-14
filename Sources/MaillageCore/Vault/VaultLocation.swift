@@ -42,12 +42,6 @@ public struct VaultLocation: Hashable, Sendable {
         assetsDirectory(for: kind).appendingPathComponent("\(id).png")
     }
 
-    /// App-private settings, kept inside the vault so it travels with the data.
-    public var configFileURL: URL {
-        root.appendingPathComponent(".maillage", isDirectory: true)
-            .appendingPathComponent("config.yaml")
-    }
-
     /// Custom terms `VocabularyPrompt` primes last, after attendees and org/project names — one
     /// per line. Absent in most vaults, which is the normal state, not an issue.
     public var vocabularyFileURL: URL {
@@ -57,7 +51,7 @@ public struct VaultLocation: Hashable, Sendable {
 
     /// Where a meeting's in-progress audio lives while it's being recorded and transcribed:
     /// `.maillage/recordings/<meeting-id>/`. App-private and inside the vault for the same
-    /// reason as ``configFileURL``, and per-meeting rather than one flat folder so deleting a
+    /// reason as ``vocabularyFileURL``, and per-meeting rather than one flat folder so deleting a
     /// meeting's audio is deleting one directory, never a filter over a shared one.
     ///
     /// Nothing here survives past transcription — see the design doc's audio-retention
@@ -89,7 +83,7 @@ public struct VaultLocation: Hashable, Sendable {
                 at: assetsDirectory(for: kind), withIntermediateDirectories: true)
         }
         try fm.createDirectory(
-            at: configFileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            at: vocabularyFileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
     }
 
     /// True when the vault root already exists on disk.

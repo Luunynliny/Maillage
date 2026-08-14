@@ -157,6 +157,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 0000000000000000000000F3 /* Build configuration list for PBXNativeTarget "Maillage" */;
 			buildPhases = (
+				000000000000000000000140 /* Fetch WhisperKit Model */,
 				0000000000000000000000E5 /* Sources */,
 				0000000000000000000000E6 /* Frameworks */,
 				0000000000000000000000E7 /* Resources */,
@@ -235,6 +236,24 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		000000000000000000000140 /* Fetch WhisperKit Model */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			name = "Fetch WhisperKit Model";
+			outputFileListPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\n\"${SRCROOT}/Scripts/fetch-whisper-model.sh\"\nmkdir -p \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/WhisperKitModel\"\nrsync -a --delete \"${SRCROOT}/.whisperkit-model-cache/openai_whisper-small_216MB/\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/WhisperKitModel/openai_whisper-small_216MB/\"\n";
+			alwaysOutOfDate = 1;
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		0000000000000000000000E1 /* Sources */ = {

@@ -24,6 +24,14 @@ dist/
 *.dSYM.zip
 *.dSYM
 
+## WhisperKit model cache
+#
+# .whisperkit-model-cache/ holds the WhisperKit model Scripts/fetch-whisper-model.sh fetches at
+# build time (see the "Fetch WhisperKit Model" build phase in maillage.xcodeproj). Never
+# committed: it's a ~216MB binary CoreML model, regenerated from a plain HTTPS fetch on first
+# build and cached for every build after, on a developer machine and in CI alike.
+.whisperkit-model-cache/
+
 ## Playgrounds
 timeline.xctimeline
 playground.xcworkspace
