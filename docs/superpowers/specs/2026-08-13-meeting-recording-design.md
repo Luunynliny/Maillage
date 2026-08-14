@@ -51,7 +51,7 @@ Sources/MaillageCore/
 ├── Vault/TranscriptCodec.swift    strict round-trip for the body's Transcript block
 ├── Audio/                         AudioCaptureSession, SystemAudioTap,
 │                                  MicrophoneRecorder, CapturePermissions
-├── Transcription/                 Transcriber (protocol), WhisperTranscriber,
+├── Transcription/                 Transcriber (protocol), WhisperTranscriber, LanguageDetector,
 │                                  WhisperModelStore, VaultVocabulary, TranscriptMerger
 ├── Summary/                       MeetingSummarizer (protocol), FoundationModelsSummarizer,
 │                                  TranscriptChunker
@@ -87,8 +87,8 @@ protocol Transcriber {
 
 `WhisperTranscriber` implements it over WhisperKit:
 
-- `DecodingOptions.language` **forced** from the meeting's language rather than auto-detected — see
-  constraint 2 below.
+- `DecodingOptions.language` **forced from a one-shot language-ID pass**, not left `nil` for the
+  real decode — see constraint 2 below for why auto-detect-and-hold, not per-chunk auto-detect.
 - `wordTimestamps: true` for per-segment timing, `chunkingStrategy: .vad` for long recordings.
 - **`promptTokens` carries the vocabulary prompt** — the biasing lever that makes "Marie Dupont" and
   "Acme" come out spelled right rather than phonetically. Not `prefixTokens`, which forces the *start
@@ -127,8 +127,19 @@ also demonstrates the code-switched register we want:
 > `de canary deploy et de pull request.`
 
 Prose conditions better than a list and is less likely to be echoed verbatim. Carrier templates are
-per base language (fr, en), with en as the fallback. `language` stays **forced, not auto-detected**, so
-the `<|fr|>` prefill token anchors the language after the prompt.
+per base language (fr, en), with en as the fallback.
+
+`language` is not user-picked and not left to auto-detect on every chunk either. `LanguageDetector`
+runs `WhisperKit.detectLanguage` **once**, on the mic track's first non-silent window (skipping a
+leading VAD no-speech window — language-ID on pure silence is unreliable and known to default to
+English), then that result is **held and forced** for every chunk of both tracks for the rest of
+the meeting, so the `<|fr|>` prefill token keeps anchoring the language after the prompt exactly as
+before — the anchor is just fed by detection now, not a picker. Per-chunk redetection was considered
+and rejected: everything downstream assumes one language per meeting (the frontmatter's single
+`language:` key, the summary's "dominant language"), and redetecting per chunk reopens this exact
+constraint's flip risk at finer grain — a jargon-heavy chunk misdetecting on its own, not just a
+genuine language switch, which this feature was never scoped to track (see "Explicitly out of
+scope").
 
 **Constraint 3: Whisper echoes prompts** into the transcript, especially on the first window and over
 silence. `PromptEchoFilter` strips a leading segment that fuzzy-matches the prompt. This is a real
@@ -156,6 +167,11 @@ the same options to every chunk, so the prompt *should* be reapplied per window 
 first. That is inferred from the call structure, not stated in the docs — confirm it empirically on a
 recording longer than one chunk, because if it only primes window one, a 30-minute meeting is biased
 for its first 30 seconds and the feature is largely cosmetic.
+
+**Also to verify in phase 4:** confirm `LanguageDetector`'s one-shot pass doesn't misfire on a mic
+track that opens with a few seconds of silence or cross-talk before anyone actually speaks — that
+window is the only signal the whole meeting's language, and therefore the whole prompt, gets built
+from.
 
 `WhisperModelStore` owns first-run model download with visible progress, and the model choice, read
 from `.maillage/config.yaml` (default `large-v3`). It must handle "download interrupted" by resuming
@@ -254,9 +270,9 @@ onto the person — a person file must not accumulate hundreds of meeting links.
 ### Views
 
 - `SidebarView` — a 4th Meetings section; `+` opens `RecordingSheet`; red indicator while recording.
-- `RecordingSheet` — title, language (auto-detect or forced), org/project/attendee pickers reusing the
-  editors' existing search-pick controls, Start/Stop, elapsed time, level meters, then pipeline
-  progress. Attendees stay editable **during** recording.
+- `RecordingSheet` — title, org/project/attendee pickers reusing the editors' existing search-pick
+  controls, Start/Stop, elapsed time, level meters, then pipeline progress. No language field: it's
+  detected from the audio, not chosen. Attendees stay editable **during** recording.
 - `MeetingView` — centre pane for a selected meeting: summary card, attendees as `EntityLink`s,
   transcript. Registered in `CenterPane`'s selection routing.
 - `EntityDetails` — a person gains a derived **Meetings** list. This is the payoff of the whole
@@ -289,13 +305,16 @@ which matters because the process tap is the single most failure-prone piece her
 
 **Phase 4 — transcription.** Add WhisperKit to `Package.swift` **and** `project.pbxproj` (versions are
 declared twice in this repo; bump them together), and to CLAUDE.md's dependency table with its MIT
-licence. `WhisperTranscriber`, `WhisperModelStore`, `VocabularyPrompt`, `PromptEchoFilter`,
-`TranscriptMerger`, audio deletion, the orphan sweep.
+licence. `WhisperTranscriber`, `LanguageDetector`, `WhisperModelStore`, `VocabularyPrompt`,
+`PromptEchoFilter`, `TranscriptMerger`, audio deletion, the orphan sweep.
 
-**Calibrate on a real code-switched recording**, measuring three things separately so a bad result
+**Calibrate on a real code-switched recording**, measuring four things separately so a bad result
 points at a cause: (a) `large-v3` vs. a smaller variant — tech-term accuracy against transcription
 time, recorded as the config default; (b) the vocabulary prompt on vs. off, to confirm it earns its
-complexity; (c) whether the prompt reaches windows past the first. Ends with the real feature working.
+complexity; (c) whether the prompt reaches windows past the first; (d) whether `LanguageDetector`'s
+one-shot pass correctly identifies the meeting's dominant language when the recording opens with
+silence or cross-talk, since that result now gates building the prompt at all. Ends with the real
+feature working.
 
 **Phase 5 — the summary.** `TranscriptChunker`, `FoundationModelsSummarizer`, the summary card.
 Isolated by design: if phases 1–4 run long, ship them and do this next.
@@ -311,7 +330,9 @@ semantic-release versions it correctly.
   language, not a word list; a zero-limit case yields no prompt rather than a truncated fragment),
   `PromptEchoFilterTests` (leading echo stripped, a genuine opening line that merely resembles the
   prompt kept), `TranscriptMergerTests` (interleaving, sole-attendee labelling,
-  one empty track), `MeetingFrontmatterTests` (including a meeting with no attendees),
+  one empty track), `LanguageDetectorTests` (skips a leading no-speech window before detecting,
+  pure logic against a fake VAD/detection result — the real WhisperKit call is gated like the
+  suite below), `MeetingFrontmatterTests` (including a meeting with no attendees),
   `VaultStoreMeetingTests` (history derivation; deleting a person clears them from `attendees:`;
   renaming rewrites `[[id]]` inside meetings), `TranscriptChunkerTests` (pure, no LLM).
 - Audio capture, WhisperKit and the LLM cannot run headlessly on CI. Gate those suites with
@@ -328,4 +349,9 @@ semantic-release versions it correctly.
 ## Explicitly out of scope
 
 Diarization and speaker identification, voiceprints, editing a transcript in-app, importing existing
-audio files, calendar integration, and exporting meetings anywhere.
+audio files, calendar integration, exporting meetings anywhere, and tracking a meeting whose
+*dominant* spoken language itself changes mid-recording (a French half followed by an English
+half). "Code-switching is first-class" always meant foreign vocabulary inside one base language,
+not a meeting hopping between two base languages — the latter would need per-chunk language
+detection and a per-chunk vocabulary prompt, and break the single `language:` field everywhere
+else in this design already assumes one.

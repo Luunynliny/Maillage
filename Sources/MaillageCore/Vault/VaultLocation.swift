@@ -48,6 +48,13 @@ public struct VaultLocation: Hashable, Sendable {
             .appendingPathComponent("config.yaml")
     }
 
+    /// Custom terms `VocabularyPrompt` primes last, after attendees and org/project names — one
+    /// per line. Absent in most vaults, which is the normal state, not an issue.
+    public var vocabularyFileURL: URL {
+        root.appendingPathComponent(".maillage", isDirectory: true)
+            .appendingPathComponent("vocabulary.txt")
+    }
+
     /// Where a meeting's in-progress audio lives while it's being recorded and transcribed:
     /// `.maillage/recordings/<meeting-id>/`. App-private and inside the vault for the same
     /// reason as ``configFileURL``, and per-meeting rather than one flat folder so deleting a
@@ -57,9 +64,14 @@ public struct VaultLocation: Hashable, Sendable {
     /// promise — so unlike ``assetsDirectory(for:)`` this is never created eagerly by
     /// ``createSkeletonIfNeeded()``; it exists only from the moment a recording starts.
     public func recordingsDirectory(forMeeting id: EntityID) -> URL {
+        recordingsRootDirectory.appendingPathComponent(id, isDirectory: true)
+    }
+
+    /// Parent of every in-progress recording, so the launch-time orphan sweep has one place to
+    /// list rather than reconstructing the path itself.
+    public var recordingsRootDirectory: URL {
         root.appendingPathComponent(".maillage", isDirectory: true)
             .appendingPathComponent("recordings", isDirectory: true)
-            .appendingPathComponent(id, isDirectory: true)
     }
 
     /// Creates the vault root, the three entity directories, their asset folders, and

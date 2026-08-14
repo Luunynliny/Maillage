@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		000000000000000000000122 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000114 /* Yams */; };
 		000000000000000000000125 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000116 /* MarkdownUI */; };
+		000000000000000000000126 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000118 /* WhisperKit */; };
 		000000000000000000000123 /* MaillageCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000C1 /* MaillageCore.framework */; };
 		000000000000000000000124 /* MaillageCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000C1 /* MaillageCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -63,6 +64,7 @@
 			files = (
 				000000000000000000000122 /* Yams in Frameworks */,
 				000000000000000000000125 /* MarkdownUI in Frameworks */,
+				000000000000000000000126 /* WhisperKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -145,6 +147,7 @@
 			packageProductDependencies = (
 				000000000000000000000114 /* Yams */,
 				000000000000000000000116 /* MarkdownUI */,
+				000000000000000000000118 /* WhisperKit */,
 			);
 			productName = MaillageCore;
 			productReference = 0000000000000000000000C1 /* MaillageCore.framework */;
@@ -203,6 +206,7 @@
 			packageReferences = (
 				000000000000000000000112 /* XCRemoteSwiftPackageReference "Yams" */,
 				000000000000000000000115 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
+				000000000000000000000117 /* XCRemoteSwiftPackageReference "WhisperKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0000000000000000000000A3 /* Products */;
@@ -489,6 +493,14 @@
 				minimumVersion = 2.4.1;
 			};
 		};
+		000000000000000000000117 /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/argmaxinc/WhisperKit";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.1.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -501,6 +513,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 000000000000000000000115 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
 			productName = MarkdownUI;
+		};
+		000000000000000000000118 /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 000000000000000000000117 /* XCRemoteSwiftPackageReference "WhisperKit" */;
+			productName = WhisperKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -78,9 +78,27 @@ public final class VaultStore {
             // be trusted.
             logoImages.removeAll()
             rebuildLogoIDs()
+            sweepOrphanedRecordings()
             lastError = nil
         } catch {
             lastError = error.localizedDescription
+        }
+    }
+
+    /// Deletes any leftover `.maillage/recordings/<id>/` directory whose meeting already has a
+    /// transcript. A crash between transcription finishing and `MeetingRecorder` removing the
+    /// directory would otherwise leave audio on disk forever — the deletion promise has to hold
+    /// on the crash path, not just the happy one.
+    private func sweepOrphanedRecordings() {
+        let fm = FileManager.default
+        guard
+            let ids = try? fm.contentsOfDirectory(atPath: location.recordingsRootDirectory.path)
+        else { return }
+        for id in ids {
+            guard let meeting = snapshot.meetings[id],
+                !TranscriptCodec.split(meeting.body).segments.isEmpty
+            else { continue }
+            try? fm.removeItem(at: location.recordingsDirectory(forMeeting: id))
         }
     }
 
@@ -434,7 +452,6 @@ public final class VaultStore {
         title: String,
         date: CalendarDay = .today(),
         duration: Int? = nil,
-        language: String? = nil,
         organization: Wikilink? = nil,
         project: Wikilink? = nil,
         attendees: [Wikilink] = [],
@@ -442,7 +459,7 @@ public final class VaultStore {
     ) -> Meeting? {
         let id = writer.availableID(for: title, kind: .meeting, prefix: "\(date)-")
         let meeting = Meeting(
-            id: id, title: title, date: date, duration: duration, language: language,
+            id: id, title: title, date: date, duration: duration,
             organization: organization, project: project, attendees: attendees,
             created: .today(), body: body)
         return persist(meeting) ? meeting : nil

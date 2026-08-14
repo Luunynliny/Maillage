@@ -17,6 +17,9 @@ public struct RootView: View {
     @State private var editorRequest: EditorRequest?
     @State private var isPaletteVisible = false
     @State private var isPickingVault = false
+    /// Owned here, not by `RecordingSheet`, so a recording's transcription pipeline survives
+    /// the sheet being dismissed — see `MeetingRecorder`'s own doc comment for why.
+    @State private var activeRecorder: MeetingRecorder?
     /// Whether the centre pane's details section is unfolded. Held here rather than in
     /// ``CenterPaneHeader`` so the View menu's Show/Hide Details item can reach it; the header
     /// folds it back shut on every change of subject.
@@ -97,7 +100,7 @@ public struct RootView: View {
             ProjectEditor(existing: nil) { selection = $0 }
 
         case .newMeeting:
-            RecordingSheet { selection = $0 }
+            RecordingSheet(recorder: $activeRecorder) { selection = $0 }
 
         case .edit(let id):
             switch store.entity(id: id) {
