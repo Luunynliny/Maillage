@@ -34,6 +34,9 @@ struct CenterPane: View {
     /// Whether each subject view's header has its details folded out. Owned by ``RootView``
     /// so the choice outlives the selection it was made on.
     @Binding var isDetailVisible: Bool
+    /// Lets ``MeetingView`` tell whether *it's* the meeting currently being transcribed, to
+    /// show a spinner instead of an empty state that's actively wrong mid-transcription.
+    let activeRecorder: MeetingRecorder?
 
     var body: some View {
         ZStack {
@@ -55,7 +58,8 @@ struct CenterPane: View {
             case .meeting(let meeting):
                 MeetingView(
                     meeting: meeting, selection: $selection,
-                    editorRequest: $editorRequest, isDetailVisible: $isDetailVisible)
+                    editorRequest: $editorRequest, isDetailVisible: $isDetailVisible,
+                    activeRecorder: activeRecorder)
             // Nothing selected: the bubbles are the only view that stands on its own without a
             // subject, and they're where you click through to the other three.
             case nil:

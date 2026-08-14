@@ -35,7 +35,8 @@ public struct RootView: View {
             CenterPane(
                 selection: $selection,
                 editorRequest: $editorRequest,
-                isDetailVisible: $isDetailVisible)
+                isDetailVisible: $isDetailVisible,
+                activeRecorder: activeRecorder)
         }
         // Details fold shut on every change of subject. Here rather than in
         // ``CenterPaneHeader``, because switching between kinds swaps the whole centre view for
