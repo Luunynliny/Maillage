@@ -7,10 +7,19 @@ import Foundation
 /// section, written by a later phase) from the one part of the body this type actually
 /// understands. The preamble round-trips byte-for-byte, exactly like a person's notes do.
 ///
-/// One line per segment, timestamp only — see ``TranscriptSegment`` for why there's no speaker:
+/// One line per segment. Timestamp only when diarization wasn't on for this meeting — see
+/// ``TranscriptSegment`` for that case — otherwise a speaker tag follows it, space-separated,
+/// inside the same parens:
 /// ```
 /// (00:15) Oui, mais il faut wire le canary d'abord.
+/// (00:15 #M2) On va commencer.
+/// (00:15 #M2:marie-dupont) On va commencer.
 /// ```
+/// `#` then a track letter (`M`/`S`) then a slot digit, optionally `:<personID>` once resolved.
+/// Old-format lines (no second token) still parse exactly as before, with ``TranscriptSegment/speaker``
+/// coming back `nil` — this is the whole migration story for meetings recorded before this format
+/// existed, no rewrite needed.
+///
 /// The timestamp is `MM:SS`, or `H:MM:SS` once the offset reaches an hour — see
 /// ``formatTimestamp(seconds:)``. The utterance itself is captured to the end of the line, so a
 /// literal `(` or `)` inside it — someone saying a parenthetical — needs no escaping. A literal
@@ -41,23 +50,31 @@ public enum TranscriptCodec {
         return (preamble, segments)
     }
 
-    /// Parses one `(timestamp) text` line by hand rather than with a regular expression — the
-    /// shape is fixed and narrow enough that scanning for the two delimiters directly is no
-    /// harder to follow than a pattern with numbered capture groups would be, and it sidesteps
-    /// needing a force-unwrapped or force-tried regex for what is, either way, a
+    /// Parses one `(timestamp [speakerTag]) text` line by hand rather than with a regular
+    /// expression — the shape is fixed and narrow enough that scanning for the delimiters
+    /// directly is no harder to follow than a pattern with numbered capture groups would be, and
+    /// it sidesteps needing a force-unwrapped or force-tried regex for what is, either way, a
     /// compile-time-fixed pattern.
     private static func parseLine(_ line: String) -> TranscriptSegment? {
         guard line.hasPrefix("(") else { return nil }
         let afterOpenParen = line.index(after: line.startIndex)
-        guard let closingParen = line[afterOpenParen...].firstIndex(of: ")"),
-            let offset = parseTimestamp(String(line[afterOpenParen..<closingParen]))
+        guard let closingParen = line[afterOpenParen...].firstIndex(of: ")") else { return nil }
+
+        // The timestamp is always the first token; a speaker tag, if present, is the second,
+        // space-separated — so split on whitespace before parsing either, rather than handing
+        // the whole parens content to `parseTimestamp`, which only ever expects one token.
+        let parensContent = line[afterOpenParen..<closingParen]
+        let tokens = parensContent.split(separator: " ", maxSplits: 1)
+        guard let firstToken = tokens.first, let offset = parseTimestamp(String(firstToken))
         else { return nil }
+        let speaker = tokens.count > 1 ? parseSpeakerTag(String(tokens[1])) : nil
 
         let afterTimestamp = line[line.index(after: closingParen)...]
         guard afterTimestamp.hasPrefix(" ") else { return nil }
         let text = afterTimestamp.dropFirst()
 
-        return TranscriptSegment(offsetSeconds: offset, text: unescape(String(text)))
+        return TranscriptSegment(
+            offsetSeconds: offset, text: unescape(String(text)), speaker: speaker)
     }
 
     /// Rebuilds a full body from a preamble and its segments, in the shape ``split`` expects
@@ -68,11 +85,53 @@ public enum TranscriptCodec {
         guard !segments.isEmpty else { return trimmedPreamble }
 
         let lines = segments.map { segment in
-            "(\(formatTimestamp(seconds: segment.offsetSeconds))) " + escape(segment.text)
+            let timestamp = formatTimestamp(seconds: segment.offsetSeconds)
+            let tag = segment.speaker.map { " " + formatSpeakerTag($0) } ?? ""
+            return "(\(timestamp)\(tag)) " + escape(segment.text)
         }
         let transcript = "\(heading)\n\n" + lines.joined(separator: "\n")
 
         return trimmedPreamble.isEmpty ? transcript : "\(trimmedPreamble)\n\n\(transcript)"
+    }
+
+    // MARK: Speaker tags
+
+    /// `#M2` (unresolved) or `#M2:marie-dupont` (resolved) — track letter, slot digit, then an
+    /// optional `:<personID>` once a human has confirmed who it is.
+    private static func formatSpeakerTag(_ speaker: Speaker) -> String {
+        let trackLetter = speaker.track == .mic ? "M" : "S"
+        let base = "#\(trackLetter)\(speaker.slot)"
+        guard let personID = speaker.personID else { return base }
+        return "\(base):\(personID)"
+    }
+
+    /// Parses a speaker tag back, or `nil` for anything that doesn't match the shape — a stray
+    /// second token in a hand-edited file is skipped the same way an unparseable line is.
+    private static func parseSpeakerTag(_ raw: String) -> Speaker? {
+        guard raw.hasPrefix("#") else { return nil }
+        let body = raw.dropFirst()
+
+        let trackAndSlot: Substring
+        var personID: EntityID?
+        if let colon = body.firstIndex(of: ":") {
+            trackAndSlot = body[body.startIndex..<colon]
+            let idPart = body[body.index(after: colon)...]
+            guard !idPart.isEmpty else { return nil }
+            personID = String(idPart)
+        } else {
+            trackAndSlot = body
+        }
+
+        guard let trackLetter = trackAndSlot.first else { return nil }
+        let track: AudioTrack
+        switch trackLetter {
+        case "M": track = .mic
+        case "S": track = .system
+        default: return nil
+        }
+        guard let slot = Int(trackAndSlot.dropFirst()) else { return nil }
+
+        return Speaker(track: track, slot: slot, personID: personID)
     }
 
     // MARK: Timestamps

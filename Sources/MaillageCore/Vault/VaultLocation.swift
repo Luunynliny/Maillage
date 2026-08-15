@@ -42,6 +42,13 @@ public struct VaultLocation: Hashable, Sendable {
         assetsDirectory(for: kind).appendingPathComponent("\(id).png")
     }
 
+    /// Path of the voiceprint backing a person, whether or not one exists — same
+    /// "a logo is a file, not a field" shape as ``logoURL(kind:id:)``, in the same
+    /// `assets/people/` directory, just a different extension. Only people have one.
+    public func voiceprintURL(personID: EntityID) -> URL {
+        assetsDirectory(for: .person).appendingPathComponent("\(personID).voiceprint")
+    }
+
     /// Custom terms `VocabularyPrompt` primes last, after attendees and org/project names — one
     /// per line. Absent in most vaults, which is the normal state, not an issue.
     public var vocabularyFileURL: URL {

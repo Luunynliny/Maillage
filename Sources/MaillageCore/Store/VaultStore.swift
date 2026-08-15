@@ -53,6 +53,11 @@ public final class VaultStore {
     /// frontmatter. Observable, so a row redraws the moment one is set or removed.
     public private(set) var logoIDs: [EntityKind: Set<EntityID>] = [:]
 
+    /// Which people have a voiceprint — derived from `assets/people/*.voiceprint`, the same
+    /// "file is the fact" shape as ``logoIDs``. Only people have one, so this is a flat set
+    /// rather than keyed by kind.
+    public private(set) var voiceprintIDs: Set<EntityID> = []
+
     /// Set when a save or load fails, for display in the UI.
     public var lastError: String?
 
@@ -78,6 +83,7 @@ public final class VaultStore {
             // be trusted.
             logoImages.removeAll()
             rebuildLogoIDs()
+            rebuildVoiceprintIDs()
             sweepOrphanedRecordings()
             lastError = nil
         } catch {
@@ -144,6 +150,10 @@ public final class VaultStore {
         logoIDs = index
     }
 
+    private func rebuildVoiceprintIDs() {
+        voiceprintIDs = writer.voiceprintIDs()
+    }
+
     // MARK: Logos
 
     /// Whether this entity has a logo on disk.
@@ -204,6 +214,56 @@ public final class VaultStore {
             try writer.deleteLogo(kind: kind, id: id)
             logoImages.invalidate(kind: kind, id: id)
             logoIDs[kind]?.remove(id)
+            lastError = nil
+            return true
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
+    // MARK: Voiceprints
+
+    /// Whether this person has a voiceprint on disk. Reads the observable index, same reasoning
+    /// as ``hasLogo(kind:id:)``.
+    public func hasVoiceprint(personID: EntityID) -> Bool {
+        voiceprintIDs.contains(personID)
+    }
+
+    /// This person's stored voice signature, decoded, or `nil` if they have none — no cache,
+    /// unlike ``logo(kind:id:)``: a voiceprint is only ever read when a new diarized speaker
+    /// slot needs matching against every enrolled person, not once per frame like an avatar.
+    public func voiceprint(personID: EntityID) -> Voiceprint? {
+        guard hasVoiceprint(personID: personID),
+            let data = try? Data(contentsOf: location.voiceprintURL(personID: personID))
+        else { return nil }
+        return try? JSONDecoder().decode(Voiceprint.self, from: data)
+    }
+
+    /// Folds a newly confirmed embedding into this person's stored voiceprint via
+    /// ``Voiceprint/updated(_:confirming:)`` — an exponential moving average, not a snapshot, so
+    /// this is called every time a speaker slot is confirmed or corrected against this person,
+    /// not just the first time.
+    @discardableResult
+    public func setVoiceprint(personID: EntityID, confirming embedding: [Float]) -> Bool {
+        do {
+            let updated = Voiceprint.updated(voiceprint(personID: personID), confirming: embedding)
+            let data = try JSONEncoder().encode(updated)
+            try writer.writeVoiceprint(data, personID: personID)
+            voiceprintIDs.insert(personID)
+            lastError = nil
+            return true
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
+    @discardableResult
+    public func removeVoiceprint(personID: EntityID) -> Bool {
+        do {
+            try writer.deleteVoiceprint(personID: personID)
+            voiceprintIDs.remove(personID)
             lastError = nil
             return true
         } catch {
@@ -578,6 +638,12 @@ public final class VaultStore {
             try writer.deleteLogo(kind: kind, id: id)
             logoImages.invalidate(kind: kind, id: id)
             logoIDs[kind]?.remove(id)
+            // Same reasoning, people only: a voiceprint left behind would let a later person
+            // who reuses this id inherit someone else's voice as their own.
+            if kind == .person {
+                try writer.deleteVoiceprint(personID: id)
+                voiceprintIDs.remove(id)
+            }
 
             switch kind {
             case .person: snapshot.people.removeValue(forKey: id)
@@ -668,6 +734,10 @@ public final class VaultStore {
             logoImages.invalidate(kind: kind, id: newID)
             if logoIDs[kind]?.remove(oldID) != nil {
                 logoIDs[kind, default: []].insert(newID)
+            }
+            // `rename` moved the voiceprint file too, people only — catch the index up to it.
+            if kind == .person, voiceprintIDs.remove(oldID) != nil {
+                voiceprintIDs.insert(newID)
             }
             lastError = nil
             return newID
