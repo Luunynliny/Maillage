@@ -114,7 +114,7 @@ public final class MeetingRecorder {
 
             let whisperKit = try await WhisperModelStore().loadWhisperKit()
             let language = try await LanguageDetector(whisperKit: whisperKit)
-                .detect(micTrackAt: micURL)
+                .detect(micTrackAt: micURL, systemTrackAt: systemURL)
 
             guard var meeting = store.snapshot.meetings[meetingID] else { return }
 
@@ -143,12 +143,8 @@ public final class MeetingRecorder {
                 systemSegments = PromptEchoFilter.strip(systemSegments, prompt: promptText)
             }
 
-            let soleAttendeeName =
-                meeting.attendees.count == 1
-                ? store.displayName(for: meeting.attendees[0].id) : nil
             let merged = TranscriptMerger.merge(
-                micSegments: micSegments, systemSegments: systemSegments,
-                soleAttendeeName: soleAttendeeName)
+                micSegments: micSegments, systemSegments: systemSegments)
 
             meeting.language = language
             meeting.body = TranscriptCodec.join(

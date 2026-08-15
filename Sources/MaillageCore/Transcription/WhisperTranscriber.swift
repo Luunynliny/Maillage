@@ -29,8 +29,8 @@ public final class WhisperTranscriber: Transcriber, @unchecked Sendable {
         return results.flatMap { result in
             result.segments.map {
                 TranscriptSegment(
-                    speaker: "", offsetSeconds: Int($0.start),
-                    text: $0.text.trimmingCharacters(in: .whitespaces))
+                    offsetSeconds: Int($0.start), text: $0.text.trimmingCharacters(in: .whitespaces)
+                )
             }
         }
     }

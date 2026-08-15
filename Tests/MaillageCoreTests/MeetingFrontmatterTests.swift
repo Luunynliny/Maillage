@@ -18,7 +18,7 @@ struct MeetingFrontmatterTests {
             project: Wikilink("maillage"),
             attendees: [Wikilink("marie-dupont"), Wikilink("jean-martin")],
             created: day,
-            body: "## Transcript\n\n**You** (00:12) Salut."
+            body: "## Transcript\n\n(00:12) Salut."
         )
 
         let file = try FrontmatterCodec.encode(meeting, body: meeting.body)
@@ -31,7 +31,7 @@ struct MeetingFrontmatterTests {
         #expect(decoded.organization == Wikilink("acme-corp"))
         #expect(decoded.project == Wikilink("maillage"))
         #expect(decoded.attendees == [Wikilink("marie-dupont"), Wikilink("jean-martin")])
-        #expect(body == "## Transcript\n\n**You** (00:12) Salut.")
+        #expect(body == "## Transcript\n\n(00:12) Salut.")
     }
 
     @Test("Writes attendees, organization and project in Obsidian [[id]] form")

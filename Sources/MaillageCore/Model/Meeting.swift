@@ -104,20 +104,20 @@ public struct Meeting: Entity, Codable {
     }
 }
 
-/// One utterance in a transcript: who said it, when, and what.
+/// One utterance in a transcript: when and what — never who.
 ///
-/// `speaker` is a free-text label (`"You"`, `"Marie Dupont"`, `"Them"`), not a ``Wikilink`` —
-/// this vault records no speaker identification, so nothing here is guaranteed to resolve to
-/// an attendee. Later phases may write a label that happens to match one, but ``TranscriptCodec``
-/// treats it as text throughout.
+/// No speaker field, on purpose: this vault records no speaker identification, and mic vs.
+/// system track is not a substitute for it. That split only labels *who* correctly for a remote
+/// call, where the other party's voice can only physically enter through the system tap. An
+/// in-person meeting recorded on one laptop puts everyone's voice through the mic, so a track
+/// can hold any number of unidentified people — attributing it to "You" would be a guess dressed
+/// up as a fact.
 public struct TranscriptSegment: Hashable, Sendable {
-    public var speaker: String
     /// Offset from the start of the recording.
     public var offsetSeconds: Int
     public var text: String
 
-    public init(speaker: String, offsetSeconds: Int, text: String) {
-        self.speaker = speaker
+    public init(offsetSeconds: Int, text: String) {
         self.offsetSeconds = offsetSeconds
         self.text = text
     }

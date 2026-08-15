@@ -97,7 +97,7 @@ struct SeededVaultTests {
         let (preamble, segments) = TranscriptCodec.split(standup.body)
         #expect(preamble.contains("Refit is behind schedule"))
         #expect(segments.count == 4)
-        #expect(segments.first?.speaker == "Turanga Leela")
+        #expect(segments.first?.text == "Where are we on the hull plating?")
         #expect(segments.first?.offsetSeconds == 5)
     }
 }

@@ -8,9 +8,8 @@ struct TranscriptCodecTests {
     @Test("Round-trips a preamble and its segments")
     func roundTrips() {
         let segments = [
-            TranscriptSegment(speaker: "You", offsetSeconds: 12, text: "On ship cette semaine ?"),
-            TranscriptSegment(
-                speaker: "Marie Dupont", offsetSeconds: 15, text: "Oui, mais il faut d'abord."),
+            TranscriptSegment(offsetSeconds: 12, text: "On ship cette semaine ?"),
+            TranscriptSegment(offsetSeconds: 15, text: "Oui, mais il faut d'abord."),
         ]
         let body = TranscriptCodec.join(preamble: "## Summary\n\n**Ship it.**", segments: segments)
 
@@ -42,10 +41,10 @@ struct TranscriptCodecTests {
         #expect(segments.isEmpty)
     }
 
-    @Test("A literal ** inside speech round-trips, not mistaken for the speaker delimiter")
+    @Test("A literal ** inside speech round-trips as plain text")
     func doubleStarInsideSpeech() {
         let segments = [
-            TranscriptSegment(speaker: "You", offsetSeconds: 0, text: "Wrap it in ** for bold.")
+            TranscriptSegment(offsetSeconds: 0, text: "Wrap it in ** for bold.")
         ]
         let (_, decoded) = TranscriptCodec.split(
             TranscriptCodec.join(preamble: "", segments: segments))
@@ -56,8 +55,7 @@ struct TranscriptCodecTests {
     func parenthesesInsideSpeech() {
         let segments = [
             TranscriptSegment(
-                speaker: "Marie Dupont", offsetSeconds: 5,
-                text: "It's fine (I already checked with them).")
+                offsetSeconds: 5, text: "It's fine (I already checked with them).")
         ]
         let (_, decoded) = TranscriptCodec.split(
             TranscriptCodec.join(preamble: "", segments: segments))
@@ -67,7 +65,7 @@ struct TranscriptCodecTests {
     @Test("A literal newline inside speech round-trips without breaking the one-line shape")
     func newlineInsideSpeech() {
         let segments = [
-            TranscriptSegment(speaker: "You", offsetSeconds: 3, text: "First line.\nSecond line.")
+            TranscriptSegment(offsetSeconds: 3, text: "First line.\nSecond line.")
         ]
         let body = TranscriptCodec.join(preamble: "", segments: segments)
         // Escaped, so the transcript stays exactly one physical line per segment.
@@ -83,7 +81,7 @@ struct TranscriptCodecTests {
         #expect(TranscriptCodec.formatTimestamp(seconds: 90) == "01:30")
 
         let segments = [
-            TranscriptSegment(speaker: "You", offsetSeconds: 3_725, text: "An hour in.")
+            TranscriptSegment(offsetSeconds: 3_725, text: "An hour in.")
         ]
         let (_, decoded) = TranscriptCodec.split(
             TranscriptCodec.join(preamble: "", segments: segments))
@@ -93,9 +91,9 @@ struct TranscriptCodecTests {
     @Test("Multiple segments interleave in the order they were given")
     func multipleSegmentsPreserveOrder() {
         let segments = [
-            TranscriptSegment(speaker: "You", offsetSeconds: 0, text: "First."),
-            TranscriptSegment(speaker: "Them", offsetSeconds: 4, text: "Second."),
-            TranscriptSegment(speaker: "You", offsetSeconds: 9, text: "Third."),
+            TranscriptSegment(offsetSeconds: 0, text: "First."),
+            TranscriptSegment(offsetSeconds: 4, text: "Second."),
+            TranscriptSegment(offsetSeconds: 9, text: "Third."),
         ]
         let (_, decoded) = TranscriptCodec.split(
             TranscriptCodec.join(preamble: "", segments: segments))

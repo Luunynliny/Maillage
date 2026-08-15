@@ -11,10 +11,9 @@ struct PromptEchoFilterTests {
     func stripsLeadingEcho() {
         let segments = [
             TranscriptSegment(
-                speaker: "", offsetSeconds: 0,
+                offsetSeconds: 0,
                 text: "Réunion avec Marie Dupont et Jean Martin chez Acme Corp"),
-            TranscriptSegment(
-                speaker: "", offsetSeconds: 5, text: "On fait le point sur le sprint."),
+            TranscriptSegment(offsetSeconds: 5, text: "On fait le point sur le sprint."),
         ]
         let filtered = PromptEchoFilter.strip(segments, prompt: prompt)
         #expect(filtered.count == 1)
@@ -24,7 +23,7 @@ struct PromptEchoFilterTests {
     @Test("A genuine opening line that merely resembles the prompt is kept")
     func keepsGenuineResemblance() {
         let segments = [
-            TranscriptSegment(speaker: "", offsetSeconds: 0, text: "Marie, tu peux lancer ça ?")
+            TranscriptSegment(offsetSeconds: 0, text: "Marie, tu peux lancer ça ?")
         ]
         let filtered = PromptEchoFilter.strip(segments, prompt: prompt)
         #expect(filtered.count == 1)

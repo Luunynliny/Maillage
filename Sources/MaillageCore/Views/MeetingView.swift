@@ -142,20 +142,15 @@ struct MeetingView: View {
         }
     }
 
-    /// `**Speaker** (00:15)` above the line, the words below — a transcript is read by
-    /// scanning who's talking first, the same reason a chat app leads each bubble with a
-    /// name. `speaker` is text, not a ``Wikilink``: this vault records no speaker
-    /// identification, so nothing here is assumed to resolve to an attendee.
+    /// Timestamp above the words, nothing else — no speaker name, since neither track can be
+    /// honestly attributed to one person (see ``TranscriptSegment``). No left/right alignment
+    /// or other spatial stand-in either: that would just reintroduce the same false distinction
+    /// visually instead of in text.
     private func segmentRow(_ segment: TranscriptSegment) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: Theme.Spacing.xs) {
-                Text(segment.speaker)
-                    .font(Theme.Font.body.weight(.semibold))
-                    .foregroundStyle(Theme.textNormal)
-                Text(TranscriptCodec.formatTimestamp(seconds: segment.offsetSeconds))
-                    .font(Theme.Font.mono)
-                    .foregroundStyle(Theme.textFaint)
-            }
+            Text(TranscriptCodec.formatTimestamp(seconds: segment.offsetSeconds))
+                .font(Theme.Font.mono)
+                .foregroundStyle(Theme.textFaint)
             Text(segment.text)
                 .font(Theme.Font.body)
                 .foregroundStyle(Theme.textNormal)
