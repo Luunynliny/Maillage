@@ -1,4 +1,5 @@
 import Foundation
+import FoundationModels
 import Observation
 import WhisperKit
 
@@ -7,7 +8,9 @@ public enum MeetingRecorderState: Equatable, Sendable {
     case idle
     case recording
     case transcribing
+    case summarising
     case failed(String)
+    case done
 }
 
 /// Drives one recording from Start to a finished transcript: creates the meeting it belongs to,
@@ -106,7 +109,7 @@ public final class MeetingRecorder {
     private func transcribe(meetingID: EntityID, directory: URL) async {
         defer {
             self.meetingID = nil
-            if case .failed = state {} else { state = .idle }
+            if case .failed = state {} else { state = .done }
         }
         do {
             let micURL = directory.appendingPathComponent("mic.wav")
@@ -152,6 +155,29 @@ public final class MeetingRecorder {
             store.update(meeting)
 
             try? FileManager.default.removeItem(at: directory)
+
+            state = .summarising
+            if SystemLanguageModel.default.availability == .available {
+                do {
+                    let summary = try await FoundationModelsSummarizer().summarize(
+                        merged, language: language)
+                    if var summarized = store.snapshot.meetings[meetingID] {
+                        summarized.body = TranscriptCodec.join(
+                            preamble: summary.markdown, segments: merged)
+                        store.update(summarized)
+                    }
+                } catch {
+                    // Never state = .failed here — a summary failure degrades to "transcript, no
+                    // summary," per the design doc; only surface it the same soft way
+                    // transcription failure already does, via the shared banner.
+                    let name = store.displayName(for: meetingID) ?? meetingID
+                    store.lastError =
+                        "Couldn't summarize \"\(name)\": \(error.localizedDescription)"
+                }
+            }
+            // Unavailable (device ineligible, Apple Intelligence off, model not ready): silently
+            // skip. That's a device-capability gap, not a per-meeting problem — a banner on every
+            // meeting on an ineligible Mac would just be noise.
         } catch {
             state = .failed(error.localizedDescription)
             // The recording sheet is long gone by the time transcription fails or succeeds, so
