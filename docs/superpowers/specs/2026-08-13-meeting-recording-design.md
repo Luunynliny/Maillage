@@ -366,6 +366,11 @@ semantic-release versions it correctly.
   French, the meeting appears on the attendee's detail pane, and `.maillage/recordings/<id>/` is gone.
 - Kill the app deliberately mid-transcription, relaunch, confirm the orphan sweep removed the audio.
   This is the deletion promise; the crash path is the one that needs testing, not the happy path.
+- Confirm the summary card appears after a real recording, written in the meeting's dominant
+  language, with Decisions/Actions matching what was actually said.
+- With Apple Intelligence off in System Settings (or on ineligible hardware), confirm the meeting
+  still ends with a full transcript, no summary card, and no error banner — the silent-skip path,
+  not the soft-failure banner path.
 
 ## Explicitly out of scope
 
