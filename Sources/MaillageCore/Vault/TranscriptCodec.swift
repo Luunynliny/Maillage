@@ -7,17 +7,15 @@ import Foundation
 /// section, written by a later phase) from the one part of the body this type actually
 /// understands. The preamble round-trips byte-for-byte, exactly like a person's notes do.
 ///
-/// One line per segment:
+/// One line per segment, timestamp only — see ``TranscriptSegment`` for why there's no speaker:
 /// ```
-/// **Marie Dupont** (00:15) Oui, mais il faut wire le canary d'abord.
+/// (00:15) Oui, mais il faut wire le canary d'abord.
 /// ```
 /// The timestamp is `MM:SS`, or `H:MM:SS` once the offset reaches an hour — see
-/// ``formatTimestamp(seconds:)``. A speaker name is never expected to contain `**`, so the
-/// name capture can stop at the next one; the utterance itself is captured to the end of the
-/// line, so a literal `(` or `)` inside it — someone saying a parenthetical — needs no
-/// escaping. A literal newline inside an utterance is escaped to `\n` on the way out and
-/// restored on the way in, which is the one thing that *would* otherwise break the one-line
-/// shape.
+/// ``formatTimestamp(seconds:)``. The utterance itself is captured to the end of the line, so a
+/// literal `(` or `)` inside it — someone saying a parenthetical — needs no escaping. A literal
+/// newline inside an utterance is escaped to `\n` on the way out and restored on the way in,
+/// which is the one thing that *would* otherwise break the one-line shape.
 public enum TranscriptCodec {
     /// The heading this type looks for. Kept as a constant because ``split`` and ``join``
     /// must agree on it exactly, or a save would duplicate the heading it meant to replace.
@@ -43,34 +41,23 @@ public enum TranscriptCodec {
         return (preamble, segments)
     }
 
-    /// Parses one `**Speaker** (timestamp) text` line by hand rather than with a regular
-    /// expression — the shape is fixed and narrow enough that scanning for the three
-    /// delimiters directly is no harder to follow than a pattern with four numbered capture
-    /// groups would be, and it sidesteps needing a force-unwrapped or force-tried regex for
-    /// what is, either way, a compile-time-fixed pattern.
+    /// Parses one `(timestamp) text` line by hand rather than with a regular expression — the
+    /// shape is fixed and narrow enough that scanning for the two delimiters directly is no
+    /// harder to follow than a pattern with numbered capture groups would be, and it sidesteps
+    /// needing a force-unwrapped or force-tried regex for what is, either way, a
+    /// compile-time-fixed pattern.
     private static func parseLine(_ line: String) -> TranscriptSegment? {
-        guard line.hasPrefix("**") else { return nil }
-        let afterOpeningStars = line.index(line.startIndex, offsetBy: 2)
-        guard
-            let closingStars = line.range(
-                of: "**", range: afterOpeningStars..<line.endIndex)
-        else { return nil }
-        let speaker = String(line[afterOpeningStars..<closingStars.lowerBound])
-        guard !speaker.isEmpty else { return nil }
-
-        var rest = line[closingStars.upperBound...]
-        guard rest.hasPrefix(" (") else { return nil }
-        rest = rest.dropFirst(2)
-        guard let closingParen = rest.firstIndex(of: ")"),
-            let offset = parseTimestamp(String(rest[rest.startIndex..<closingParen]))
+        guard line.hasPrefix("(") else { return nil }
+        let afterOpenParen = line.index(after: line.startIndex)
+        guard let closingParen = line[afterOpenParen...].firstIndex(of: ")"),
+            let offset = parseTimestamp(String(line[afterOpenParen..<closingParen]))
         else { return nil }
 
-        let afterTimestamp = rest[rest.index(after: closingParen)...]
+        let afterTimestamp = line[line.index(after: closingParen)...]
         guard afterTimestamp.hasPrefix(" ") else { return nil }
         let text = afterTimestamp.dropFirst()
 
-        return TranscriptSegment(
-            speaker: speaker, offsetSeconds: offset, text: unescape(String(text)))
+        return TranscriptSegment(offsetSeconds: offset, text: unescape(String(text)))
     }
 
     /// Rebuilds a full body from a preamble and its segments, in the shape ``split`` expects
@@ -81,8 +68,7 @@ public enum TranscriptCodec {
         guard !segments.isEmpty else { return trimmedPreamble }
 
         let lines = segments.map { segment in
-            "**\(segment.speaker)** (\(formatTimestamp(seconds: segment.offsetSeconds))) "
-                + escape(segment.text)
+            "(\(formatTimestamp(seconds: segment.offsetSeconds))) " + escape(segment.text)
         }
         let transcript = "\(heading)\n\n" + lines.joined(separator: "\n")
 

@@ -10,7 +10,9 @@ a person and see every meeting you've had with them.
 Three constraints shape every choice below:
 
 - **Everything runs on the machine.** No audio, no transcript, no summary crosses the network. Model
-  *weights* are fetched once from Hugging Face on first run; content never is.
+  *weights* are fetched from Hugging Face at **build time** by `Scripts/fetch-whisper-model.sh` and
+  embedded in the app bundle — nothing is fetched, and no network is needed, at runtime. Content
+  never crosses the network, on any run.
 - **The recording is deleted** as soon as both tracks transcribe. The transcript is the artefact.
 - **Code-switching is a first-class requirement, not a nicety.** You speak French with English
   technical vocabulary in the same sentence. A transcriber that forces one language per meeting is
@@ -26,7 +28,7 @@ indicator is a requirement rather than a polish item.
 
 | Decision | Choice |
 |---|---|
-| Transcription | **WhisperKit** (MIT, argmax inc.), CoreML, multilingual `large-v3`. One model, shared vocabulary — English terms inside French sentences stay English |
+| Transcription | **WhisperKit** (MIT, argmax inc.), CoreML, multilingual `openai_whisper-small` (216MB, quantized) — the smallest variant with usable multilingual/code-switching accuracy, embedded in the app at build time rather than downloaded. One model, shared vocabulary — English terms inside French sentences stay English |
 | macOS floor | **Raised 14 → 26**, for `FoundationModels` only. Gives a free on-device summary LLM instead of a second multi-GB download |
 | Meeting storage | A **4th `EntityKind`**, `meetings/<id>.md`, reusing `FrontmatterCodec`, `VaultReader`/`VaultWriter`, the sidebar, the palette, `[[id]]` linking |
 | Meeting fields | title, date, duration, language, attendees, organization, project |
@@ -38,8 +40,12 @@ indicator is a requirement rather than a polish item.
 
 Mic and system audio are captured to **two separate files**, never mixed. This is not speaker
 detection — it is that they are different APIs (`AVAudioEngine` vs. a Core Audio process tap), so
-capturing them separately is *less* work than mixing them. It falls out that the mic track is you and
-the system track is everyone else, so the transcript gets "You" / other-side labels for free.
+capturing them separately is *less* work than mixing them. Neither track is ever labelled by
+speaker, though: that would only be true for a remote call, where the other party's voice can only
+physically enter through the system tap. An in-person meeting recorded on one laptop puts everyone's
+voice through the mic, so the mic track can hold any number of unidentified people — "You" would be
+a guess dressed up as a fact. The transcript stays plain, timestamped text; see
+`TranscriptSegment`.
 
 ## Architecture
 
@@ -51,7 +57,7 @@ Sources/MaillageCore/
 ├── Vault/TranscriptCodec.swift    strict round-trip for the body's Transcript block
 ├── Audio/                         AudioCaptureSession, SystemAudioTap,
 │                                  MicrophoneRecorder, CapturePermissions
-├── Transcription/                 Transcriber (protocol), WhisperTranscriber,
+├── Transcription/                 Transcriber (protocol), WhisperTranscriber, LanguageDetector,
 │                                  WhisperModelStore, VaultVocabulary, TranscriptMerger
 ├── Summary/                       MeetingSummarizer (protocol), FoundationModelsSummarizer,
 │                                  TranscriptChunker
@@ -87,8 +93,8 @@ protocol Transcriber {
 
 `WhisperTranscriber` implements it over WhisperKit:
 
-- `DecodingOptions.language` **forced** from the meeting's language rather than auto-detected — see
-  constraint 2 below.
+- `DecodingOptions.language` **forced from a one-shot language-ID pass**, not left `nil` for the
+  real decode — see constraint 2 below for why auto-detect-and-hold, not per-chunk auto-detect.
 - `wordTimestamps: true` for per-segment timing, `chunkingStrategy: .vad` for long recordings.
 - **`promptTokens` carries the vocabulary prompt** — the biasing lever that makes "Marie Dupont" and
   "Acme" come out spelled right rather than phonetically. Not `prefixTokens`, which forces the *start
@@ -127,8 +133,23 @@ also demonstrates the code-switched register we want:
 > `de canary deploy et de pull request.`
 
 Prose conditions better than a list and is less likely to be echoed verbatim. Carrier templates are
-per base language (fr, en), with en as the fallback. `language` stays **forced, not auto-detected**, so
-the `<|fr|>` prefill token anchors the language after the prompt.
+per base language (fr, en), with en as the fallback.
+
+`language` is not user-picked and not left to auto-detect on every chunk either. `LanguageDetector`
+runs `WhisperKit.detectLanguage` **once**, on the mic track's first voiced window (skipping leading
+silence/noise — language-ID on pure silence is unreliable and known to default to English), falling
+back to the system track's first voiced window if the mic has no detectable speech at all — a
+meeting recorded while mostly listening (a call you mostly listen to, or just testing transcription
+by playing a video with the mic silent) otherwise hands the detector nothing but room tone, and a
+language guessed from noise gets forced onto real speech on the other track for the whole meeting.
+That result is **held and forced** for every chunk of both tracks for the rest of
+the meeting, so the `<|fr|>` prefill token keeps anchoring the language after the prompt exactly as
+before — the anchor is just fed by detection now, not a picker. Per-chunk redetection was considered
+and rejected: everything downstream assumes one language per meeting (the frontmatter's single
+`language:` key, the summary's "dominant language"), and redetecting per chunk reopens this exact
+constraint's flip risk at finer grain — a jargon-heavy chunk misdetecting on its own, not just a
+genuine language switch, which this feature was never scoped to track (see "Explicitly out of
+scope").
 
 **Constraint 3: Whisper echoes prompts** into the transcript, especially on the first window and over
 silence. `PromptEchoFilter` strips a leading segment that fuzzy-matches the prompt. This is a real
@@ -157,14 +178,24 @@ first. That is inferred from the call structure, not stated in the docs — conf
 recording longer than one chunk, because if it only primes window one, a 30-minute meeting is biased
 for its first 30 seconds and the feature is largely cosmetic.
 
-`WhisperModelStore` owns first-run model download with visible progress, and the model choice, read
-from `.maillage/config.yaml` (default `large-v3`). It must handle "download interrupted" by resuming
-or discarding cleanly — a half-downloaded CoreML model that loads and produces garbage is the worst
-failure mode available.
+**Also to verify in phase 4:** confirmed empirically that a mic track with no detectable speech at
+all (a meeting recorded while mostly listening) falls back to the system track rather than guessing
+from noise — `LanguageDetector` now does this. Still open: whether a mic track with a *little*
+unrepresentative speech (a few words of cross-talk, then mostly silence) picks a worse language than
+falling back would have; that's a real judgment call about "enough" speech to trust, not something
+the fallback's simple has-any-voiced-second check resolves.
+
+`WhisperModelStore` resolves the model bundled inside the running app and loads it. There is no
+download-progress UI to build and no partial-download recovery to design: `Scripts/fetch-whisper-model.sh`
+fetches the model once at **build time** (cached in `.whisperkit-model-cache/`, never committed —
+see the "Fetch WhisperKit Model" build phase in `maillage.xcodeproj`), so at runtime the model is
+either present in the signed bundle, in which case loading it cannot meaningfully fail from
+anything this type controls, or the bundle itself is broken, which is a build problem, not a
+runtime one.
 
 `TranscriptMerger` interleaves the two tracks' segments by start time into one chronological
-transcript, labelling mic segments `You` and system segments with the sole attendee's name when there
-is exactly one (the common 1:1 case) or `Others` otherwise. Pure and unit-tested.
+transcript — no speaker labels, since neither track can be honestly attributed to one person. Pure
+and unit-tested.
 
 ### The transcript lives in the markdown
 
@@ -200,8 +231,8 @@ created: '2026-08-13'
 
 ## Transcript
 
-**You** (00:12) On ship le feature flag cette semaine ?
-**Marie Dupont** (00:15) Oui, mais il faut wire le canary d'abord.
+(00:12) On ship le feature flag cette semaine ?
+(00:15) Oui, mais il faut wire le canary d'abord.
 ```
 
 `TranscriptCodec` round-trips the Transcript block, mirroring what `FrontmatterCodec` already does for
@@ -222,8 +253,8 @@ struct — a typed result, not prose to parse:
 ```
 
 The on-device context window is small and `GenerationError.exceededContextWindowSize` is real, so
-summarising is **map-reduce**: `TranscriptChunker` splits segments into speaker-boundary-respecting
-windows, each window is summarised, then the summaries are reduced into one. The chunker is pure and
+summarising is **map-reduce**: `TranscriptChunker` splits segments into fixed-size windows, each
+window is summarised, then the summaries are reduced into one. The chunker is pure and
 unit-tested; `exceededContextWindowSize` is caught by halving the window and retrying. Guard on
 `SystemLanguageModel.availability` and degrade to "transcript, no summary" rather than failing the
 meeting — a transcript without a summary is still worth keeping.
@@ -254,9 +285,9 @@ onto the person — a person file must not accumulate hundreds of meeting links.
 ### Views
 
 - `SidebarView` — a 4th Meetings section; `+` opens `RecordingSheet`; red indicator while recording.
-- `RecordingSheet` — title, language (auto-detect or forced), org/project/attendee pickers reusing the
-  editors' existing search-pick controls, Start/Stop, elapsed time, level meters, then pipeline
-  progress. Attendees stay editable **during** recording.
+- `RecordingSheet` — title, org/project/attendee pickers reusing the editors' existing search-pick
+  controls, Start/Stop, elapsed time, level meters, then pipeline progress. No language field: it's
+  detected from the audio, not chosen. Attendees stay editable **during** recording.
 - `MeetingView` — centre pane for a selected meeting: summary card, attendees as `EntityLink`s,
   transcript. Registered in `CenterPane`'s selection routing.
 - `EntityDetails` — a person gains a derived **Meetings** list. This is the payoff of the whole
@@ -289,13 +320,20 @@ which matters because the process tap is the single most failure-prone piece her
 
 **Phase 4 — transcription.** Add WhisperKit to `Package.swift` **and** `project.pbxproj` (versions are
 declared twice in this repo; bump them together), and to CLAUDE.md's dependency table with its MIT
-licence. `WhisperTranscriber`, `WhisperModelStore`, `VocabularyPrompt`, `PromptEchoFilter`,
-`TranscriptMerger`, audio deletion, the orphan sweep.
+licence. `WhisperTranscriber`, `LanguageDetector`, `WhisperModelStore`, `VocabularyPrompt`,
+`PromptEchoFilter`, `TranscriptMerger`, audio deletion, the orphan sweep — plus
+`Scripts/fetch-whisper-model.sh` and the "Fetch WhisperKit Model" Xcode build phase that embeds the
+model at build time, so nothing downloads at runtime.
 
 **Calibrate on a real code-switched recording**, measuring three things separately so a bad result
-points at a cause: (a) `large-v3` vs. a smaller variant — tech-term accuracy against transcription
-time, recorded as the config default; (b) the vocabulary prompt on vs. off, to confirm it earns its
-complexity; (c) whether the prompt reaches windows past the first. Ends with the real feature working.
+points at a cause: (a) the vocabulary prompt on vs. off, to confirm it earns its
+complexity; (b) whether the prompt reaches windows past the first; (c) whether `LanguageDetector`
+correctly identifies the meeting's dominant language across mic-silent, system-silent, and
+both-tracks-quiet recordings, since that result gates building the prompt at all.
+`openai_whisper-small`
+is a fixed, already-decided choice at this point (the smallest variant with usable multilingual
+accuracy), not a runtime knob to calibrate against a config default. Ends with the real
+feature working.
 
 **Phase 5 — the summary.** `TranscriptChunker`, `FoundationModelsSummarizer`, the summary card.
 Isolated by design: if phases 1–4 run long, ship them and do this next.
@@ -310,8 +348,12 @@ semantic-release versions it correctly.
   counter: attendee names survive a token limit low enough to drop jargon; output is prose in the base
   language, not a word list; a zero-limit case yields no prompt rather than a truncated fragment),
   `PromptEchoFilterTests` (leading echo stripped, a genuine opening line that merely resembles the
-  prompt kept), `TranscriptMergerTests` (interleaving, sole-attendee labelling,
-  one empty track), `MeetingFrontmatterTests` (including a meeting with no attendees),
+  prompt kept), `TranscriptMergerTests` (interleaving, a same-second tie keeping mic before system,
+  one empty track), `LanguageDetectorTests` (trims a leading no-speech window before detecting,
+  returns `nil` rather than falling back on a track that's silent throughout — the signal the
+  mic-then-system fallback relies on — pure logic against WhisperKit's own VAD, the real
+  `detectLangauge` call is gated like the suite below), `MeetingFrontmatterTests` (including a
+  meeting with no attendees),
   `VaultStoreMeetingTests` (history derivation; deleting a person clears them from `attendees:`;
   renaming rewrites `[[id]]` inside meetings), `TranscriptChunkerTests` (pure, no LLM).
 - Audio capture, WhisperKit and the LLM cannot run headlessly on CI. Gate those suites with
@@ -319,7 +361,7 @@ semantic-release versions it correctly.
 - `make check` then `make build` — parity, lint, format, and a real signed `.app`.
 - End-to-end in the running app (`open maillage.xcodeproj`, **Maillage** scheme, ⌘R): play a Teams or
   YouTube clip, talk over it in French using English tech terms, add an attendee mid-recording, stop.
-  Confirm both level meters moved, the transcript interleaves You/other chronologically, **the English
+  Confirm both level meters moved, the transcript interleaves both tracks chronologically, **the English
   technical terms are spelled as English words**, vault names are spelled correctly, the summary is in
   French, the meeting appears on the attendee's detail pane, and `.maillage/recordings/<id>/` is gone.
 - Kill the app deliberately mid-transcription, relaunch, confirm the orphan sweep removed the audio.
@@ -328,4 +370,9 @@ semantic-release versions it correctly.
 ## Explicitly out of scope
 
 Diarization and speaker identification, voiceprints, editing a transcript in-app, importing existing
-audio files, calendar integration, and exporting meetings anywhere.
+audio files, calendar integration, exporting meetings anywhere, and tracking a meeting whose
+*dominant* spoken language itself changes mid-recording (a French half followed by an English
+half). "Code-switching is first-class" always meant foreign vocabulary inside one base language,
+not a meeting hopping between two base languages — the latter would need per-chunk language
+detection and a per-chunk vocabulary prompt, and break the single `language:` field everywhere
+else in this design already assumes one.

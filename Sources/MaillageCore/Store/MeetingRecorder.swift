@@ -1,26 +1,26 @@
 import Foundation
 import Observation
+import WhisperKit
 
 /// Where one recording currently stands.
-///
-/// Two states short of the full pipeline in the design doc (`transcribing`, `summarising`
-/// come with the phases that implement them) — this phase only records, so `.recording` is
-/// followed straight by `.idle` once the files and the meeting are both finalised.
 public enum MeetingRecorderState: Equatable, Sendable {
     case idle
     case recording
+    case transcribing
     case failed(String)
 }
 
-/// Drives one recording from Start to Stop: creates the meeting it belongs to, starts both
-/// audio tracks, and finalises the meeting's duration when they stop.
+/// Drives one recording from Start to a finished transcript: creates the meeting it belongs to,
+/// starts both audio tracks, and on Stop detects the meeting's language, transcribes both
+/// tracks, merges and writes the transcript, then deletes the audio.
 ///
 /// Deliberately not part of `VaultStore` — the store mirrors the vault and every other method
-/// on it completes in one call, where this one runs for as long as a meeting does. It also
-/// isn't folded into `RecordingSheet`: unlike `PersonEditor` and the other editors, which own
-/// their `@State` and call `VaultStore` directly because saving is a single atomic step, a
-/// recording is a *process* with its own lifetime, independent of whether the sheet showing it
-/// stays open — reason enough for its own type even before phase 4 gives it more to coordinate.
+/// on it completes in one call, where this one runs for as long as a meeting does, well past
+/// Stop now that transcription happens in the background. It also isn't folded into
+/// `RecordingSheet`: unlike `PersonEditor` and the other editors, which own their `@State` and
+/// call `VaultStore` directly because saving is a single atomic step, a recording is a *process*
+/// whose lifetime must outlive the sheet showing it — `RootView` owns the instance for exactly
+/// this reason, handing it to `RecordingSheet` as a binding rather than letting the sheet own it.
 @MainActor
 @Observable
 public final class MeetingRecorder {
@@ -44,14 +44,13 @@ public final class MeetingRecorder {
     /// microphone permission never leaves a zero-second meeting sitting in the vault.
     public func start(
         title: String,
-        language: String?,
         organization: Wikilink?,
         project: Wikilink?,
         attendees: [Wikilink]
     ) async {
         guard
             let meeting = store.createMeeting(
-                title: title, language: language, organization: organization, project: project,
+                title: title, organization: organization, project: project,
                 attendees: attendees)
         else {
             state = .failed(store.lastError ?? "Couldn't create the meeting.")
@@ -76,19 +75,90 @@ public final class MeetingRecorder {
         }
     }
 
-    /// Stops both tracks and writes the recording's duration to the meeting. Idle if nothing
-    /// was recording — calling this from a sheet's `onDisappear` as a safety net must not
-    /// throw or misbehave just because Stop was already pressed.
+    /// Stops both tracks, writes the recording's duration, then hands off to transcription in
+    /// the background — this call itself returns immediately, so Stop & Save can dismiss the
+    /// sheet without waiting on a model. Idle if nothing was recording — calling this from a
+    /// sheet's `onDisappear` as a safety net must not throw or misbehave just because Stop was
+    /// already pressed.
     public func stop() {
         guard state == .recording, let meetingID else { return }
         let duration = capture.stop()
 
-        if var meeting = store.snapshot.meetings[meetingID] {
-            meeting.duration = duration
-            store.update(meeting)
+        guard var meeting = store.snapshot.meetings[meetingID] else {
+            self.meetingID = nil
+            state = .idle
+            return
         }
+        meeting.duration = duration
+        store.update(meeting)
 
-        self.meetingID = nil
-        state = .idle
+        state = .transcribing
+        let directory = store.location.recordingsDirectory(forMeeting: meetingID)
+        Task { [weak self] in
+            await self?.transcribe(meetingID: meetingID, directory: directory)
+        }
+    }
+
+    /// Detect → prompt → transcribe both tracks → merge → write → delete the audio. Every step
+    /// after detection depends on the language it found, and both tracks share one prompt built
+    /// from it — see the design doc's Constraint 2 for why the language is held for the whole
+    /// meeting rather than redetected per track or per chunk.
+    private func transcribe(meetingID: EntityID, directory: URL) async {
+        defer {
+            self.meetingID = nil
+            if case .failed = state {} else { state = .idle }
+        }
+        do {
+            let micURL = directory.appendingPathComponent("mic.wav")
+            let systemURL = directory.appendingPathComponent("system.wav")
+
+            let whisperKit = try await WhisperModelStore().loadWhisperKit()
+            let language = try await LanguageDetector(whisperKit: whisperKit)
+                .detect(micTrackAt: micURL, systemTrackAt: systemURL)
+
+            guard var meeting = store.snapshot.meetings[meetingID] else { return }
+
+            let customTerms =
+                store.usedProjectRoles + store.usedRelationLabels
+                + VaultConfig.vocabularyTerms(at: store.location)
+            // `Constants` is WhisperKit's own top-level type, not nested under `WhisperKit` — read
+            // from it rather than hardcode, so this tracks the library if the context size changes.
+            let tokenLimit = (Constants.maxTokenContext / 2) - 1
+            let promptText = VocabularyPrompt.build(
+                meeting: meeting, snapshot: store.snapshot, language: language,
+                customTerms: customTerms,
+                budget: .init(
+                    limit: tokenLimit,
+                    count: { whisperKit.tokenizer?.encode(text: $0).count ?? 0 }))
+            let promptTokens =
+                promptText.isEmpty ? nil : whisperKit.tokenizer?.encode(text: promptText)
+
+            let transcriber = WhisperTranscriber(whisperKit: whisperKit)
+            var micSegments = try await transcriber.transcribe(
+                fileAt: micURL, language: language, promptTokens: promptTokens)
+            var systemSegments = try await transcriber.transcribe(
+                fileAt: systemURL, language: language, promptTokens: promptTokens)
+            if !promptText.isEmpty {
+                micSegments = PromptEchoFilter.strip(micSegments, prompt: promptText)
+                systemSegments = PromptEchoFilter.strip(systemSegments, prompt: promptText)
+            }
+
+            let merged = TranscriptMerger.merge(
+                micSegments: micSegments, systemSegments: systemSegments)
+
+            meeting.language = language
+            meeting.body = TranscriptCodec.join(
+                preamble: TranscriptCodec.split(meeting.body).preamble, segments: merged)
+            store.update(meeting)
+
+            try? FileManager.default.removeItem(at: directory)
+        } catch {
+            state = .failed(error.localizedDescription)
+            // The recording sheet is long gone by the time transcription fails or succeeds, so
+            // `state` alone is never observed — route through the same banner `VaultStore` already
+            // shows for a failed save or load, rather than adding a second, parallel error surface.
+            let name = store.displayName(for: meetingID) ?? meetingID
+            store.lastError = "Couldn't transcribe \"\(name)\": \(error.localizedDescription)"
+        }
     }
 }
