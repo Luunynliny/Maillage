@@ -4,30 +4,27 @@ import SwiftUI
 ///
 /// Two phases in one sheet rather than a settings form that hands off to a separate recording
 /// screen, because the fields on the first phase — mostly attendees — stay relevant and stay
-/// editable on the second. Title, language, organization and project lock once recording
-/// starts: language in particular can't change mid-recording without invalidating the
-/// transcription phase's whole premise of one forced language per meeting.
+/// editable on the second. Title, organization and project lock once recording starts. There is
+/// no language field here at all — the transcription phase detects it from the audio itself,
+/// once, from a dedicated pass — so nothing about it needs asking or locking up front.
 ///
 /// This sheet *is* the "you are being recorded" indicator the design doc requires: it cannot
 /// be swiped or Esc'd away while `isRecording`, only stopped, so there is no way to be
-/// recording with nothing on screen saying so. A recording does not outlive it — closing it
-/// stops capture — so there is no separate always-visible indicator to add elsewhere yet; one
-/// would only earn its place if a later phase let a recording run with the sheet closed.
+/// recording with nothing on screen saying so. `recorder` is a binding into `RootView`'s state,
+/// not owned here — Stop & Save dismisses this sheet immediately, but transcription keeps
+/// running in the background well after, so the recorder driving it must outlive the sheet.
 struct RecordingSheet: View {
     @Environment(VaultStore.self) private var store
     @Environment(\.dismiss) private var dismiss
 
+    @Binding var recorder: MeetingRecorder?
     var onSaved: (EntityID) -> Void = { _ in }
 
-    @State private var recorder: MeetingRecorder?
     @State private var title = ""
-    @State private var language = "fr"
     @State private var organizations: Set<EntityID> = []
     @State private var projects: Set<EntityID> = []
     @State private var attendees: Set<EntityID> = []
     @State private var errorMessage: String?
-
-    private static let languages = [("fr", "French"), ("en", "English")]
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.large) {
@@ -41,9 +38,6 @@ struct RecordingSheet: View {
 
             VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
                 FormField("Title", placeholder: "Acme standup", text: $title)
-                    .disabled(isRecording)
-
-                languageField
                     .disabled(isRecording)
 
                 MultiSelectField(
@@ -142,23 +136,6 @@ struct RecordingSheet: View {
         }
     }
 
-    // MARK: Fields
-
-    private var languageField: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text("Language")
-                .font(Theme.Font.caption)
-                .foregroundStyle(Theme.textMuted)
-            Picker("", selection: $language) {
-                ForEach(Self.languages, id: \.0) { code, name in
-                    Text(name).tag(code)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-        }
-    }
-
     // MARK: Footer
 
     private var footer: some View {
@@ -191,7 +168,6 @@ struct RecordingSheet: View {
         Task {
             await newRecorder.start(
                 title: title,
-                language: language,
                 organization: organizations.min().map(Wikilink.init),
                 project: projects.min().map(Wikilink.init),
                 attendees: attendees.sorted().map(Wikilink.init))

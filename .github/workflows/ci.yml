@@ -206,6 +206,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The "Fetch WhisperKit Model" build phase Scripts/build-app.sh triggers downloads ~216MB
+      # from Hugging Face on a cache miss. Keyed on the fetch script's own hash so a future change
+      # to it (a different variant, a bug fix) invalidates the cache automatically — no separate
+      # version string to remember to bump.
+      - name: Cache WhisperKit model
+        uses: actions/cache@v4
+        with:
+          path: .whisperkit-model-cache
+          key: whisperkit-model-openai_whisper-small_216MB-${{ hashFiles('Scripts/fetch-whisper-model.sh') }}
+
       # Signed ad-hoc, which needs no Developer ID and so works on a runner. The version is left
       # at the project's own MARKETING_VERSION here — only `release` knows the real one, and it
       # rebuilds nothing: it restamps this exact bundle. See Scripts/build-app.sh.
