@@ -105,21 +105,53 @@ public struct Meeting: Entity, Codable {
     }
 }
 
-/// One utterance in a transcript: when and what — never who.
+/// One utterance in a transcript: when, what, and — since meeting recording v2 — who, if a
+/// diarizer slot has been confirmed against a Person.
 ///
-/// No speaker field, on purpose: this vault records no speaker identification, and mic vs.
-/// system track is not a substitute for it. That split only labels *who* correctly for a remote
-/// call, where the other party's voice can only physically enter through the system tap. An
-/// in-person meeting recorded on one laptop puts everyone's voice through the mic, so a track
-/// can hold any number of unidentified people — attributing it to "You" would be a guess dressed
-/// up as a fact.
+/// The original design here had no speaker field at all: mic vs. system track was never a
+/// substitute for identification, since an in-person meeting puts everyone's voice through the
+/// same mic, and attributing that to "You" would have been a guess dressed up as a fact. A
+/// ``Speaker`` is different — it's diarizer-assigned evidence, confirmed by a human before it
+/// ever gets a `personID`, not an automated guess. See the meeting-recording-v2 design doc for
+/// the full reasoning behind reversing the original "no diarization" rule.
 public struct TranscriptSegment: Hashable, Sendable {
     /// Offset from the start of the recording.
     public var offsetSeconds: Int
     public var text: String
+    /// `nil` when diarization was off for this meeting (the >4-speaker opt-out, or any meeting
+    /// recorded before this feature existed) — indistinguishable from an old-format transcript
+    /// on purpose, since the presence of a tag is the only signal this needs.
+    public var speaker: Speaker?
 
-    public init(offsetSeconds: Int, text: String) {
+    public init(offsetSeconds: Int, text: String, speaker: Speaker? = nil) {
         self.offsetSeconds = offsetSeconds
         self.text = text
+        self.speaker = speaker
+    }
+}
+
+/// Which audio track a diarized voice was heard on. Mic and system are unrelated speaker
+/// populations — an in-person room's voices vs. a remote call's — so a slot only ever means
+/// anything alongside the track it came from.
+public enum AudioTrack: String, Hashable, Sendable {
+    case mic
+    case system
+}
+
+/// A diarizer-assigned voice slot on one track, and who it's been resolved to, if anyone.
+/// `slot` is 0-3 — Sortformer's four fixed slots — and unique only within `track`: mic slot 0
+/// and system slot 0 are unrelated voices, never assumed to be the same person.
+public struct Speaker: Hashable, Sendable {
+    public let track: AudioTrack
+    public let slot: Int
+    /// Set only once a human has confirmed (or corrected) who this slot is — never inferred
+    /// silently. See ``Voiceprint/bestMatch(candidate:among:threshold:)`` for how a suggestion
+    /// gets made, which is always a suggestion, never an assignment on its own.
+    public var personID: EntityID?
+
+    public init(track: AudioTrack, slot: Int, personID: EntityID? = nil) {
+        self.track = track
+        self.slot = slot
+        self.personID = personID
     }
 }
