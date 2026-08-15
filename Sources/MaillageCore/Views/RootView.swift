@@ -17,6 +17,9 @@ public struct RootView: View {
     @State private var editorRequest: EditorRequest?
     @State private var isPaletteVisible = false
     @State private var isPickingVault = false
+    /// Owned here, not by `RecordingSheet`, so a recording's transcription pipeline survives
+    /// the sheet being dismissed — see `MeetingRecorder`'s own doc comment for why.
+    @State private var activeRecorder: MeetingRecorder?
     /// Whether the centre pane's details section is unfolded. Held here rather than in
     /// ``CenterPaneHeader`` so the View menu's Show/Hide Details item can reach it; the header
     /// folds it back shut on every change of subject.
@@ -32,7 +35,8 @@ public struct RootView: View {
             CenterPane(
                 selection: $selection,
                 editorRequest: $editorRequest,
-                isDetailVisible: $isDetailVisible)
+                isDetailVisible: $isDetailVisible,
+                activeRecorder: activeRecorder)
         }
         // Details fold shut on every change of subject. Here rather than in
         // ``CenterPaneHeader``, because switching between kinds swaps the whole centre view for
@@ -96,6 +100,9 @@ public struct RootView: View {
         case .newProject:
             ProjectEditor(existing: nil) { selection = $0 }
 
+        case .newMeeting:
+            RecordingSheet(recorder: $activeRecorder) { selection = $0 }
+
         case .edit(let id):
             switch store.entity(id: id) {
             case .person(let person):
@@ -108,6 +115,14 @@ public struct RootView: View {
                 OrganizationEditor(existing: org) { selection = $0 }
             case .project(let project):
                 ProjectEditor(existing: project) { selection = $0 }
+            case .meeting:
+                // No `MeetingEditor` yet, matching `.newMeeting` above — attendees are set
+                // while recording, and nothing else on a meeting is edited in-app so far.
+                DismissibleMessage(
+                    title: "Meetings aren't edited here",
+                    message:
+                        "Set attendees while recording. Everything else can be edited by hand "
+                        + "in the vault file for now.")
             case nil:
                 missingEntitySheet
             }
@@ -233,6 +248,21 @@ private struct DeleteConfirmation: View {
             if members > 0 {
                 lines.append("\(members) people will be unlinked from it, but not deleted.")
             }
+        }
+        // Meetings never appear in `backlinks(for:)` — nothing links *to* one — so without
+        // this, deleting a well-attended person or a project full of meeting notes looked
+        // consequence-free right up until the meeting history quietly lost an attendee.
+        let meetingCount: Int =
+            switch entity {
+            case .person: store.meetings(withPerson: entity.id).count
+            case .organization: store.meetings(inOrganization: entity.id).count
+            case .project: store.meetings(onProject: entity.id).count
+            case .meeting: 0
+            }
+        if meetingCount > 0 {
+            lines.append(
+                "\(meetingCount) meeting\(meetingCount == 1 ? "" : "s") will no longer reference it, but won't be deleted."
+            )
         }
         return lines.joined(separator: " ")
     }

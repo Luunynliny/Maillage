@@ -84,5 +84,20 @@ struct SeededVaultTests {
         #expect(store.logoIDs[.person]?.contains("philip-fry") == true)
         #expect(store.logoIDs[.organization]?.contains("planet-express") == true)
         #expect(store.logo(kind: .person, id: "philip-fry") != nil)
+
+        // The one hand-written meeting: proof this vault's format agrees with what a person
+        // editing markdown directly would write, same as everything else this test checks.
+        let standup = try #require(store.snapshot.meetings["2026-08-12-ship-refit-standup"])
+        #expect(standup.displayName == "Ship refit standup")
+        #expect(standup.organization?.id == "planet-express")
+        #expect(standup.project?.id == "ship-refit")
+        #expect(standup.attendees.map(\.id) == ["philip-fry", "turanga-leela", "bender-rodriguez"])
+        #expect(store.meetings(withPerson: "philip-fry") == [standup])
+
+        let (preamble, segments) = TranscriptCodec.split(standup.body)
+        #expect(preamble.contains("Refit is behind schedule"))
+        #expect(segments.count == 4)
+        #expect(segments.first?.text == "Where are we on the hull plating?")
+        #expect(segments.first?.offsetSeconds == 5)
     }
 }

@@ -42,10 +42,30 @@ public struct VaultLocation: Hashable, Sendable {
         assetsDirectory(for: kind).appendingPathComponent("\(id).png")
     }
 
-    /// App-private settings, kept inside the vault so it travels with the data.
-    public var configFileURL: URL {
+    /// Custom terms `VocabularyPrompt` primes last, after attendees and org/project names — one
+    /// per line. Absent in most vaults, which is the normal state, not an issue.
+    public var vocabularyFileURL: URL {
         root.appendingPathComponent(".maillage", isDirectory: true)
-            .appendingPathComponent("config.yaml")
+            .appendingPathComponent("vocabulary.txt")
+    }
+
+    /// Where a meeting's in-progress audio lives while it's being recorded and transcribed:
+    /// `.maillage/recordings/<meeting-id>/`. App-private and inside the vault for the same
+    /// reason as ``vocabularyFileURL``, and per-meeting rather than one flat folder so deleting a
+    /// meeting's audio is deleting one directory, never a filter over a shared one.
+    ///
+    /// Nothing here survives past transcription — see the design doc's audio-retention
+    /// promise — so unlike ``assetsDirectory(for:)`` this is never created eagerly by
+    /// ``createSkeletonIfNeeded()``; it exists only from the moment a recording starts.
+    public func recordingsDirectory(forMeeting id: EntityID) -> URL {
+        recordingsRootDirectory.appendingPathComponent(id, isDirectory: true)
+    }
+
+    /// Parent of every in-progress recording, so the launch-time orphan sweep has one place to
+    /// list rather than reconstructing the path itself.
+    public var recordingsRootDirectory: URL {
+        root.appendingPathComponent(".maillage", isDirectory: true)
+            .appendingPathComponent("recordings", isDirectory: true)
     }
 
     /// Creates the vault root, the three entity directories, their asset folders, and
@@ -56,11 +76,14 @@ public struct VaultLocation: Hashable, Sendable {
             try fm.createDirectory(at: directory(for: kind), withIntermediateDirectories: true)
             // Made eagerly alongside the entity directory, so the vault's shape is visible in
             // Finder before anything is in it and a write never has to create its own parent.
+            // Skipped for a kind with no logos of its own — an empty `assets/meetings/` next
+            // to two folders that actually hold something would just be Finder clutter.
+            guard kind.supportsLogo else { continue }
             try fm.createDirectory(
                 at: assetsDirectory(for: kind), withIntermediateDirectories: true)
         }
         try fm.createDirectory(
-            at: configFileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            at: vocabularyFileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
     }
 
     /// True when the vault root already exists on disk.

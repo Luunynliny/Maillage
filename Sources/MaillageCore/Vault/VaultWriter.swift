@@ -139,26 +139,7 @@ public struct VaultWriter {
         var updated = snapshot
 
         // 1. Rewrite the entity itself under its new id.
-        switch kind {
-        case .person:
-            if var person = updated.people.removeValue(forKey: oldID) {
-                person.id = newID
-                updated.people[newID] = person
-                try write(person)
-            }
-        case .organization:
-            if var org = updated.organizations.removeValue(forKey: oldID) {
-                org.id = newID
-                updated.organizations[newID] = org
-                try write(org)
-            }
-        case .project:
-            if var project = updated.projects.removeValue(forKey: oldID) {
-                project.id = newID
-                updated.projects[newID] = project
-                try write(project)
-            }
-        }
+        try renameStoredEntity(kind: kind, from: oldID, to: newID, in: &updated)
         try FileManager.default.removeItem(at: oldURL)
 
         // 2. Carry the logo across. The filename is the identity and a logo is named after it,
@@ -215,6 +196,81 @@ public struct VaultWriter {
             }
         }
 
+        // Nothing links *to* a meeting — attendance lives only on the meeting's own file —
+        // so renaming one needed no repointing above. Renaming a person, organization or
+        // project, though, has to reach every meeting that names them, the same as it
+        // reaches every person's relations, organization and projects above. Its own method
+        // rather than a fourth block inlined here, purely to keep `rename` itself under the
+        // complexity budget documented on `cyclomatic_complexity` in `.swiftlint.yml` — the
+        // repointing itself is no more entangled with the rest than the organization/project
+        // block above already was.
+        try repointMeetings(kind: kind, from: oldID, to: newID, in: &updated)
+
         return updated
+    }
+
+    /// Step 1 of ``rename``: writes the renamed entity under `newID` and drops the old key,
+    /// for whichever one of the four snapshot dictionaries `kind` names.
+    private func renameStoredEntity(
+        kind: EntityKind, from oldID: EntityID, to newID: EntityID, in updated: inout VaultSnapshot
+    ) throws {
+        switch kind {
+        case .person:
+            if var person = updated.people.removeValue(forKey: oldID) {
+                person.id = newID
+                updated.people[newID] = person
+                try write(person)
+            }
+        case .organization:
+            if var org = updated.organizations.removeValue(forKey: oldID) {
+                org.id = newID
+                updated.organizations[newID] = org
+                try write(org)
+            }
+        case .project:
+            if var project = updated.projects.removeValue(forKey: oldID) {
+                project.id = newID
+                updated.projects[newID] = project
+                try write(project)
+            }
+        case .meeting:
+            if var meeting = updated.meetings.removeValue(forKey: oldID) {
+                meeting.id = newID
+                updated.meetings[newID] = meeting
+                try write(meeting)
+            }
+        }
+    }
+
+    /// Step 3's meeting pass: see the call site in ``rename`` for why this is split out.
+    private func repointMeetings(
+        kind: EntityKind, from oldID: EntityID, to newID: EntityID, in updated: inout VaultSnapshot
+    ) throws {
+        guard kind == .person || kind == .organization || kind == .project else { return }
+
+        for (id, var meeting) in updated.meetings {
+            var touched = false
+
+            if kind == .person {
+                for index in meeting.attendees.indices
+                where meeting.attendees[index].id == oldID {
+                    meeting.attendees[index].id = newID
+                    touched = true
+                }
+            }
+            if kind == .organization, meeting.organization?.id == oldID {
+                meeting.organization?.id = newID
+                touched = true
+            }
+            if kind == .project, meeting.project?.id == oldID {
+                meeting.project?.id = newID
+                touched = true
+            }
+
+            if touched {
+                updated.meetings[id] = meeting
+                try write(meeting)
+            }
+        }
     }
 }

@@ -18,12 +18,13 @@ public struct VaultSnapshot: Sendable {
     public var people: [EntityID: Person] = [:]
     public var organizations: [EntityID: Organization] = [:]
     public var projects: [EntityID: Project] = [:]
+    public var meetings: [EntityID: Meeting] = [:]
     public var issues: [VaultLoadIssue] = []
 
     public init() {}
 
     public var isEmpty: Bool {
-        people.isEmpty && organizations.isEmpty && projects.isEmpty
+        people.isEmpty && organizations.isEmpty && projects.isEmpty && meetings.isEmpty
     }
 }
 
@@ -65,6 +66,16 @@ public struct VaultReader {
             case .success(var project):
                 project.id = url.deletingPathExtension().lastPathComponent
                 snapshot.projects[project.id] = project
+            case .failure(let issue):
+                snapshot.issues.append(issue)
+            }
+        }
+
+        for url in markdownFiles(in: .meeting) {
+            switch decode(Meeting.self, at: url) {
+            case .success(var meeting):
+                meeting.id = url.deletingPathExtension().lastPathComponent
+                snapshot.meetings[meeting.id] = meeting
             case .failure(let issue):
                 snapshot.issues.append(issue)
             }
@@ -113,3 +124,4 @@ protocol BodyWritable {
 extension Person: BodyWritable {}
 extension Organization: BodyWritable {}
 extension Project: BodyWritable {}
+extension Meeting: BodyWritable {}
