@@ -53,6 +53,9 @@ struct MeetingView: View {
                 if isTranscribing {
                     transcribingCard
                 }
+                if isSummarising {
+                    summarisingCard
+                }
                 if !preamble.isEmpty {
                     summaryCard
                 }
@@ -67,9 +70,9 @@ struct MeetingView: View {
 
     // MARK: Transcribing
 
-    /// There is no summarising step to spin for yet — nothing generates a summary until a
-    /// later phase exists — so this covers the one real wait today: the background pipeline
+    /// Covers the wait between Stop and a written transcript — the background pipeline
     /// `MeetingRecorder` kicks off on Stop, which outlives the recording sheet closing.
+    /// `summarisingCard` below is the analogous spinner for the step right after this one.
     private var transcribingCard: some View {
         Card {
             HStack(spacing: Theme.Spacing.small) {
@@ -85,6 +88,25 @@ struct MeetingView: View {
 
     private var isTranscribing: Bool {
         activeRecorder?.meetingID == meeting.id && activeRecorder?.state == .transcribing
+    }
+
+    // MARK: Summarising
+
+    private var summarisingCard: some View {
+        Card {
+            HStack(spacing: Theme.Spacing.small) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Summarising…")
+                    .font(Theme.Font.body)
+                    .foregroundStyle(Theme.textMuted)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var isSummarising: Bool {
+        activeRecorder?.meetingID == meeting.id && activeRecorder?.state == .summarising
     }
 
     // MARK: Attendees
