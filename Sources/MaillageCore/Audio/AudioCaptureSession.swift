@@ -33,8 +33,17 @@ public final class AudioCaptureSession {
     public private(set) var microphoneLevel: Float = 0
     public private(set) var systemAudioLevel: Float = 0
 
+    /// Live 16 kHz mono samples from each track, for a streaming transcriber to consume — the
+    /// same converted buffers each recorder writes to its WAV file, just also handed off here.
+    /// A fresh stream per ``start(microphoneURL:systemAudioURL:)`` call, already finished
+    /// (empty) before the first one — consuming either only makes sense after `start` returns.
+    public private(set) var microphoneSamples = AsyncStream<[Float]> { $0.finish() }
+    public private(set) var systemAudioSamples = AsyncStream<[Float]> { $0.finish() }
+
     private let microphone = MicrophoneRecorder()
     private let systemAudio = SystemAudioTap()
+    private var microphoneContinuation: AsyncStream<[Float]>.Continuation?
+    private var systemAudioContinuation: AsyncStream<[Float]>.Continuation?
     private var startedAt: Date?
     private var pollTask: Task<Void, Never>?
 
@@ -57,18 +66,33 @@ public final class AudioCaptureSession {
             throw AudioCaptureError.microphonePermissionDenied
         }
 
+        // Built before either track starts, so the very first buffer each callback produces
+        // already has somewhere to go — `.makeStream()`'s continuation is `Sendable` and safe
+        // to call from the real-time thread the callback below actually runs on, unlike `self`.
+        let micStream = AsyncStream<[Float]>.makeStream()
+        let systemStream = AsyncStream<[Float]>.makeStream()
+
         do {
-            try systemAudio.start(to: systemAudioURL)
+            try systemAudio.start(to: systemAudioURL) { samples in
+                systemStream.continuation.yield(samples)
+            }
         } catch {
             throw AudioCaptureError.systemAudio(error)
         }
 
         do {
-            try microphone.start(to: microphoneURL)
+            try microphone.start(to: microphoneURL) { samples in
+                micStream.continuation.yield(samples)
+            }
         } catch {
             systemAudio.stop()
             throw AudioCaptureError.microphone(error)
         }
+
+        microphoneSamples = micStream.stream
+        systemAudioSamples = systemStream.stream
+        microphoneContinuation = micStream.continuation
+        systemAudioContinuation = systemStream.continuation
 
         isRecording = true
         startedAt = Date()
@@ -84,6 +108,12 @@ public final class AudioCaptureSession {
         pollTask = nil
         microphone.stop()
         systemAudio.stop()
+        // Finishing lets a `for await` over either stream end on its own, rather than a
+        // consumer having to notice `isRecording` went false from the outside.
+        microphoneContinuation?.finish()
+        systemAudioContinuation?.finish()
+        microphoneContinuation = nil
+        systemAudioContinuation = nil
         isRecording = false
         microphoneLevel = 0
         systemAudioLevel = 0

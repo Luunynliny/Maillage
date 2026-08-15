@@ -39,10 +39,15 @@ final class SystemAudioTap {
     private var ioProcID: AudioDeviceIOProcID?
     private var file: AVAudioFile?
     private var converter: PCMConverter?
+    private var onBuffer: (@Sendable ([Float]) -> Void)?
 
     let level = LockedValue<Float>(0)
 
-    func start(to url: URL) throws {
+    /// See ``MicrophoneRecorder/start(to:onBuffer:)`` for what `onBuffer` is for and the
+    /// real-time-thread constraints on it — identical here, just fed from the IOProc instead
+    /// of `AVAudioEngine`'s tap.
+    func start(to url: URL, onBuffer: (@Sendable ([Float]) -> Void)? = nil) throws {
+        self.onBuffer = onBuffer
         try createTapExcludingSelf()
         try createAggregateDevice()
 
@@ -90,6 +95,7 @@ final class SystemAudioTap {
         ioProcID = nil
         file = nil
         converter = nil
+        onBuffer = nil
         level.set(0)
         if aggregateDeviceID != .unknown {
             AudioHardwareDestroyAggregateDevice(aggregateDeviceID)
@@ -207,6 +213,17 @@ final class SystemAudioTap {
         level.set(Self.rootMeanSquare(of: buffer))
         guard let converted = converter?.convert(buffer) else { return }
         try? file?.write(from: converted)
+        if let onBuffer {
+            onBuffer(Self.samples(from: converted))
+        }
+    }
+
+    /// See ``MicrophoneRecorder``'s copy of this — same reasoning: the buffer is only valid
+    /// for the duration of this callback, so anything handed off the real-time thread needs
+    /// its own plain array.
+    private static func samples(from buffer: AVAudioPCMBuffer) -> [Float] {
+        guard let channel = buffer.floatChannelData?[0] else { return [] }
+        return Array(UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength)))
     }
 
     private static func rootMeanSquare(of buffer: AVAudioPCMBuffer) -> Float {
