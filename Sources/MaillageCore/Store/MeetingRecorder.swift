@@ -33,6 +33,12 @@ public final class MeetingRecorder {
     public let capture = AudioCaptureSession()
 
     private let store: VaultStore
+    /// Drain `capture`'s live sample streams for the duration of the recording. No-op for now —
+    /// a later phase replaces these with the actual streaming transcriber — but wiring them up
+    /// here first proves buffers flow end to end, and that consuming them changes nothing about
+    /// how a recording behaves, before anything downstream depends on it.
+    private var microphoneDrainTask: Task<Void, Never>?
+    private var systemAudioDrainTask: Task<Void, Never>?
 
     public init(store: VaultStore) {
         self.store = store
@@ -69,6 +75,12 @@ public final class MeetingRecorder {
                 microphoneURL: directory.appendingPathComponent("mic.wav"),
                 systemAudioURL: directory.appendingPathComponent("system.wav"))
             state = .recording
+            microphoneDrainTask = Task { [capture] in
+                for await _ in capture.microphoneSamples {}
+            }
+            systemAudioDrainTask = Task { [capture] in
+                for await _ in capture.systemAudioSamples {}
+            }
         } catch {
             capture.stop()
             try? FileManager.default.removeItem(at: directory)
