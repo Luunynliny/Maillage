@@ -22,8 +22,10 @@ public enum MeetingRecorderState: Equatable, Sendable {
 /// Stop now that transcription happens in the background. It also isn't folded into
 /// `RecordingSheet`: unlike `PersonEditor` and the other editors, which own their `@State` and
 /// call `VaultStore` directly because saving is a single atomic step, a recording is a *process*
-/// whose lifetime must outlive the sheet showing it — `RootView` owns the instance for exactly
-/// this reason, handing it to `RecordingSheet` as a binding rather than letting the sheet own it.
+/// whose lifetime must outlive both the sheet that starts it and the view that watches it —
+/// `RootView` owns the instance for exactly this reason, handing it to `RecordingSheet` to start
+/// one and to `MeetingView` to show, edit and stop the active one, rather than letting either own
+/// it.
 @MainActor
 @Observable
 public final class MeetingRecorder {

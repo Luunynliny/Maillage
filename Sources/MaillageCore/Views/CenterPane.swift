@@ -56,10 +56,16 @@ struct CenterPane: View {
                     person: person, selection: $selection,
                     editorRequest: $editorRequest, isDetailVisible: $isDetailVisible)
             case .meeting(let meeting):
+                // Own identity per meeting, not just per kind: `MeetingView` seeds its editable
+                // organization/project/attendees `@State` from `meeting` once, at init, so
+                // switching from one meeting straight to another must not carry the first
+                // meeting's picker selections onto the second.
                 MeetingView(
                     meeting: meeting, selection: $selection,
                     editorRequest: $editorRequest, isDetailVisible: $isDetailVisible,
-                    activeRecorder: activeRecorder)
+                    activeRecorder: activeRecorder
+                )
+                .id(meeting.id)
             // Nothing selected: the bubbles are the only view that stands on its own without a
             // subject, and they're where you click through to the other three.
             case nil:
