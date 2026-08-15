@@ -10,6 +10,7 @@
 		000000000000000000000122 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000114 /* Yams */; };
 		000000000000000000000125 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000116 /* MarkdownUI */; };
 		000000000000000000000126 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000118 /* WhisperKit */; };
+		000000000000000000000143 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000142 /* FluidAudio */; };
 		000000000000000000000123 /* MaillageCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000C1 /* MaillageCore.framework */; };
 		000000000000000000000124 /* MaillageCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000C1 /* MaillageCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -65,6 +66,7 @@
 				000000000000000000000122 /* Yams in Frameworks */,
 				000000000000000000000125 /* MarkdownUI in Frameworks */,
 				000000000000000000000126 /* WhisperKit in Frameworks */,
+				000000000000000000000143 /* FluidAudio in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -148,6 +150,7 @@
 				000000000000000000000114 /* Yams */,
 				000000000000000000000116 /* MarkdownUI */,
 				000000000000000000000118 /* WhisperKit */,
+				000000000000000000000142 /* FluidAudio */,
 			);
 			productName = MaillageCore;
 			productReference = 0000000000000000000000C1 /* MaillageCore.framework */;
@@ -208,6 +211,7 @@
 				000000000000000000000112 /* XCRemoteSwiftPackageReference "Yams" */,
 				000000000000000000000115 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 				000000000000000000000117 /* XCRemoteSwiftPackageReference "WhisperKit" */,
+				000000000000000000000141 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0000000000000000000000A3 /* Products */;
@@ -520,6 +524,14 @@
 				minimumVersion = 1.1.0;
 			};
 		};
+		000000000000000000000141 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.12.4;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -537,6 +549,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 000000000000000000000117 /* XCRemoteSwiftPackageReference "WhisperKit" */;
 			productName = WhisperKit;
+		};
+		000000000000000000000142 /* FluidAudio */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 000000000000000000000141 /* XCRemoteSwiftPackageReference "FluidAudio" */;
+			productName = FluidAudio;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

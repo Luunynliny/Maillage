@@ -19,6 +19,7 @@ let package = Package(
         .package(url: "https://github.com/jpsim/Yams", from: "5.1.0"),
         .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.1"),
         .package(url: "https://github.com/argmaxinc/WhisperKit", from: "1.1.0"),
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.12.4"),
     ],
     targets: [
         .target(
@@ -27,6 +28,7 @@ let package = Package(
                 .product(name: "Yams", package: "Yams"),
                 .product(name: "MarkdownUI", package: "swift-markdown-ui"),
                 .product(name: "WhisperKit", package: "WhisperKit"),
+                .product(name: "FluidAudio", package: "FluidAudio"),
             ],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
