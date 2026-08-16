@@ -7,9 +7,11 @@ import PackageDescription
 
 let package = Package(
     name: "maillage",
-    // v26: the meeting-recording feature needs FoundationModels for the on-device meeting
-    // summary, which ships only from macOS 26. See
-    // docs/superpowers/specs/2026-08-13-meeting-recording-design.md.
+    // v26: originally required by FoundationModels, which the meeting-recording feature used for
+    // an on-device summary — see docs/superpowers/specs/2026-08-13-meeting-recording-design.md.
+    // FoundationModels is gone now, replaced by the bundled mlx-swift-lm model below, which has no
+    // comparable OS-version floor. Open question, not yet investigated: does anything else in the
+    // app still need macOS 26? See CLAUDE.md's Stack section.
     platforms: [.macOS(.v26)],
     products: [
         .executable(name: "maillage", targets: ["Maillage"]),

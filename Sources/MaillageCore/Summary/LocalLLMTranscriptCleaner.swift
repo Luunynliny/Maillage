@@ -68,20 +68,47 @@ public final class LocalLLMTranscriptCleaner: TranscriptCleaner, Sendable {
     ) async throws -> [TranscriptSegment] {
         // Fresh ChatSession per call — no context should accumulate between independent chunks.
         // Cheap: the shared `container`'s weights are loaded once and reused across every chunk.
-        let session = ChatSession(
-            container, instructions: "\(instructions) Respond in \(language).")
         let transcriptText = segments.map { LocalLLMSummarizer.line(for: $0) }.joined(
             separator: "\n")
+        let session = ChatSession(
+            container, instructions: "\(instructions) Respond in \(language).",
+            generateParameters: GenerateParameters(
+                maxTokens: Self.maxTokens(forInputCharacterCount: transcriptText.count),
+                repetitionPenalty: 1.1))
         let response = try await session.respond(
             to: "Clean up this meeting transcript excerpt:\n\n\(transcriptText)")
 
         let cleaned = Self.parseCleanedLines(response)
-        // A response that parsed to nothing at all is worse than useless — treat it as a failure
-        // so `mapChunks` falls back to this chunk's original segments instead of silently
-        // dropping them, the same "never lose the transcript" posture as everywhere else in this
-        // path.
-        guard !cleaned.isEmpty else { throw LocalLLMTranscriptCleanerError.unparseableResponse }
+        // Cleanup drops garbage, it never condenses — a response that parsed to (almost) nothing,
+        // or whose last timestamp runs past the input's, is the model doing a different task
+        // (summarizing, truncating) rather than doing this one badly. `merged` gets persisted and
+        // the source audio deleted right after, so this has to catch more than total failure:
+        // treat it as a failure so `mapChunks` falls back to this chunk's original segments
+        // instead of silently losing most of it.
+        guard Self.isPlausible(cleaned, original: segments) else {
+            throw LocalLLMTranscriptCleanerError.implausibleResponse
+        }
         return cleaned
+    }
+
+    /// A generous cap, not a prediction: cleaned output tracks input length (cleanup drops
+    /// fragments, it doesn't shorten prose), so this only needs to comfortably outrun the real
+    /// output rather than estimate it exactly. ~4 characters per token is the standard rough
+    /// estimate for English/French prose; the 4x multiplier on top of that is the safety margin.
+    static func maxTokens(forInputCharacterCount count: Int) -> Int {
+        let estimatedInputTokens = count / 4
+        return max(256, estimatedInputTokens * 4)
+    }
+
+    /// Rejects a cleaned chunk that lost more than half its segments, or whose timestamps run
+    /// past the original chunk's last one — either is the model doing the wrong task (condensing,
+    /// continuing past the excerpt) rather than cleaning up hallucinations, which only ever
+    /// removes whole fragments in place. Pure, so it's unit-tested without a real model call.
+    static func isPlausible(_ cleaned: [TranscriptSegment], original: [TranscriptSegment]) -> Bool {
+        guard !original.isEmpty else { return true }
+        guard cleaned.count >= original.count / 2 else { return false }
+        let lastOriginalOffset = original.last?.offsetSeconds ?? 0
+        return cleaned.allSatisfy { $0.offsetSeconds <= lastOriginalOffset }
     }
 
     /// Parses the model's cleaned-up response back into segments, one `(mm:ss) text` (or
@@ -111,9 +138,9 @@ public final class LocalLLMTranscriptCleaner: TranscriptCleaner, Sendable {
 }
 
 enum LocalLLMTranscriptCleanerError: Error, LocalizedError {
-    case unparseableResponse
+    case implausibleResponse
 
     var errorDescription: String? {
-        "The local LLM's cleanup response didn't contain any parseable transcript lines."
+        "The local LLM's cleanup response didn't look like a plausible cleaned transcript."
     }
 }

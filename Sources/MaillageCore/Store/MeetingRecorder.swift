@@ -1,4 +1,5 @@
 import Foundation
+import MLXLMCommon
 import NaturalLanguage
 import Observation
 
@@ -170,25 +171,40 @@ public final class MeetingRecorder {
         let language = Self.detectedLanguage(of: merged)
         meeting.language = language
 
+        // Loaded once and shared by both passes below — cleanup and summarization run strictly
+        // sequentially here (unlike the two WhisperKit loads above, which run concurrently on two
+        // different tracks), so a second load would just be a redundant multi-second re-read of
+        // the same ~840MB of weights from disk for no benefit.
+        let localLLM: ModelContainer?
+        do {
+            localLLM = try await LocalLLMModelStore().loadContainer()
+        } catch {
+            localLLM = nil
+            let name = store.displayName(for: meetingID) ?? meetingID
+            store.lastError =
+                "Couldn't load the local LLM for \"\(name)\": \(error.localizedDescription)"
+        }
+
         // Detected on the raw merged segments, before cleanup — cleaning might trim enough text
         // to make detection less reliable, and the cleaner's own prompt needs a language to
         // respond in either way. The same `language` then also feeds the summarizer below, so
         // both passes agree on one detection rather than each doing its own.
-        do {
-            let container = try await LocalLLMModelStore().loadContainer()
-            let instructions = PromptTemplateStore.load(.cleanup, location: store.location)
-            merged = try await LocalLLMTranscriptCleaner(
-                container: container, instructions: instructions
-            ).clean(merged, language: language ?? "en")
-        } catch {
-            // Never let a cleanup failure cost the transcript — degrade to the raw merged
-            // segments, the same soft-failure posture a summarization failure already has. A
-            // bundled model is either present or the build is broken, so unlike the
-            // `FoundationModels` version this replaces, there is no "unavailable on this device"
-            // case to silently skip — any failure here is real and worth surfacing.
-            let name = store.displayName(for: meetingID) ?? meetingID
-            store.lastError =
-                "Couldn't clean up the transcript for \"\(name)\": \(error.localizedDescription)"
+        if let localLLM {
+            do {
+                let instructions = PromptTemplateStore.load(.cleanup, location: store.location)
+                merged = try await LocalLLMTranscriptCleaner(
+                    container: localLLM, instructions: instructions
+                ).clean(merged, language: language ?? "en")
+            } catch {
+                // Never let a cleanup failure cost the transcript — degrade to the raw merged
+                // segments, the same soft-failure posture a summarization failure already has. A
+                // bundled model is either present or the build is broken, so unlike the
+                // `FoundationModels` version this replaces, there is no "unavailable on this
+                // device" case to silently skip — any failure here is real and worth surfacing.
+                let name = store.displayName(for: meetingID) ?? meetingID
+                store.lastError =
+                    "Couldn't clean up the transcript for \"\(name)\": \(error.localizedDescription)"
+            }
         }
 
         meeting.body = TranscriptCodec.join(
@@ -200,24 +216,25 @@ public final class MeetingRecorder {
         try? FileManager.default.removeItem(at: directory)
 
         state = .summarising
-        do {
-            let container = try await LocalLLMModelStore().loadContainer()
-            let instructions = PromptTemplateStore.load(.summary, location: store.location)
-            let summary = try await LocalLLMSummarizer(
-                container: container, instructions: instructions
-            ).summarize(merged, language: language ?? "en")
-            if var summarized = store.snapshot.meetings[meetingID] {
-                summarized.body = TranscriptCodec.join(preamble: summary, segments: merged)
-                store.update(summarized)
+        if let localLLM {
+            do {
+                let instructions = PromptTemplateStore.load(.summary, location: store.location)
+                let summary = try await LocalLLMSummarizer(
+                    container: localLLM, instructions: instructions
+                ).summarize(merged, language: language ?? "en")
+                if var summarized = store.snapshot.meetings[meetingID] {
+                    summarized.body = TranscriptCodec.join(preamble: summary, segments: merged)
+                    store.update(summarized)
+                }
+            } catch {
+                // Never state = .failed here — a summary failure degrades to "transcript, no
+                // summary," per the design doc; only surface it the same soft way
+                // transcription failure already does, via the shared banner. Same reasoning as
+                // cleanup above: no device-capability gap to silently skip anymore.
+                let name = store.displayName(for: meetingID) ?? meetingID
+                store.lastError =
+                    "Couldn't summarize \"\(name)\": \(error.localizedDescription)"
             }
-        } catch {
-            // Never state = .failed here — a summary failure degrades to "transcript, no
-            // summary," per the design doc; only surface it the same soft way
-            // transcription failure already does, via the shared banner. Same reasoning as
-            // cleanup above: no device-capability gap to silently skip anymore.
-            let name = store.displayName(for: meetingID) ?? meetingID
-            store.lastError =
-                "Couldn't summarize \"\(name)\": \(error.localizedDescription)"
         }
     }
 

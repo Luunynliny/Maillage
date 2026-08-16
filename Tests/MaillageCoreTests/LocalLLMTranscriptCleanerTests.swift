@@ -57,6 +57,70 @@ struct LocalLLMTranscriptCleanerTests {
         #expect(LocalLLMTranscriptCleaner.parseCleanedLines("").isEmpty)
     }
 
+    // MARK: Plausibility guard against a chunk that summarized/truncated instead of cleaning
+
+    @Test("Keeping every segment is plausible")
+    func keepingEveryoneIsPlausible() {
+        let original = (0..<10).map { TranscriptSegment(offsetSeconds: $0 * 5, text: "line \($0)") }
+        #expect(LocalLLMTranscriptCleaner.isPlausible(original, original: original))
+    }
+
+    @Test("Dropping under half the segments is plausible")
+    func droppingAFewIsPlausible() {
+        let original = (0..<10).map { TranscriptSegment(offsetSeconds: $0 * 5, text: "line \($0)") }
+        let cleaned = Array(original.prefix(6))
+        #expect(LocalLLMTranscriptCleaner.isPlausible(cleaned, original: original))
+    }
+
+    @Test("Dropping more than half the segments is implausible — that's condensing, not cleaning")
+    func droppingMostIsImplausible() {
+        let original = (0..<10).map { TranscriptSegment(offsetSeconds: $0 * 5, text: "line \($0)") }
+        let cleaned = Array(original.prefix(4))
+        #expect(!LocalLLMTranscriptCleaner.isPlausible(cleaned, original: original))
+    }
+
+    @Test("An empty cleaned result is implausible when the original had more than one segment")
+    func emptyIsImplausible() {
+        let original = (0..<10).map { TranscriptSegment(offsetSeconds: $0 * 5, text: "line \($0)") }
+        #expect(!LocalLLMTranscriptCleaner.isPlausible([], original: original))
+    }
+
+    @Test("A single-segment chunk that cleans to nothing is plausible — dropping one hallucination")
+    func singleSegmentDroppedEntirelyIsPlausible() {
+        let original = [TranscriptSegment(offsetSeconds: 0, text: "thank you")]
+        #expect(LocalLLMTranscriptCleaner.isPlausible([], original: original))
+    }
+
+    @Test("A timestamp past the original chunk's end is implausible — the model kept going")
+    func timestampPastTheEndIsImplausible() {
+        let original = [
+            TranscriptSegment(offsetSeconds: 0, text: "a"),
+            TranscriptSegment(offsetSeconds: 10, text: "b"),
+        ]
+        let cleaned = [
+            TranscriptSegment(offsetSeconds: 0, text: "a"),
+            TranscriptSegment(offsetSeconds: 999, text: "made up"),
+        ]
+        #expect(!LocalLLMTranscriptCleaner.isPlausible(cleaned, original: original))
+    }
+
+    @Test("An empty original chunk trivially passes — nothing to compare against")
+    func emptyOriginalIsTriviallyPlausible() {
+        #expect(LocalLLMTranscriptCleaner.isPlausible([], original: []))
+    }
+
+    // MARK: maxTokens scales with input size
+
+    @Test("A short input still gets a usable floor, not a token-starved cap")
+    func maxTokensHasAFloor() {
+        #expect(LocalLLMTranscriptCleaner.maxTokens(forInputCharacterCount: 10) == 256)
+    }
+
+    @Test("A long input scales past the floor")
+    func maxTokensScalesUp() {
+        #expect(LocalLLMTranscriptCleaner.maxTokens(forInputCharacterCount: 4_000) == 4_000)
+    }
+
     // MARK: Per-chunk isolation (mapChunks, reused unchanged from the FoundationModels version)
 
     @Test("Concatenates every chunk's cleaned result, in order")
