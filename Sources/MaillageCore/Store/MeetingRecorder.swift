@@ -14,9 +14,10 @@ public enum MeetingRecorderState: Equatable, Sendable {
 }
 
 /// Drives one recording from Start to a finished transcript: creates the meeting it belongs to,
-/// starts both audio tracks and their live streaming transcribers together, and on Stop waits for
-/// each track's trailing audio to flush, merges the final segments, writes the transcript, then
-/// deletes the audio.
+/// starts both audio tracks and their live streaming transcribers (plus, unless the >4-speaker
+/// opt-out is set, a diarizer alongside each) together, and on Stop waits for each track's
+/// trailing audio to flush, merges the final segments, writes the transcript, then deletes the
+/// audio.
 ///
 /// Deliberately not part of `VaultStore` — the store mirrors the vault and every other method
 /// on it completes in one call, where this one runs for as long as a meeting does, well past
@@ -75,7 +76,8 @@ public final class MeetingRecorder {
         title: String,
         organization: Wikilink?,
         project: Wikilink?,
-        attendees: [Wikilink]
+        attendees: [Wikilink],
+        disableDiarization: Bool = false
     ) async {
         guard
             let meeting = store.createMeeting(
@@ -100,6 +102,20 @@ public final class MeetingRecorder {
             let systemAudioTranscriber = FluidAudioStreamingTranscriber(
                 manager: try await modelStore.loadStreamingASR())
 
+            // Never created for the >4-speaker opt-out: no diarizer, no speaker slots, every
+            // segment's `speaker` stays `nil` — the same shape as a meeting recorded before this
+            // feature existed.
+            let microphoneDiarizer: FluidAudioStreamingDiarizer? =
+                disableDiarization
+                ? nil
+                : FluidAudioStreamingDiarizer(
+                    diarizer: try await modelStore.loadStreamingDiarizer())
+            let systemAudioDiarizer: FluidAudioStreamingDiarizer? =
+                disableDiarization
+                ? nil
+                : FluidAudioStreamingDiarizer(
+                    diarizer: try await modelStore.loadStreamingDiarizer())
+
             await microphoneTranscriber.onUpdate { [weak self] text in
                 Task { @MainActor in self?.microphoneLiveText = text }
             }
@@ -113,9 +129,11 @@ public final class MeetingRecorder {
             state = .recording
 
             microphonePipeline = Self.runPipeline(
-                samples: capture.microphoneSamples, transcriber: microphoneTranscriber)
+                samples: capture.microphoneSamples, transcriber: microphoneTranscriber,
+                diarizer: microphoneDiarizer, track: .mic)
             systemAudioPipeline = Self.runPipeline(
-                samples: capture.systemAudioSamples, transcriber: systemAudioTranscriber)
+                samples: capture.systemAudioSamples, transcriber: systemAudioTranscriber,
+                diarizer: systemAudioDiarizer, track: .system)
         } catch {
             capture.stop()
             try? FileManager.default.removeItem(at: directory)
@@ -134,13 +152,17 @@ public final class MeetingRecorder {
     /// failing is not tolerated: it means this track never produced a usable transcript at all,
     /// and `finishTranscription` needs to know that rather than silently getting an empty one.
     nonisolated private static func runPipeline(
-        samples: AsyncStream<[Float]>, transcriber: FluidAudioStreamingTranscriber
+        samples: AsyncStream<[Float]>, transcriber: FluidAudioStreamingTranscriber,
+        diarizer: FluidAudioStreamingDiarizer?, track: AudioTrack
     ) -> Task<TrackResult, Error> {
         Task {
             for await buffer in samples {
                 try? await transcriber.ingest(samples: buffer)
+                try? diarizer?.ingest(samples: buffer)
             }
-            let segments = try await transcriber.finish()
+            let diarizerSegments = try diarizer?.finish() ?? []
+            let segments = try await transcriber.finish(
+                track: track, diarizerSegments: diarizerSegments)
             let language = await transcriber.detectedLanguage()
             return TrackResult(segments: segments, language: language)
         }

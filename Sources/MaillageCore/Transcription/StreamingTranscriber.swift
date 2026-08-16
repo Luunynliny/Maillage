@@ -18,7 +18,10 @@ public protocol StreamingTranscriber: Sendable {
     func ingest(samples: [Float]) async throws
     /// Flushes trailing audio and returns final utterance-level segments, offsets relative to
     /// the start of this transcriber's own stream — the caller applies any track-level offset.
-    func finish() async throws -> [TranscriptSegment]
+    /// `track`/`diarizerSegments` assign each segment a speaker slot when diarization ran
+    /// alongside this transcriber — see ``TokenTimingGrouper``.
+    func finish(track: AudioTrack?, diarizerSegments: [DiarizerSegment]) async throws
+        -> [TranscriptSegment]
     /// The first language tag the decoder emitted this session, or `nil` if none yet — only
     /// meaningful after `finish()` has returned.
     func detectedLanguage() async -> String?
@@ -43,9 +46,12 @@ public struct FluidAudioStreamingTranscriber: StreamingTranscriber {
         _ = try await manager.process(samples: samples)
     }
 
-    public func finish() async throws -> [TranscriptSegment] {
+    public func finish(track: AudioTrack? = nil, diarizerSegments: [DiarizerSegment] = [])
+        async throws -> [TranscriptSegment]
+    {
         let (_, timings) = try await manager.finishWithTokenTimings()
-        return TokenTimingGrouper.segments(from: timings)
+        return TokenTimingGrouper.segments(
+            from: timings, track: track, diarizerSegments: diarizerSegments)
     }
 
     public func detectedLanguage() async -> String? {

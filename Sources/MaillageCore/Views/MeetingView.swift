@@ -349,12 +349,17 @@ struct MeetingView: View {
         }
     }
 
-    /// Timestamp above the words, nothing else — no speaker name, since neither track can be
-    /// honestly attributed to one person (see ``TranscriptSegment``). No left/right alignment
-    /// or other spatial stand-in either: that would just reintroduce the same false distinction
-    /// visually instead of in text.
+    /// Timestamp above the words. A diarized segment also gets a speaker label above that — an
+    /// ``EntityLink`` once a human has confirmed who it is, a ``Pill`` reading "Speaker N" until
+    /// then (per CLAUDE.md's own rule: a `Pill` is for what isn't yet an entity). No speaker
+    /// label at all when diarization was off for this meeting — see ``TranscriptSegment``. No
+    /// left/right alignment or other spatial stand-in either: that would just reintroduce the
+    /// same false distinction visually instead of in text.
     private func segmentRow(_ segment: TranscriptSegment) -> some View {
         VStack(alignment: .leading, spacing: 2) {
+            if let speaker = segment.speaker {
+                speakerLabel(speaker)
+            }
             Text(TranscriptCodec.formatTimestamp(seconds: segment.offsetSeconds))
                 .font(Theme.Font.mono)
                 .foregroundStyle(Theme.textFaint)
@@ -363,6 +368,22 @@ struct MeetingView: View {
                 .foregroundStyle(Theme.textNormal)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func speakerLabel(_ speaker: Speaker) -> some View {
+        if let personID = speaker.personID {
+            EntityLink(
+                title: store.displayName(for: personID) ?? personID,
+                kind: .person,
+                id: personID,
+                isPlaceholder: store.entity(id: personID)?.asPerson?.placeholder == true
+            ) {
+                selection = personID
+            }
+        } else {
+            Pill("Speaker \(speaker.slot + 1)")
         }
     }
 

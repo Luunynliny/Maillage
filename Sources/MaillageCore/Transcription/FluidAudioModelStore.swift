@@ -1,3 +1,4 @@
+import CoreML
 import FluidAudio
 import Foundation
 
@@ -32,12 +33,44 @@ public final class FluidAudioModelStore {
         try await manager.loadModels(from: modelsDirectory)
         return manager
     }
+
+    /// Sortformer's `fastV2_1` config — the lowest-latency of FluidAudio's streaming tiers
+    /// (~1s inherent lag from its right-context window), fetched at build time by
+    /// `Scripts/fetch-fluidaudio-diarizer-model.sh` and landing at
+    /// `Maillage.app/Contents/Resources/FluidAudioModels/sortformer-fastv2.1-fp16/`.
+    ///
+    /// Loads the compiled `.mlmodelc` directly via `MLModel.load(contentsOf:)` — Apple's own
+    /// compile-if-needed loader — rather than `SortformerModels.load(mainModelPath:)`, which
+    /// always recompiles from an uncompiled `.mlpackage` and would choke on the pre-compiled
+    /// bundle this app ships.
+    public func loadStreamingDiarizer() async throws -> SortformerDiarizer {
+        guard
+            let modelURL = Bundle.main.resourceURL?
+                .appendingPathComponent(
+                    "FluidAudioModels/sortformer-fastv2.1-fp16/Sortformer_v2.1.mlmodelc")
+        else {
+            throw FluidAudioModelStoreError.bundledDiarizerModelMissing
+        }
+        let config = SortformerConfig.fastV2_1
+        let mainModel = try await MLModel.load(
+            contentsOf: modelURL, configuration: MLModelConfiguration())
+        let models = try SortformerModels(config: config, main: mainModel)
+        let diarizer = SortformerDiarizer(config: config)
+        diarizer.initialize(models: models)
+        return diarizer
+    }
 }
 
 public enum FluidAudioModelStoreError: Error, LocalizedError {
     case bundledModelMissing
+    case bundledDiarizerModelMissing
 
     public var errorDescription: String? {
-        "The FluidAudio ASR model isn't in this build — run Scripts/fetch-fluidaudio-asr-model.sh and rebuild."
+        switch self {
+        case .bundledModelMissing:
+            "The FluidAudio ASR model isn't in this build — run Scripts/fetch-fluidaudio-asr-model.sh and rebuild."
+        case .bundledDiarizerModelMissing:
+            "The FluidAudio diarizer model isn't in this build — run Scripts/fetch-fluidaudio-diarizer-model.sh and rebuild."
+        }
     }
 }

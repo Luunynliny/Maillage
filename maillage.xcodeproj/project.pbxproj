@@ -158,6 +158,7 @@
 			buildConfigurationList = 0000000000000000000000F3 /* Build configuration list for PBXNativeTarget "Maillage" */;
 			buildPhases = (
 				000000000000000000000140 /* Fetch FluidAudio ASR Model */,
+				000000000000000000000150 /* Fetch FluidAudio Diarizer Model */,
 				0000000000000000000000E5 /* Sources */,
 				0000000000000000000000E6 /* Frameworks */,
 				0000000000000000000000E7 /* Resources */,
@@ -251,6 +252,21 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "set -euo pipefail\n\"${SRCROOT}/Scripts/fetch-fluidaudio-asr-model.sh\"\nmkdir -p \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/FluidAudioModels/nemotron-multilingual-latin-2240ms\"\nrsync -a --delete \"${SRCROOT}/.fluidaudio-model-cache/latin/2240ms/\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/FluidAudioModels/nemotron-multilingual-latin-2240ms/\"\n";
+			alwaysOutOfDate = 1;
+		};
+		000000000000000000000150 /* Fetch FluidAudio Diarizer Model */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			name = "Fetch FluidAudio Diarizer Model";
+			outputFileListPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\n\"${SRCROOT}/Scripts/fetch-fluidaudio-diarizer-model.sh\"\nmkdir -p \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/FluidAudioModels/sortformer-fastv2.1-fp16\"\nrsync -a --delete \"${SRCROOT}/.fluidaudio-model-cache/v3/fp16/Sortformer_v2.1.mlmodelc/\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/FluidAudioModels/sortformer-fastv2.1-fp16/Sortformer_v2.1.mlmodelc/\"\n";
 			alwaysOutOfDate = 1;
 		};
 /* End PBXShellScriptBuildPhase section */

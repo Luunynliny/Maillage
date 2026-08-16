@@ -8,6 +8,11 @@ private func timing(_ token: String, start: Double, end: Double) -> TokenTiming 
     TokenTiming(token: token, tokenId: 0, startTime: start, endTime: end, confidence: 1)
 }
 
+private func diarizerSegment(speaker: Int, start: Float, end: Float) -> DiarizerSegment {
+    DiarizerSegment(
+        speakerIndex: speaker, startTime: start, endTime: end, frameDurationSeconds: 0.01)
+}
+
 @Suite("Token timing grouper")
 struct TokenTimingGrouperTests {
     @Test("Joins word-piece tokens into one segment, dropping the boundary marker")
@@ -85,5 +90,41 @@ struct TokenTimingGrouperTests {
     func onlyLanguageTagsProducesNothing() {
         let timings = [timing("<fr-FR>", start: 0, end: 0.05)]
         #expect(TokenTimingGrouper.segments(from: timings).isEmpty)
+    }
+
+    @Test("With a track and overlapping diarizer segments, each segment gets a speaker")
+    func assignsSpeakerFromOverlap() {
+        let timings = [
+            timing("▁Bonjour", start: 0, end: 0.5),
+            // 2 second gap — new segment, spoken by the other slot.
+            timing("▁Salut", start: 2.5, end: 3.0),
+        ]
+        let diarizerSegments = [
+            diarizerSegment(speaker: 0, start: 0, end: 1),
+            diarizerSegment(speaker: 1, start: 2, end: 4),
+        ]
+        let segments = TokenTimingGrouper.segments(
+            from: timings, track: .mic, diarizerSegments: diarizerSegments)
+        #expect(segments.count == 2)
+        #expect(segments[0].speaker == Speaker(track: .mic, slot: 0))
+        #expect(segments[1].speaker == Speaker(track: .mic, slot: 1))
+    }
+
+    @Test("With no track given, segments carry no speaker even if diarizer segments overlap")
+    func noSpeakerWithoutTrack() {
+        let timings = [timing("▁Bonjour", start: 0, end: 0.5)]
+        let diarizerSegments = [diarizerSegment(speaker: 0, start: 0, end: 1)]
+        let segments = TokenTimingGrouper.segments(
+            from: timings, diarizerSegments: diarizerSegments)
+        #expect(segments[0].speaker == nil)
+    }
+
+    @Test("A segment with no overlapping diarizer segment stays unassigned")
+    func unassignedWhenNothingOverlaps() {
+        let timings = [timing("▁Bonjour", start: 10, end: 10.5)]
+        let diarizerSegments = [diarizerSegment(speaker: 0, start: 0, end: 1)]
+        let segments = TokenTimingGrouper.segments(
+            from: timings, track: .mic, diarizerSegments: diarizerSegments)
+        #expect(segments[0].speaker == nil)
     }
 }

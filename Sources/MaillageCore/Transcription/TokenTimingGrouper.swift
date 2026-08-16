@@ -17,8 +17,12 @@ public enum TokenTimingGrouper {
     /// marker) is the library's tested logic, not a reimplementation of it here. Language-tag
     /// tokens (`<xx-XX>`, the decoder's own bookkeeping for which language it's decoding) are
     /// dropped — metadata about the utterance, never something anyone said.
+    /// `track`/`diarizerSegments` assign each grouped segment a ``Speaker`` by overlapping its
+    /// full word-span against that track's diarizer segments (see ``SpeakerAligner``) — omitted
+    /// (the defaults) when diarization is off, which leaves every segment's `speaker` `nil`.
     public static func segments(
-        from timings: [TokenTiming], pauseThreshold: TimeInterval = 1.5
+        from timings: [TokenTiming], pauseThreshold: TimeInterval = 1.5,
+        track: AudioTrack? = nil, diarizerSegments: [DiarizerSegment] = []
     ) -> [TranscriptSegment] {
         let words = buildWordTimings(from: timings).filter {
             !($0.word.hasPrefix("<") && $0.word.hasSuffix(">"))
@@ -29,10 +33,16 @@ public enum TokenTimingGrouper {
 
         func flush() {
             defer { current = [] }
-            guard let first = current.first else { return }
+            guard let first = current.first, let last = current.last else { return }
             let text = current.map(\.word).joined(separator: " ")
+            let speaker = track.flatMap { track in
+                SpeakerAligner.assign(
+                    start: Float(first.startTime), end: Float(last.endTime), in: diarizerSegments
+                ).map { Speaker(track: track, slot: $0) }
+            }
             segments.append(
-                TranscriptSegment(offsetSeconds: Int(first.startTime.rounded()), text: text))
+                TranscriptSegment(
+                    offsetSeconds: Int(first.startTime.rounded()), text: text, speaker: speaker))
         }
 
         for word in words {

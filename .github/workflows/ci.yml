@@ -206,15 +206,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The "Fetch FluidAudio ASR Model" build phase Scripts/build-app.sh triggers downloads
-      # ~600MB from Hugging Face on a cache miss. Keyed on the fetch script's own hash so a
-      # future change to it (a different variant, a bug fix) invalidates the cache automatically
-      # — no separate version string to remember to bump.
-      - name: Cache FluidAudio ASR model
+      # The "Fetch FluidAudio ASR Model" and "Fetch FluidAudio Diarizer Model" build phases
+      # Scripts/build-app.sh triggers download ~600MB and ~240MB respectively from Hugging Face
+      # on a cache miss — both land under the same .fluidaudio-model-cache tree, so one cache
+      # entry covers both. Keyed on both fetch scripts' own hash so a future change to either (a
+      # different variant, a bug fix) invalidates the cache automatically — no separate version
+      # string to remember to bump.
+      - name: Cache FluidAudio models
         uses: actions/cache@v4
         with:
           path: .fluidaudio-model-cache
-          key: fluidaudio-asr-model-latin-2240ms-${{ hashFiles('Scripts/fetch-fluidaudio-asr-model.sh') }}
+          key: fluidaudio-models-${{ hashFiles('Scripts/fetch-fluidaudio-asr-model.sh', 'Scripts/fetch-fluidaudio-diarizer-model.sh') }}
 
       # Signed ad-hoc, which needs no Developer ID and so works on a runner. The version is left
       # at the project's own MARKETING_VERSION here — only `release` knows the real one, and it
