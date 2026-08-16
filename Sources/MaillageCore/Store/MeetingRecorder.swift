@@ -119,64 +119,86 @@ public final class MeetingRecorder {
     /// own WAV file top to bottom — there is no live pipeline left over from `start()` to await,
     /// unlike the streaming design this replaced, so a missing bundled model now surfaces here
     /// rather than at Start, the same failed-transcription banner a decode failure would.
+    ///
+    /// Each track's failure is caught independently rather than let either throw through a joint
+    /// `try await` — a silent system-audio tap (no tap permission, a zero-frame WAV) is a known
+    /// failure mode of this capture path, and it must not also discard a perfectly good
+    /// microphone transcript. Only both tracks failing counts as the meeting failing; one track
+    /// failing degrades to a transcript from the surviving track plus the same soft error banner
+    /// a failed summary already uses.
     private func finishTranscription(meetingID: EntityID, directory: URL) async {
         defer {
             self.meetingID = nil
             if case .failed = state {} else { state = .done }
         }
 
-        do {
-            async let microphoneSegments = Self.transcribe(
-                url: directory.appendingPathComponent("mic.wav"))
-            async let systemAudioSegments = Self.transcribe(
-                url: directory.appendingPathComponent("system.wav"))
-            let merged = TranscriptMerger.merge(
-                micSegments: try await microphoneSegments,
-                systemSegments: try await systemAudioSegments)
+        async let microphoneResult = Self.transcribeResult(
+            url: directory.appendingPathComponent("mic.wav"))
+        async let systemAudioResult = Self.transcribeResult(
+            url: directory.appendingPathComponent("system.wav"))
+        let (micResult, systemResult) = await (microphoneResult, systemAudioResult)
 
-            guard var meeting = store.snapshot.meetings[meetingID] else { return }
-
-            let language = Self.detectedLanguage(of: merged)
-            meeting.language = language
-            meeting.body = TranscriptCodec.join(
-                preamble: TranscriptCodec.split(meeting.body).preamble, segments: merged)
-            store.update(meeting)
-
-            // The audio's only reason to still exist was to be transcribed — safe to delete
-            // now that both tracks' segments are in hand.
-            try? FileManager.default.removeItem(at: directory)
-
-            state = .summarising
-            if SystemLanguageModel.default.availability == .available {
-                do {
-                    let summary = try await FoundationModelsSummarizer().summarize(
-                        merged, language: language ?? "en")
-                    if var summarized = store.snapshot.meetings[meetingID] {
-                        summarized.body = TranscriptCodec.join(
-                            preamble: summary.markdown, segments: merged)
-                        store.update(summarized)
-                    }
-                } catch {
-                    // Never state = .failed here — a summary failure degrades to "transcript, no
-                    // summary," per the design doc; only surface it the same soft way
-                    // transcription failure already does, via the shared banner.
-                    let name = store.displayName(for: meetingID) ?? meetingID
-                    store.lastError =
-                        "Couldn't summarize \"\(name)\": \(error.localizedDescription)"
-                }
-            }
-            // Unavailable (device ineligible, Apple Intelligence off, model not ready): silently
-            // skip. That's a device-capability gap, not a per-meeting problem — a banner on
-            // every meeting on an ineligible Mac would just be noise.
-        } catch {
-            state = .failed(error.localizedDescription)
-            // The recording sheet is long gone by the time transcription fails or succeeds, so
-            // `state` alone is never observed — route through the same banner `VaultStore`
-            // already shows for a failed save or load, rather than adding a second, parallel
-            // error surface.
+        if case .failure(let micError) = micResult, case .failure(let systemError) = systemResult {
+            state = .failed(micError.localizedDescription)
             let name = store.displayName(for: meetingID) ?? meetingID
-            store.lastError = "Couldn't transcribe \"\(name)\": \(error.localizedDescription)"
+            store.lastError =
+                "Couldn't transcribe \"\(name)\": \(micError.localizedDescription); "
+                + systemError.localizedDescription
+            return
         }
+
+        let micSegments = (try? micResult.get()) ?? []
+        let systemSegments = (try? systemResult.get()) ?? []
+        let merged = TranscriptMerger.merge(
+            micSegments: micSegments, systemSegments: systemSegments)
+
+        // Surface whichever single track failed, non-fatally — the meeting still has a real
+        // transcript from the other track, so this is the same soft banner a failed summary
+        // uses, not a `.failed` state.
+        if case .failure(let error) = micResult {
+            let name = store.displayName(for: meetingID) ?? meetingID
+            store.lastError =
+                "Couldn't transcribe your microphone for \"\(name)\": \(error.localizedDescription)"
+        } else if case .failure(let error) = systemResult {
+            let name = store.displayName(for: meetingID) ?? meetingID
+            store.lastError =
+                "Couldn't transcribe the other side's audio for \"\(name)\": \(error.localizedDescription)"
+        }
+
+        guard var meeting = store.snapshot.meetings[meetingID] else { return }
+
+        let language = Self.detectedLanguage(of: merged)
+        meeting.language = language
+        meeting.body = TranscriptCodec.join(
+            preamble: TranscriptCodec.split(meeting.body).preamble, segments: merged)
+        store.update(meeting)
+
+        // The audio's only reason to still exist was to be transcribed — safe to delete now
+        // that whatever segments either track could produce are in hand.
+        try? FileManager.default.removeItem(at: directory)
+
+        state = .summarising
+        if SystemLanguageModel.default.availability == .available {
+            do {
+                let summary = try await FoundationModelsSummarizer().summarize(
+                    merged, language: language ?? "en")
+                if var summarized = store.snapshot.meetings[meetingID] {
+                    summarized.body = TranscriptCodec.join(
+                        preamble: summary.markdown, segments: merged)
+                    store.update(summarized)
+                }
+            } catch {
+                // Never state = .failed here — a summary failure degrades to "transcript, no
+                // summary," per the design doc; only surface it the same soft way
+                // transcription failure already does, via the shared banner.
+                let name = store.displayName(for: meetingID) ?? meetingID
+                store.lastError =
+                    "Couldn't summarize \"\(name)\": \(error.localizedDescription)"
+            }
+        }
+        // Unavailable (device ineligible, Apple Intelligence off, model not ready): silently
+        // skip. That's a device-capability gap, not a per-meeting problem — a banner on
+        // every meeting on an ineligible Mac would just be noise.
     }
 
     /// Loads a fresh batch ASR model and transcribes one track's WAV file top to bottom, grouped
@@ -186,6 +208,19 @@ public final class MeetingRecorder {
         let manager = try await FluidAudioModelStore().loadBatchASR()
         let result = try await FluidAudioTranscriber(manager: manager).transcribe(fileURL: url)
         return TokenTimingGrouper.segments(from: result.tokenTimings ?? [])
+    }
+
+    /// `transcribe(url:)`, with its failure caught rather than thrown — so `finishTranscription`
+    /// can run both tracks concurrently and inspect each one's outcome independently instead of
+    /// either `async let`'s throw wiping out both.
+    nonisolated private static func transcribeResult(url: URL) async -> Result<
+        [TranscriptSegment], Error
+    > {
+        do {
+            return .success(try await transcribe(url: url))
+        } catch {
+            return .failure(error)
+        }
     }
 
     /// The meeting's dominant language, detected from its merged transcript text via Apple's
