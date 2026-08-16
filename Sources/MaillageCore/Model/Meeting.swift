@@ -119,11 +119,3 @@ public struct TranscriptSegment: Hashable, Sendable {
         self.text = text
     }
 }
-
-/// Which audio track a transcript segment came from — mic (the person recording) or system (a
-/// remote call). Used only by ``TranscriptMerger`` to interleave both tracks' segments; carries
-/// no speaker identity.
-public enum AudioTrack: String, Hashable, Sendable {
-    case mic
-    case system
-}
