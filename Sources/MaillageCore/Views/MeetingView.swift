@@ -307,38 +307,31 @@ struct MeetingView: View {
                 }
                 Spacer()
             }
-            VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-                ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
-                    segmentRow(segment)
+            VStack(alignment: .leading, spacing: Theme.Spacing.large) {
+                ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
+                    paragraphRow(paragraph)
                 }
             }
         }
     }
 
-    /// Timestamp and text, one line per segment — the same shape ``segmentRow`` renders, so
-    /// pasting elsewhere reads the same way the transcript reads on screen.
-    private func copyTranscript() {
-        let text = segments.map {
-            "\(TranscriptCodec.formatTimestamp(seconds: $0.offsetSeconds))  \($0.text)"
-        }.joined(separator: "\n")
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+    /// No timestamps and no left/right alignment or other spatial stand-in for who's speaking:
+    /// this vault records no speaker identification, so introducing one visually would just
+    /// reintroduce the same false distinction in a different form.
+    private func paragraphRow(_ paragraph: String) -> some View {
+        Text(paragraph)
+            .font(Theme.Font.body)
+            .foregroundStyle(Theme.textNormal)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Timestamp above the words. No left/right alignment or other spatial stand-in for who's
-    /// speaking: this vault records no speaker identification, so introducing one visually would
-    /// just reintroduce the same false distinction in a different form.
-    private func segmentRow(_ segment: TranscriptSegment) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(TranscriptCodec.formatTimestamp(seconds: segment.offsetSeconds))
-                .font(Theme.Font.mono)
-                .foregroundStyle(Theme.textFaint)
-            Text(segment.text)
-                .font(Theme.Font.body)
-                .foregroundStyle(Theme.textNormal)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
+    /// One paragraph per line, blank-line separated — the same shape ``paragraphRow`` renders,
+    /// so pasting elsewhere reads the same way the transcript reads on screen.
+    private func copyTranscript() {
+        let text = paragraphs.joined(separator: "\n\n")
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     // MARK: Data
@@ -351,6 +344,10 @@ struct MeetingView: View {
 
     private var segments: [TranscriptSegment] {
         TranscriptCodec.split(meeting.body).segments
+    }
+
+    private var paragraphs: [String] {
+        TranscriptParagraphs.group(segments)
     }
 
     private var subtitle: String {
