@@ -1161,6 +1161,7 @@ struct NotesField: View {
     var title: String = "Notes"
     /// Shown dimmed while the body is empty, so it matches the single-line fields above it.
     var placeholder: String = "Anything worth remembering…"
+    var height: CGFloat = 80
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
@@ -1178,7 +1179,7 @@ struct NotesField: View {
                     inset: Theme.Spacing.xs
                 )
                 .padding(Theme.Spacing.small)
-                .frame(height: 80)
+                .frame(height: height)
                 .background(Theme.bgPrimary)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
                 .overlay(

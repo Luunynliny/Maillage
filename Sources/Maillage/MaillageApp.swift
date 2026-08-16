@@ -92,5 +92,13 @@ struct MaillageApp: App {
                 }
             }
         }
+
+        // The one exception to "no keyboard shortcuts" above: Settings' ⌘, comes from AppKit
+        // itself, not from a shortcut this app wires up and could get wrong — every Mac app
+        // has it, and unlike the custom shortcuts that were removed, it always fires.
+        Settings {
+            PromptSettingsView()
+                .environment(store)
+        }
     }
 }
