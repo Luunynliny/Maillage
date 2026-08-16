@@ -302,10 +302,10 @@ struct MeetingView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
             HStack(spacing: Theme.Spacing.small) {
                 SectionHeader("Transcript")
-                Spacer()
                 if !segments.isEmpty {
                     IconButton("doc.on.doc", help: "Copy transcript") { copyTranscript() }
                 }
+                Spacer()
             }
             VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
                 ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
