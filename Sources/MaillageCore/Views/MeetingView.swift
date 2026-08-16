@@ -1,3 +1,4 @@
+import AppKit
 import MarkdownUI
 import SwiftUI
 
@@ -299,13 +300,29 @@ struct MeetingView: View {
 
     private var transcriptSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            SectionHeader("Transcript")
+            HStack(spacing: Theme.Spacing.small) {
+                SectionHeader("Transcript")
+                Spacer()
+                if !segments.isEmpty {
+                    IconButton("doc.on.doc", help: "Copy transcript") { copyTranscript() }
+                }
+            }
             VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
                 ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
                     segmentRow(segment)
                 }
             }
         }
+    }
+
+    /// Timestamp and text, one line per segment — the same shape ``segmentRow`` renders, so
+    /// pasting elsewhere reads the same way the transcript reads on screen.
+    private func copyTranscript() {
+        let text = segments.map {
+            "\(TranscriptCodec.formatTimestamp(seconds: $0.offsetSeconds))  \($0.text)"
+        }.joined(separator: "\n")
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     /// Timestamp above the words. No left/right alignment or other spatial stand-in for who's
