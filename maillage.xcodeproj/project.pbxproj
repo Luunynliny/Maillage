@@ -250,7 +250,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -euo pipefail\n\"${SRCROOT}/Scripts/fetch-fluidaudio-asr-model.sh\"\nmkdir -p \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/FluidAudioModels/parakeet-tdt-0.6b-v3\"\nrsync -a --delete \"${SRCROOT}/.fluidaudio-model-cache/parakeet-tdt-0.6b-v3/\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/FluidAudioModels/parakeet-tdt-0.6b-v3/\"\n";
+			shellScript = "set -euo pipefail\n\"${SRCROOT}/Scripts/fetch-fluidaudio-asr-model.sh\"\nmkdir -p \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/FluidAudioModels/nemotron-multilingual-latin-2240ms\"\nrsync -a --delete \"${SRCROOT}/.fluidaudio-model-cache/latin/2240ms/\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/FluidAudioModels/nemotron-multilingual-latin-2240ms/\"\n";
 			alwaysOutOfDate = 1;
 		};
 /* End PBXShellScriptBuildPhase section */

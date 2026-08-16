@@ -206,8 +206,8 @@ public final class MeetingRecorder {
     /// file it's given — `finishTranscription` runs both tracks' calls concurrently.
     nonisolated private static func transcribe(url: URL) async throws -> [TranscriptSegment] {
         let manager = try await FluidAudioModelStore().loadBatchASR()
-        let result = try await FluidAudioTranscriber(manager: manager).transcribe(fileURL: url)
-        return TokenTimingGrouper.segments(from: result.tokenTimings ?? [])
+        let timings = try await FluidAudioTranscriber(manager: manager).transcribe(fileURL: url)
+        return TokenTimingGrouper.segments(from: timings)
     }
 
     /// `transcribe(url:)`, with its failure caught rather than thrown — so `finishTranscription`

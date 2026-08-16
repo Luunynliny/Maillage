@@ -13,11 +13,16 @@ public enum TokenTimingGrouper {
     ///
     /// Groups by word, not by raw sub-word token — via FluidAudio's own
     /// ``buildWordTimings(from:)``, so the sub-word joining (SentencePiece's `▁` word-boundary
-    /// marker) is the library's tested logic, not a reimplementation of it here.
+    /// marker) is the library's tested logic, not a reimplementation of it here. Nemotron (unlike
+    /// Parakeet) emits inline language-tag tokens (`<fr-FR>`, `<en-US>`, ...) as part of its token
+    /// stream — its own bookkeeping for which language it just decoded, never something anyone
+    /// said — so those are dropped before grouping into segments.
     public static func segments(
         from timings: [TokenTiming], pauseThreshold: TimeInterval = 1.5
     ) -> [TranscriptSegment] {
-        let words = buildWordTimings(from: timings)
+        let words = buildWordTimings(from: timings).filter {
+            !($0.word.hasPrefix("<") && $0.word.hasSuffix(">"))
+        }
 
         var segments: [TranscriptSegment] = []
         var current: [WordTiming] = []

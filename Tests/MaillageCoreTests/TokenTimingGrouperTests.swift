@@ -69,4 +69,21 @@ struct TokenTimingGrouperTests {
     func emptyTimingsProduceNoSegments() {
         #expect(TokenTimingGrouper.segments(from: []).isEmpty)
     }
+
+    @Test("Language-tag tokens are dropped from the text")
+    func dropsLanguageTags() {
+        let timings = [
+            timing("<fr-FR>", start: 0, end: 0.05),
+            timing("▁Bonjour", start: 0.1, end: 0.5),
+        ]
+        let segments = TokenTimingGrouper.segments(from: timings)
+        #expect(segments.count == 1)
+        #expect(segments[0].text == "Bonjour")
+    }
+
+    @Test("A segment made entirely of language tags produces no segment")
+    func onlyLanguageTagsProducesNothing() {
+        let timings = [timing("<fr-FR>", start: 0, end: 0.05)]
+        #expect(TokenTimingGrouper.segments(from: timings).isEmpty)
+    }
 }
