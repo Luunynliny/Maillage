@@ -240,15 +240,16 @@ public final class VaultStore {
         return try? JSONDecoder().decode(Voiceprint.self, from: data)
     }
 
-    /// Folds a newly confirmed embedding into this person's stored voiceprint via
-    /// ``Voiceprint/updated(_:confirming:)`` — an exponential moving average, not a snapshot, so
-    /// this is called every time a speaker slot is confirmed or corrected against this person,
-    /// not just the first time.
+    /// Replaces this person's stored voiceprint outright — latest confirmation wins, no
+    /// blending. Unlike an embedding, averaging two audio clips together doesn't produce a more
+    /// representative voice, just a garbled one; always keeping the newest confirmed sample is
+    /// simpler and also naturally absorbs a gradual voice change (an illness was the example that
+    /// prompted this) over repeated confirmations, without needing a decay rate to tune.
     @discardableResult
-    public func setVoiceprint(personID: EntityID, confirming embedding: [Float]) -> Bool {
+    public func setVoiceprint(personID: EntityID, samples: [Float], sampleRate: Int) -> Bool {
         do {
-            let updated = Voiceprint.updated(voiceprint(personID: personID), confirming: embedding)
-            let data = try JSONEncoder().encode(updated)
+            let data = try JSONEncoder().encode(
+                Voiceprint(samples: samples, sampleRate: sampleRate))
             try writer.writeVoiceprint(data, personID: personID)
             voiceprintIDs.insert(personID)
             lastError = nil

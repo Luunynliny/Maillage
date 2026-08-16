@@ -13,6 +13,21 @@ public enum MeetingRecorderState: Equatable, Sendable {
     case done
 }
 
+/// A diarized slot on one meeting's track that hasn't been confirmed against a person yet.
+/// `candidateSamples` is captured once, at Stop, from the audio still on disk at that moment —
+/// this is genuinely the only chance: `finishTranscription` deletes the recording right after,
+/// so a slot resolved later can still relabel the transcript but can never train a voiceprint
+/// from it. `suggestedPersonID` is set only when Sortformer's own acoustic matching recognized a
+/// previously enrolled voice this session — a suggestion to confirm, never applied on its own.
+public struct PendingSpeaker: Identifiable, Sendable {
+    public var id: Speaker { speaker }
+    public let speaker: Speaker
+    public let meetingID: EntityID
+    public let candidateSamples: [Float]
+    public let sampleRate: Int
+    public let suggestedPersonID: EntityID?
+}
+
 /// Drives one recording from Start to a finished transcript: creates the meeting it belongs to,
 /// starts both audio tracks and their live streaming transcribers (plus, unless the >4-speaker
 /// opt-out is set, a diarizer alongside each) together, and on Stop waits for each track's
@@ -45,6 +60,12 @@ public final class MeetingRecorder {
     public private(set) var microphoneLiveText = ""
     public private(set) var systemAudioLiveText = ""
 
+    /// One card per diarized slot still waiting on a human to say who it is — populated at Stop,
+    /// for every meeting this recorder has finished since launch (not just the most recent one),
+    /// and only cleared by ``assignSpeaker(_:to:)``/``dismissPendingSpeaker(_:)``. `MeetingView`
+    /// filters this to its own `meeting.id`.
+    public private(set) var pendingSpeakers: [PendingSpeaker] = []
+
     private let store: VaultStore
     /// Each track's live pipeline for the duration of the recording: ingest buffers as they
     /// arrive, republish the growing live text, and — once `capture.stop()` finishes the sample
@@ -56,6 +77,8 @@ public final class MeetingRecorder {
     private struct TrackResult {
         var segments: [TranscriptSegment]
         var language: String?
+        var diarizerSegments: [DiarizerSegment]
+        var recognizedPersonIDs: [Int: EntityID]
     }
 
     public init(store: VaultStore) {
@@ -105,16 +128,24 @@ public final class MeetingRecorder {
             // Never created for the >4-speaker opt-out: no diarizer, no speaker slots, every
             // segment's `speaker` stays `nil` — the same shape as a meeting recorded before this
             // feature existed.
-            let microphoneDiarizer: FluidAudioStreamingDiarizer? =
-                disableDiarization
-                ? nil
-                : FluidAudioStreamingDiarizer(
+            var microphoneDiarizer: FluidAudioStreamingDiarizer?
+            var systemAudioDiarizer: FluidAudioStreamingDiarizer?
+            if !disableDiarization {
+                let microphoneWrapper = FluidAudioStreamingDiarizer(
                     diarizer: try await modelStore.loadStreamingDiarizer())
-            let systemAudioDiarizer: FluidAudioStreamingDiarizer? =
-                disableDiarization
-                ? nil
-                : FluidAudioStreamingDiarizer(
+                let systemAudioWrapper = FluidAudioStreamingDiarizer(
                     diarizer: try await modelStore.loadStreamingDiarizer())
+                // Primed with every enrolled voice before real audio starts flowing, so a
+                // returning contact is recognized by Sortformer's own matching rather than
+                // showing up as an unresolved slot every meeting.
+                for personID in store.voiceprintIDs {
+                    guard let voiceprint = store.voiceprint(personID: personID) else { continue }
+                    microphoneWrapper.enroll(personID: personID, voiceprint: voiceprint)
+                    systemAudioWrapper.enroll(personID: personID, voiceprint: voiceprint)
+                }
+                microphoneDiarizer = microphoneWrapper
+                systemAudioDiarizer = systemAudioWrapper
+            }
 
             await microphoneTranscriber.onUpdate { [weak self] text in
                 Task { @MainActor in self?.microphoneLiveText = text }
@@ -160,11 +191,14 @@ public final class MeetingRecorder {
                 try? await transcriber.ingest(samples: buffer)
                 try? diarizer?.ingest(samples: buffer)
             }
-            let diarizerSegments = try diarizer?.finish() ?? []
+            let diarization = try diarizer?.finish()
             let segments = try await transcriber.finish(
-                track: track, diarizerSegments: diarizerSegments)
+                track: track, diarizerSegments: diarization?.segments ?? [])
             let language = await transcriber.detectedLanguage()
-            return TrackResult(segments: segments, language: language)
+            return TrackResult(
+                segments: segments, language: language,
+                diarizerSegments: diarization?.segments ?? [],
+                recognizedPersonIDs: diarization?.recognizedPersonIDs ?? [:])
         }
     }
 
@@ -227,6 +261,15 @@ public final class MeetingRecorder {
                 preamble: TranscriptCodec.split(meeting.body).preamble, segments: merged)
             store.update(meeting)
 
+            // Captured now or never: the next line deletes the only audio this could ever come
+            // from.
+            pendingSpeakers += Self.pendingSpeakers(
+                meetingID: meetingID, track: .mic, result: microphoneResult,
+                audioURL: directory.appendingPathComponent("mic.wav"))
+            pendingSpeakers += Self.pendingSpeakers(
+                meetingID: meetingID, track: .system, result: systemAudioResult,
+                audioURL: directory.appendingPathComponent("system.wav"))
+
             try? FileManager.default.removeItem(at: directory)
 
             state = .summarising
@@ -260,5 +303,92 @@ public final class MeetingRecorder {
             let name = store.displayName(for: meetingID) ?? meetingID
             store.lastError = "Couldn't transcribe \"\(name)\": \(error.localizedDescription)"
         }
+    }
+
+    /// One `PendingSpeaker` per distinct slot that actually has transcribed words attributed to
+    /// it — never one for a track that had diarization off (`result.segments` all carry `speaker
+    /// == nil` then), and never one for a slot the diarizer flagged as voice activity but the ASR
+    /// never transcribed anything for, which is otherwise a real case: near-silence on an
+    /// unused mic track can read as a low-confidence "speaker" with no actual speech, and a card
+    /// for it would relabel nothing if confirmed, only add a spurious attendee and voiceprint.
+    /// `nonisolated` and `static`: reads only its own arguments, does its own (small, synchronous)
+    /// file I/O to pull each slot's candidate audio out of the still-on-disk WAV.
+    nonisolated private static func pendingSpeakers(
+        meetingID: EntityID, track: AudioTrack, result: TrackResult, audioURL: URL
+    ) -> [PendingSpeaker] {
+        let slots = Set(result.segments.compactMap(\.speaker?.slot))
+        return slots.map { slot in
+            PendingSpeaker(
+                speaker: Speaker(track: track, slot: slot),
+                meetingID: meetingID,
+                candidateSamples: candidateSamples(
+                    forSlot: slot, in: result.diarizerSegments, audioURL: audioURL),
+                sampleRate: 16_000,
+                suggestedPersonID: result.recognizedPersonIDs[slot])
+        }
+    }
+
+    /// Concatenates one slot's segments, earliest first, up to `maxDuration` seconds — plenty
+    /// for a future `enrollSpeaker` priming, and small enough that this vault's voiceprints stay
+    /// tiny JSON files rather than de facto audio recordings.
+    nonisolated private static func candidateSamples(
+        forSlot slot: Int, in diarizerSegments: [DiarizerSegment], audioURL: URL,
+        maxDuration: Float = 10
+    ) -> [Float] {
+        var collected: [Float] = []
+        var totalDuration: Float = 0
+        for segment in diarizerSegments where segment.speakerIndex == slot {
+            guard totalDuration < maxDuration else { break }
+            guard
+                let samples = WAVSampleReader.samples(
+                    in: audioURL, startTime: segment.startTime, endTime: segment.endTime)
+            else { continue }
+            collected.append(contentsOf: samples)
+            totalDuration += segment.duration
+        }
+        return collected
+    }
+
+    /// Confirms (or corrects) `speaker` as `personID`: relabels every already-written segment for
+    /// that track/slot, adds `personID` to the meeting's attendees if absent, and — since this is
+    /// the one moment this slot's candidate audio still exists at all — saves it as `personID`'s
+    /// voiceprint for next time. Removes the resolved card from ``pendingSpeakers``.
+    public func assignSpeaker(_ speaker: Speaker, to personID: EntityID) {
+        guard let index = pendingSpeakers.firstIndex(where: { $0.speaker == speaker }) else {
+            return
+        }
+        let pending = pendingSpeakers[index]
+        guard var meeting = store.snapshot.meetings[pending.meetingID] else { return }
+
+        let split = TranscriptCodec.split(meeting.body)
+        let relabeled = split.segments.map { segment -> TranscriptSegment in
+            guard segment.speaker?.track == speaker.track, segment.speaker?.slot == speaker.slot
+            else { return segment }
+            var updated = segment
+            updated.speaker?.personID = personID
+            return updated
+        }
+        meeting.body = TranscriptCodec.join(preamble: split.preamble, segments: relabeled)
+
+        if !meeting.attendees.contains(where: { $0.id == personID }) {
+            meeting.attendees.append(Wikilink(personID))
+        }
+        store.update(meeting)
+
+        if !pending.candidateSamples.isEmpty {
+            store.setVoiceprint(
+                personID: personID, samples: pending.candidateSamples,
+                sampleRate: pending.sampleRate)
+        }
+
+        pendingSpeakers.remove(at: index)
+    }
+
+    /// Leaves a slot's segments labeled "Speaker N" for good — the card just goes away, nothing
+    /// is written and no voiceprint is trained. A deliberate v1 scope cut, not an oversight: once
+    /// dismissed (or once a new recording replaces this recorder), that slot's candidate audio is
+    /// gone, so there is nothing left to confirm against later.
+    public func dismissPendingSpeaker(_ speaker: Speaker) {
+        pendingSpeakers.removeAll { $0.speaker == speaker }
     }
 }

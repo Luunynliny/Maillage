@@ -55,7 +55,7 @@ struct MeetingView: View {
                 isDetailVisible: $isDetailVisible, selection: $selection,
                 editorRequest: $editorRequest)
 
-            if isRecordingThisMeeting || isTranscribing
+            if isRecordingThisMeeting || isTranscribing || !pendingSpeakers.isEmpty
                 || !(attendees.isEmpty && segments.isEmpty && preamble.isEmpty)
             {
                 content
@@ -98,6 +98,9 @@ struct MeetingView: View {
                 }
                 if !segments.isEmpty {
                     transcriptSection
+                }
+                if !pendingSpeakers.isEmpty {
+                    pendingSpeakersSection
                 }
             }
             .padding(Theme.Spacing.large)
@@ -387,6 +390,21 @@ struct MeetingView: View {
         }
     }
 
+    // MARK: Pending speakers
+
+    /// One card per diarized slot nobody has confirmed yet — see ``PendingSpeaker`` for why this
+    /// is the one chance to train a voiceprint from it, not just relabel the transcript.
+    private var pendingSpeakersSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+            SectionHeader("Who said this?", trailing: "\(pendingSpeakers.count)")
+            VStack(spacing: Theme.Spacing.medium) {
+                ForEach(pendingSpeakers) { pending in
+                    PendingSpeakerCard(pending: pending, recorder: activeRecorder)
+                }
+            }
+        }
+    }
+
     // MARK: Data
 
     private var attendees: [Wikilink] { meeting.attendees }
@@ -399,11 +417,66 @@ struct MeetingView: View {
         TranscriptCodec.split(meeting.body).segments
     }
 
+    /// Only this meeting's own — `activeRecorder.pendingSpeakers` also carries a since-replaced
+    /// recorder's leftovers from whichever meeting it last finished, if this one hasn't started
+    /// its own recording yet.
+    private var pendingSpeakers: [PendingSpeaker] {
+        activeRecorder?.pendingSpeakers.filter { $0.meetingID == meeting.id } ?? []
+    }
+
     private var subtitle: String {
         let count = attendees.count
         let people = "\(count) \(count == 1 ? "attendee" : "attendees")"
         guard let date = meeting.date else { return people }
         return "\(people) · \(date.description)"
+    }
+}
+
+/// One diarized slot, confirmed against an existing person or dismissed. A brand-new contact
+/// isn't created inline here — pick them from the existing sidebar "+" flow first, then confirm
+/// this card against them, the same way an attendee or a project's roster is picked everywhere
+/// else in the app; a second, bespoke "create new" combo box for this one picker isn't worth it.
+private struct PendingSpeakerCard: View {
+    @Environment(VaultStore.self) private var store
+
+    let pending: PendingSpeaker
+    let recorder: MeetingRecorder?
+
+    @State private var selection: Set<EntityID> = []
+
+    var body: some View {
+        Card {
+            HStack(spacing: Theme.Spacing.small) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Speaker \(pending.speaker.slot + 1)")
+                        .font(Theme.Font.body)
+                        .foregroundStyle(Theme.textNormal)
+                    Text(pending.speaker.track == .mic ? "You" : "Them")
+                        .font(Theme.Font.caption)
+                        .foregroundStyle(Theme.textMuted)
+                }
+                Spacer(minLength: 0)
+                SecondaryButton("Not now") { recorder?.dismissPendingSpeaker(pending.speaker) }
+                PrimaryButton("Confirm", isEnabled: selection.first != nil) {
+                    guard let personID = selection.first else { return }
+                    recorder?.assignSpeaker(pending.speaker, to: personID)
+                }
+            }
+
+            MultiSelectField(
+                label: "Who is this?",
+                options: store.allPeople.map { ($0.id, $0.displayName) },
+                selected: $selection,
+                kind: .person,
+                prompt: "Search people",
+                limit: 1
+            )
+        }
+        .onAppear {
+            if let suggested = pending.suggestedPersonID {
+                selection = [suggested]
+            }
+        }
     }
 }
 
