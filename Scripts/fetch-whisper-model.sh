@@ -68,9 +68,13 @@ done <<<"$files"
 
 # Atomic within the cache directory's own filesystem: the model directory either doesn't exist
 # yet, or is a previous complete download — never a half-written one a concurrent build could
-# see. Renamed from the HF variant name to $bundled_name here (rather than at every call site)
-# so the app-facing name stays short and stable even if the upstream variant folder is renamed on
-# a future model bump.
+# see. The rm -rf is what makes that true: without it, an interrupted prior run that got past this
+# mv but crashed before the manifest was written below would leave $model_dir populated but
+# unmanifested, and mv into an *existing* directory nests the source inside it instead of
+# replacing it. Renamed from the HF variant name to $bundled_name here (rather than at every call
+# site) so the app-facing name stays short and stable even if the upstream variant folder is
+# renamed on a future model bump.
+rm -rf "$model_dir"
 mv "$staging/$variant" "$model_dir"
 echo "$files" >"$manifest"
 

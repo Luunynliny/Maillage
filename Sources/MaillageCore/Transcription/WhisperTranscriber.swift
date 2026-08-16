@@ -31,7 +31,7 @@ public final class WhisperTranscriber: Transcriber, @unchecked Sendable {
         return results.flatMap { result in
             result.segments.map {
                 TranscriptSegment(
-                    offsetSeconds: Int($0.start),
+                    offsetSeconds: Int($0.start.rounded()),
                     text: $0.text.trimmingCharacters(in: .whitespaces))
             }
         }
