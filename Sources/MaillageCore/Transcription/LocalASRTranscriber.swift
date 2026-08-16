@@ -21,11 +21,21 @@ import Qwen3ASR
 /// `SpeechRecognitionModel.transcribeWithLanguage`'s default protocol extension returns
 /// `TranscriptionResult(text:)` with `confidence: 0.0` for any conformer that doesn't override it,
 /// and `Qwen3ASRModel`'s own conformance never does. There is therefore no per-segment score left
-/// to filter on here, unlike the old `noSpeechThreshold` — the VAD gate above is the only
-/// hallucination mitigation this backend has, structurally different from Whisper's (which decoded
-/// fixed windows regardless of voice activity and needed `noSpeechProb` to catch what leaked
-/// through). Whether that's sufficient against Qwen3-ASR's own hallucination modes needs real-audio
-/// verification; this is flagged, not silently assumed fine.
+/// to filter on here, unlike the old `noSpeechThreshold` — the VAD gate above is this backend's
+/// only mitigation against *no-speech* hallucination specifically, structurally different from
+/// Whisper's (which decoded fixed windows regardless of voice activity and needed `noSpeechProb`
+/// to catch what leaked through). Whether the VAD gate alone is sufficient against Qwen3-ASR's own
+/// hallucination modes needs real-audio verification; this is flagged, not silently assumed fine.
+///
+/// Separately, `speech-swift` does ship a lever against a *different* failure mode — decoder
+/// repetition loops — via `Qwen3DecodingOptions.repetitionPenalty`/`noRepeatNgramSize`, which
+/// `Qwen3ASRModel` auto-escalates past `longInputThresholdSeconds` (default 15.0s) even on the
+/// legacy greedy call path. It's dormant here by construction: `maxSegmentDuration: 10.0` below
+/// keeps every VAD-bounded segment under that 15s threshold, and `StreamingASRConfig` doesn't
+/// expose a `decodingOptions` field for `transcribeStream` to reach it through regardless. If
+/// real-audio testing turns up repetition loops, the fix is either raising `maxSegmentDuration`
+/// past 15.0 to engage the library's own escalation, or upstreaming a `decodingOptions` field onto
+/// `StreamingASRConfig` — noted here so it's findable instead of rediscovered from scratch.
 ///
 /// **Language.** `language: nil` throughout: `Qwen3ASRModel.generateText` (read directly) only
 /// appends a `"language <code>"` hint token when a language is passed — when it isn't, the model
