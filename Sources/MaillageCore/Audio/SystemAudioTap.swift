@@ -220,10 +220,12 @@ final class SystemAudioTap {
 
     /// See ``MicrophoneRecorder``'s copy of this — same reasoning: the buffer is only valid
     /// for the duration of this callback, so anything handed off the real-time thread needs
-    /// its own plain array.
+    /// its own plain array. `converted` is `PCMFormat.target`, 16-bit integer PCM, so this
+    /// reads `int16ChannelData`, not `floatChannelData` — that's `nil` here.
     private static func samples(from buffer: AVAudioPCMBuffer) -> [Float] {
-        guard let channel = buffer.floatChannelData?[0] else { return [] }
-        return Array(UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength)))
+        guard let channel = buffer.int16ChannelData?[0] else { return [] }
+        let frameCount = Int(buffer.frameLength)
+        return (0..<frameCount).map { Float(channel[$0]) / 32768.0 }
     }
 
     private static func rootMeanSquare(of buffer: AVAudioPCMBuffer) -> Float {

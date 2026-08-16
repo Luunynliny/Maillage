@@ -14,7 +14,7 @@ as a force-directed graph clustered by employer.
 | Tests | Swift Testing (`@Test`, `@Suite`, `#expect`, `#require`) — **not** XCTest |
 | YAML | [Yams](https://github.com/jpsim/Yams) (MIT) |
 | Markdown rendering | [swift-markdown-ui](https://github.com/gonzalezreal/swift-markdown-ui) (MIT) |
-| Transcription | [WhisperKit](https://github.com/argmaxinc/WhisperKit) (MIT) |
+| Transcription/diarization | [FluidAudio](https://github.com/FluidInference/FluidAudio) (Apache 2.0) |
 
 Swift is a hard requirement: a later phase captures macOS system audio via Core Audio process
 taps, which has no cross-platform equivalent.
