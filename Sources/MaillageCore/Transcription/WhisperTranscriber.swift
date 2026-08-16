@@ -26,7 +26,8 @@ public final class WhisperTranscriber: Transcriber, @unchecked Sendable {
     }
 
     public func transcribe(fileAt url: URL) async throws -> [TranscriptSegment] {
-        let options = DecodingOptions(language: nil, detectLanguage: true, wordTimestamps: false)
+        let options = DecodingOptions(
+            language: nil, detectLanguage: true, skipSpecialTokens: true, wordTimestamps: false)
         let results = try await whisperKit.transcribe(audioPath: url.path, decodeOptions: options)
         return results.flatMap { result in
             result.segments.map {
