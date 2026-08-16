@@ -113,11 +113,13 @@ public final class MeetingRecorder {
         }
     }
 
-    /// Runs both tracks' batch transcriptions (concurrently, via `async let`), merges, writes,
-    /// deletes the audio, then summarises. Each track loads its own model and transcribes its
-    /// own WAV file top to bottom — there is no live pipeline left over from `start()` to await,
-    /// unlike the streaming design this replaced, so a missing bundled model now surfaces here
-    /// rather than at Start, the same failed-transcription banner a decode failure would.
+    /// Runs both tracks' batch transcriptions (concurrently, via `async let`), merges, cleans up
+    /// the merged transcript with an on-device LLM pass (dropping ASR hallucinations like
+    /// Whisper's "Thank you." artifact), writes, deletes the audio, then summarises. Each track
+    /// loads its own model and transcribes its own WAV file top to bottom — there is no live
+    /// pipeline left over from `start()` to await, unlike the streaming design this replaced, so
+    /// a missing bundled model now surfaces here rather than at Start, the same
+    /// failed-transcription banner a decode failure would.
     ///
     /// Each track's failure is caught independently rather than let either throw through a joint
     /// `try await` — a silent system-audio tap (no tap permission, a zero-frame WAV) is a known
@@ -148,7 +150,7 @@ public final class MeetingRecorder {
 
         let micSegments = (try? micResult.get()) ?? []
         let systemSegments = (try? systemResult.get()) ?? []
-        let merged = TranscriptMerger.merge(
+        var merged = TranscriptMerger.merge(
             micSegments: micSegments, systemSegments: systemSegments)
 
         // Surface whichever single track failed, non-fatally — the meeting still has a real
@@ -168,6 +170,26 @@ public final class MeetingRecorder {
 
         let language = Self.detectedLanguage(of: merged)
         meeting.language = language
+
+        // Detected on the raw merged segments, before cleanup — cleaning might trim enough text
+        // to make detection less reliable, and the cleaner's own prompt needs a language to
+        // respond in either way. The same `language` then also feeds the summarizer below, so
+        // both passes agree on one detection rather than each doing its own.
+        if SystemLanguageModel.default.availability == .available {
+            do {
+                merged = try await FoundationModelsTranscriptCleaner().clean(
+                    merged, language: language ?? "en")
+            } catch {
+                // Never let a cleanup failure cost the transcript — degrade to the raw merged
+                // segments, the same soft-failure posture a summarization failure already has.
+                let name = store.displayName(for: meetingID) ?? meetingID
+                store.lastError =
+                    "Couldn't clean up the transcript for \"\(name)\": \(error.localizedDescription)"
+            }
+        }
+        // Unavailable: silently skip, same reasoning as the summarizer below — a device-
+        // capability gap, not a per-meeting problem.
+
         meeting.body = TranscriptCodec.join(
             preamble: TranscriptCodec.split(meeting.body).preamble, segments: merged)
         store.update(meeting)
