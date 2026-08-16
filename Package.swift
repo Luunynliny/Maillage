@@ -19,6 +19,8 @@ let package = Package(
         .package(url: "https://github.com/jpsim/Yams", from: "5.1.0"),
         .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.1"),
         .package(url: "https://github.com/argmaxinc/argmax-oss-swift", from: "1.1.0"),
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "3.31.4"),
+        .package(url: "https://github.com/huggingface/swift-transformers", from: "1.3.3"),
     ],
     targets: [
         .target(
@@ -27,6 +29,10 @@ let package = Package(
                 .product(name: "Yams", package: "Yams"),
                 .product(name: "MarkdownUI", package: "swift-markdown-ui"),
                 .product(name: "WhisperKit", package: "argmax-oss-swift"),
+                .product(name: "MLXLLM", package: "mlx-swift-lm"),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+                .product(name: "MLXHuggingFace", package: "mlx-swift-lm"),
+                .product(name: "Tokenizers", package: "swift-transformers"),
             ],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),

@@ -216,6 +216,14 @@ jobs:
           path: .whisperkit-model-cache
           key: whisperkit-model-${{ hashFiles('Scripts/fetch-whisper-model.sh') }}
 
+      # Same reasoning as the WhisperKit cache above, for the local LLM's "Fetch LLM Model"
+      # build phase — ~830MB from Hugging Face on a cache miss, landing under .llm-model-cache.
+      - name: Cache local LLM model
+        uses: actions/cache@v4
+        with:
+          path: .llm-model-cache
+          key: llm-model-${{ hashFiles('Scripts/fetch-llm-model.sh') }}
+
       # Signed ad-hoc, which needs no Developer ID and so works on a runner. The version is left
       # at the project's own MARKETING_VERSION here — only `release` knows the real one, and it
       # rebuilds nothing: it restamps this exact bundle. See Scripts/build-app.sh.

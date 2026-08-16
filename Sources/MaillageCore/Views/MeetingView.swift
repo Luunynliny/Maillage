@@ -10,9 +10,9 @@ import SwiftUI
 ///
 /// The summary and the transcript are two different trust levels of the same body: the
 /// transcript is what ``TranscriptCodec`` guarantees round-trips exactly, the summary is
-/// whatever a later phase's model wrote above it — headings, bullets, bold/italic emphasis
-/// (see the design doc's `MeetingSummary` example) — and is rendered as markdown via
-/// MarkdownUI rather than hand-parsed, the same as the vault file reads in Obsidian.
+/// whatever the local LLM wrote above it directly as markdown — headings, bullets, bold/italic
+/// emphasis — and is rendered as markdown via MarkdownUI rather than hand-parsed, the same as
+/// the vault file reads in Obsidian.
 struct MeetingView: View {
     @Environment(VaultStore.self) private var store
 

@@ -136,7 +136,10 @@ public enum TranscriptCodec {
     /// Parses `"MM:SS"` or `"H:MM:SS"` back into seconds, or `nil` for anything else —
     /// including an empty string, so a stray `()` in hand-edited text is skipped as an
     /// unparseable line rather than read as a zero-second timestamp.
-    private static func parseTimestamp(_ raw: String) -> Int? {
+    ///
+    /// Internal rather than `private`: ``LocalLLMTranscriptCleaner``'s own lenient line parser
+    /// reuses this for the same `(mm:ss)`/`(h:mm:ss)` shape rather than re-implementing it.
+    static func parseTimestamp(_ raw: String) -> Int? {
         let parts = raw.split(separator: ":")
         guard (2...3).contains(parts.count) else { return nil }
         let numbers = parts.compactMap { Int($0) }

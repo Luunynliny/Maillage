@@ -32,6 +32,13 @@ dist/
 # cached for every build after, on a developer machine and in CI alike.
 .whisperkit-model-cache/
 
+## Local LLM model cache
+#
+# .llm-model-cache/ holds the MLX-format LLM Scripts/fetch-llm-model.sh fetches at build time
+# (see the "Fetch LLM Model" build phase in maillage.xcodeproj), for the same reason and on the
+# same schedule as .whisperkit-model-cache/ above.
+.llm-model-cache/
+
 ## Playgrounds
 timeline.xctimeline
 playground.xcworkspace

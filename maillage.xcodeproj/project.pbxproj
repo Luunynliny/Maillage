@@ -10,6 +10,10 @@
 		000000000000000000000122 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000114 /* Yams */; };
 		000000000000000000000125 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000116 /* MarkdownUI */; };
 		000000000000000000000143 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000142 /* WhisperKit */; };
+		000000000000000000000144 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000148 /* MLXLLM */; };
+		000000000000000000000145 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000149 /* MLXLMCommon */; };
+		000000000000000000000146 /* MLXHuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000150 /* MLXHuggingFace */; };
+		000000000000000000000147 /* Tokenizers in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000151 /* Tokenizers */; };
 		000000000000000000000123 /* MaillageCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000C1 /* MaillageCore.framework */; };
 		000000000000000000000124 /* MaillageCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000C1 /* MaillageCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -65,6 +69,10 @@
 				000000000000000000000122 /* Yams in Frameworks */,
 				000000000000000000000125 /* MarkdownUI in Frameworks */,
 				000000000000000000000143 /* WhisperKit in Frameworks */,
+				000000000000000000000144 /* MLXLLM in Frameworks */,
+				000000000000000000000145 /* MLXLMCommon in Frameworks */,
+				000000000000000000000146 /* MLXHuggingFace in Frameworks */,
+				000000000000000000000147 /* Tokenizers in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -148,6 +156,10 @@
 				000000000000000000000114 /* Yams */,
 				000000000000000000000116 /* MarkdownUI */,
 				000000000000000000000142 /* WhisperKit */,
+				000000000000000000000148 /* MLXLLM */,
+				000000000000000000000149 /* MLXLMCommon */,
+				000000000000000000000150 /* MLXHuggingFace */,
+				000000000000000000000151 /* Tokenizers */,
 			);
 			productName = MaillageCore;
 			productReference = 0000000000000000000000C1 /* MaillageCore.framework */;
@@ -158,6 +170,7 @@
 			buildConfigurationList = 0000000000000000000000F3 /* Build configuration list for PBXNativeTarget "Maillage" */;
 			buildPhases = (
 				000000000000000000000140 /* Fetch WhisperKit Model */,
+				000000000000000000000154 /* Fetch LLM Model */,
 				0000000000000000000000E5 /* Sources */,
 				0000000000000000000000E6 /* Frameworks */,
 				0000000000000000000000E7 /* Resources */,
@@ -208,6 +221,8 @@
 				000000000000000000000112 /* XCRemoteSwiftPackageReference "Yams" */,
 				000000000000000000000115 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 				000000000000000000000141 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */,
+				000000000000000000000152 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
+				000000000000000000000153 /* XCRemoteSwiftPackageReference "swift-transformers" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0000000000000000000000A3 /* Products */;
@@ -251,6 +266,21 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "set -euo pipefail\n\"${SRCROOT}/Scripts/fetch-whisper-model.sh\"\nmkdir -p \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/WhisperKitModel\"\nrsync -a --delete \"${SRCROOT}/.whisperkit-model-cache/large-v3-turbo/\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/WhisperKitModel/large-v3-turbo/\"\n";
+			alwaysOutOfDate = 1;
+		};
+		000000000000000000000154 /* Fetch LLM Model */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			name = "Fetch LLM Model";
+			outputFileListPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\n\"${SRCROOT}/Scripts/fetch-llm-model.sh\"\nmkdir -p \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/LLMModel\"\nrsync -a --delete \"${SRCROOT}/.llm-model-cache/qwen2.5-1.5b-instruct-4bit/\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/LLMModel/qwen2.5-1.5b-instruct-4bit/\"\n";
 			alwaysOutOfDate = 1;
 		};
 /* End PBXShellScriptBuildPhase section */
@@ -520,6 +550,22 @@
 				minimumVersion = 1.1.0;
 			};
 		};
+		000000000000000000000152 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.31.4;
+			};
+		};
+		000000000000000000000153 /* XCRemoteSwiftPackageReference "swift-transformers" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/huggingface/swift-transformers";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.3.3;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -537,6 +583,26 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 000000000000000000000141 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
 			productName = WhisperKit;
+		};
+		000000000000000000000148 /* MLXLLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 000000000000000000000152 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLLM;
+		};
+		000000000000000000000149 /* MLXLMCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 000000000000000000000152 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLMCommon;
+		};
+		000000000000000000000150 /* MLXHuggingFace */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 000000000000000000000152 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXHuggingFace;
+		};
+		000000000000000000000151 /* Tokenizers */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 000000000000000000000153 /* XCRemoteSwiftPackageReference "swift-transformers" */;
+			productName = Tokenizers;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

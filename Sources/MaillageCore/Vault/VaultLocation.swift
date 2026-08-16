@@ -61,6 +61,17 @@ public struct VaultLocation: Hashable, Sendable {
             .appendingPathComponent("recordings", isDirectory: true)
     }
 
+    /// Where the local LLM's user-editable prompt templates live: `.maillage/prompts/`. Like
+    /// ``recordingsRootDirectory``, never created eagerly by ``createSkeletonIfNeeded()`` — a
+    /// template file is seeded here the first time a meeting is transcribed
+    /// (``PromptTemplateStore``), not at vault creation, so an unrecorded vault has no prompts a
+    /// user would find and wonder about.
+    public func promptURL(named name: String) -> URL {
+        root.appendingPathComponent(".maillage", isDirectory: true)
+            .appendingPathComponent("prompts", isDirectory: true)
+            .appendingPathComponent("\(name).md")
+    }
+
     /// Creates the vault root, the three entity directories, their asset folders, and
     /// `.maillage/`. Safe to call repeatedly.
     public func createSkeletonIfNeeded() throws {

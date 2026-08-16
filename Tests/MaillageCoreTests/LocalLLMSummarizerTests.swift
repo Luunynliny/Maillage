@@ -3,12 +3,12 @@ import Testing
 
 @testable import MaillageCore
 
-@Suite("Summarizer transcript line rendering")
-struct FoundationModelsSummarizerTests {
+@Suite("Local LLM summarizer transcript line rendering")
+struct LocalLLMSummarizerTests {
     @Test("A segment renders as a plain timestamped line")
     func plainLine() {
         let segment = TranscriptSegment(offsetSeconds: 15, text: "On va commencer.")
-        let line = FoundationModelsSummarizer.line(for: segment)
+        let line = LocalLLMSummarizer.line(for: segment)
         #expect(line == "(00:15) On va commencer.")
     }
 }

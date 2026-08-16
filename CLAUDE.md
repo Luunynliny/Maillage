@@ -15,16 +15,21 @@ as a force-directed graph clustered by employer.
 | YAML | [Yams](https://github.com/jpsim/Yams) (MIT) |
 | Markdown rendering | [swift-markdown-ui](https://github.com/gonzalezreal/swift-markdown-ui) (MIT) |
 | Transcription | [WhisperKit](https://github.com/argmaxinc/argmax-oss-swift) (MIT) |
+| Summarization/cleanup | [mlx-swift-lm](https://github.com/ml-explore/mlx-swift-lm) (MIT) running Qwen2.5-1.5B-Instruct (Apache 2.0), tokenized via [swift-transformers](https://github.com/huggingface/swift-transformers) (Apache 2.0) |
 
 Swift is a hard requirement: a later phase captures macOS system audio via Core Audio process
 taps, which has no cross-platform equivalent.
 
-The floor is macOS 26 for `FoundationModels`, which the meeting-recording feature uses for an
+The floor was macOS 26 for `FoundationModels`, which the meeting-recording feature used for an
 on-device summary — see
 [docs/superpowers/specs/2026-08-13-meeting-recording-design.md](docs/superpowers/specs/2026-08-13-meeting-recording-design.md).
-`Package.swift`'s `swift-tools-version` is `6.2` for the same reason: `.macOS(.v26)` is gated on
-that manifest API version. That is unrelated to `.swiftLanguageMode(.v5)` above, which governs how
-the *sources* compile and does not move with it.
+`FoundationModels` has since been dropped entirely in favor of the bundled `mlx-swift-lm` model
+above, which has no comparable OS-version or device-eligibility floor — **whether `.macOS(.v26)`
+still needs to be this high is now an open question, not yet investigated**; something else in the
+app may still require it. `Package.swift`'s `swift-tools-version` is `6.2` for the same reason
+`.macOS(.v26)` is: it's gated on that manifest API version. That is unrelated to
+`.swiftLanguageMode(.v5)` above, which governs how the *sources* compile and does not move with
+either.
 
 **Open source first.** Every dependency added must be OSS with a permissive license, noted in
 the table above with its license.

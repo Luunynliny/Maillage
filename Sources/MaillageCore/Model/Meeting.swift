@@ -28,8 +28,9 @@ public struct Meeting: Entity, Codable {
     public var attendees: [Wikilink]
     public var created: CalendarDay?
     /// Holds the generated "## Summary" and "## Transcript" sections. ``TranscriptCodec``
-    /// reads and writes the latter; the former is written by ``MeetingSummary/markdown`` and
-    /// rendered by `MeetingView`, but opaque text this type never parses.
+    /// reads and writes the latter; the former is markdown text written directly by
+    /// `LocalLLMSummarizer` and rendered by `MeetingView`, but opaque text this type never
+    /// parses.
     public var body: String
 
     public var kind: EntityKind { .meeting }

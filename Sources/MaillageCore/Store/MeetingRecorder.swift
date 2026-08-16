@@ -1,5 +1,4 @@
 import Foundation
-import FoundationModels
 import NaturalLanguage
 import Observation
 
@@ -175,20 +174,22 @@ public final class MeetingRecorder {
         // to make detection less reliable, and the cleaner's own prompt needs a language to
         // respond in either way. The same `language` then also feeds the summarizer below, so
         // both passes agree on one detection rather than each doing its own.
-        if SystemLanguageModel.default.availability == .available {
-            do {
-                merged = try await FoundationModelsTranscriptCleaner().clean(
-                    merged, language: language ?? "en")
-            } catch {
-                // Never let a cleanup failure cost the transcript — degrade to the raw merged
-                // segments, the same soft-failure posture a summarization failure already has.
-                let name = store.displayName(for: meetingID) ?? meetingID
-                store.lastError =
-                    "Couldn't clean up the transcript for \"\(name)\": \(error.localizedDescription)"
-            }
+        do {
+            let container = try await LocalLLMModelStore().loadContainer()
+            let instructions = PromptTemplateStore.load(.cleanup, location: store.location)
+            merged = try await LocalLLMTranscriptCleaner(
+                container: container, instructions: instructions
+            ).clean(merged, language: language ?? "en")
+        } catch {
+            // Never let a cleanup failure cost the transcript — degrade to the raw merged
+            // segments, the same soft-failure posture a summarization failure already has. A
+            // bundled model is either present or the build is broken, so unlike the
+            // `FoundationModels` version this replaces, there is no "unavailable on this device"
+            // case to silently skip — any failure here is real and worth surfacing.
+            let name = store.displayName(for: meetingID) ?? meetingID
+            store.lastError =
+                "Couldn't clean up the transcript for \"\(name)\": \(error.localizedDescription)"
         }
-        // Unavailable: silently skip, same reasoning as the summarizer below — a device-
-        // capability gap, not a per-meeting problem.
 
         meeting.body = TranscriptCodec.join(
             preamble: TranscriptCodec.split(meeting.body).preamble, segments: merged)
@@ -199,27 +200,25 @@ public final class MeetingRecorder {
         try? FileManager.default.removeItem(at: directory)
 
         state = .summarising
-        if SystemLanguageModel.default.availability == .available {
-            do {
-                let summary = try await FoundationModelsSummarizer().summarize(
-                    merged, language: language ?? "en")
-                if var summarized = store.snapshot.meetings[meetingID] {
-                    summarized.body = TranscriptCodec.join(
-                        preamble: summary.markdown, segments: merged)
-                    store.update(summarized)
-                }
-            } catch {
-                // Never state = .failed here — a summary failure degrades to "transcript, no
-                // summary," per the design doc; only surface it the same soft way
-                // transcription failure already does, via the shared banner.
-                let name = store.displayName(for: meetingID) ?? meetingID
-                store.lastError =
-                    "Couldn't summarize \"\(name)\": \(error.localizedDescription)"
+        do {
+            let container = try await LocalLLMModelStore().loadContainer()
+            let instructions = PromptTemplateStore.load(.summary, location: store.location)
+            let summary = try await LocalLLMSummarizer(
+                container: container, instructions: instructions
+            ).summarize(merged, language: language ?? "en")
+            if var summarized = store.snapshot.meetings[meetingID] {
+                summarized.body = TranscriptCodec.join(preamble: summary, segments: merged)
+                store.update(summarized)
             }
+        } catch {
+            // Never state = .failed here — a summary failure degrades to "transcript, no
+            // summary," per the design doc; only surface it the same soft way
+            // transcription failure already does, via the shared banner. Same reasoning as
+            // cleanup above: no device-capability gap to silently skip anymore.
+            let name = store.displayName(for: meetingID) ?? meetingID
+            store.lastError =
+                "Couldn't summarize \"\(name)\": \(error.localizedDescription)"
         }
-        // Unavailable (device ineligible, Apple Intelligence off, model not ready): silently
-        // skip. That's a device-capability gap, not a per-meeting problem — a banner on
-        // every meeting on an ineligible Mac would just be noise.
     }
 
     /// Loads a fresh batch ASR model and transcribes one track's WAV file top to bottom, grouped

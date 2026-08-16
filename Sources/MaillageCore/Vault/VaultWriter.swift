@@ -33,7 +33,11 @@ public struct VaultWriter {
 
     /// Takes `Data` rather than a `String` so logos go through the same swap as markdown: an
     /// interrupted save can no more leave half a PNG behind than half a profile.
-    private func writeAtomically(_ data: Data, to url: URL) throws {
+    ///
+    /// Public rather than `private`: ``PromptTemplateStore`` reuses this exact atomic-write
+    /// primitive to seed `.maillage/prompts/*.md`, rather than a second write path with the same
+    /// temp-file-then-swap shape.
+    public func writeAtomically(_ data: Data, to url: URL) throws {
         let fm = FileManager.default
         try fm.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
