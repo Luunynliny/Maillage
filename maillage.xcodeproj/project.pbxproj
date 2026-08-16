@@ -9,7 +9,7 @@
 /* Begin PBXBuildFile section */
 		000000000000000000000122 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000114 /* Yams */; };
 		000000000000000000000125 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000116 /* MarkdownUI */; };
-		000000000000000000000143 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000142 /* FluidAudio */; };
+		000000000000000000000143 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000142 /* WhisperKit */; };
 		000000000000000000000123 /* MaillageCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000C1 /* MaillageCore.framework */; };
 		000000000000000000000124 /* MaillageCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000C1 /* MaillageCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -64,7 +64,7 @@
 			files = (
 				000000000000000000000122 /* Yams in Frameworks */,
 				000000000000000000000125 /* MarkdownUI in Frameworks */,
-				000000000000000000000143 /* FluidAudio in Frameworks */,
+				000000000000000000000143 /* WhisperKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -147,7 +147,7 @@
 			packageProductDependencies = (
 				000000000000000000000114 /* Yams */,
 				000000000000000000000116 /* MarkdownUI */,
-				000000000000000000000142 /* FluidAudio */,
+				000000000000000000000142 /* WhisperKit */,
 			);
 			productName = MaillageCore;
 			productReference = 0000000000000000000000C1 /* MaillageCore.framework */;
@@ -157,7 +157,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 0000000000000000000000F3 /* Build configuration list for PBXNativeTarget "Maillage" */;
 			buildPhases = (
-				000000000000000000000140 /* Fetch FluidAudio ASR Model */,
+				000000000000000000000140 /* Fetch WhisperKit Model */,
 				0000000000000000000000E5 /* Sources */,
 				0000000000000000000000E6 /* Frameworks */,
 				0000000000000000000000E7 /* Resources */,
@@ -207,7 +207,7 @@
 			packageReferences = (
 				000000000000000000000112 /* XCRemoteSwiftPackageReference "Yams" */,
 				000000000000000000000115 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
-				000000000000000000000141 /* XCRemoteSwiftPackageReference "FluidAudio" */,
+				000000000000000000000141 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0000000000000000000000A3 /* Products */;
@@ -238,19 +238,19 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		000000000000000000000140 /* Fetch FluidAudio ASR Model */ = {
+		000000000000000000000140 /* Fetch WhisperKit Model */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			inputFileListPaths = (
 			);
-			name = "Fetch FluidAudio ASR Model";
+			name = "Fetch WhisperKit Model";
 			outputFileListPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -euo pipefail\n\"${SRCROOT}/Scripts/fetch-fluidaudio-asr-model.sh\"\nmkdir -p \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/FluidAudioModels/nemotron-multilingual-latin-2240ms\"\nrsync -a --delete \"${SRCROOT}/.fluidaudio-model-cache/latin/2240ms/\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/FluidAudioModels/nemotron-multilingual-latin-2240ms/\"\n";
+			shellScript = "set -euo pipefail\n\"${SRCROOT}/Scripts/fetch-whisper-model.sh\"\nmkdir -p \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/WhisperKitModel\"\nrsync -a --delete \"${SRCROOT}/.whisperkit-model-cache/large-v3-turbo/\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/WhisperKitModel/large-v3-turbo/\"\n";
 			alwaysOutOfDate = 1;
 		};
 /* End PBXShellScriptBuildPhase section */
@@ -512,12 +512,12 @@
 				minimumVersion = 2.4.1;
 			};
 		};
-		000000000000000000000141 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
+		000000000000000000000141 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
+			repositoryURL = "https://github.com/argmaxinc/argmax-oss-swift";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 0.12.4;
+				minimumVersion = 1.1.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -533,10 +533,10 @@
 			package = 000000000000000000000115 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
 			productName = MarkdownUI;
 		};
-		000000000000000000000142 /* FluidAudio */ = {
+		000000000000000000000142 /* WhisperKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 000000000000000000000141 /* XCRemoteSwiftPackageReference "FluidAudio" */;
-			productName = FluidAudio;
+			package = 000000000000000000000141 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
+			productName = WhisperKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

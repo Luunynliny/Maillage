@@ -1,4 +1,3 @@
-import FluidAudio
 import Foundation
 import FoundationModels
 import NaturalLanguage
@@ -205,9 +204,8 @@ public final class MeetingRecorder {
     /// into timestamped segments. `nonisolated` and `static`: touches no recorder state, only the
     /// file it's given — `finishTranscription` runs both tracks' calls concurrently.
     nonisolated private static func transcribe(url: URL) async throws -> [TranscriptSegment] {
-        let manager = try await FluidAudioModelStore().loadBatchASR()
-        let timings = try await FluidAudioTranscriber(manager: manager).transcribe(fileURL: url)
-        return TokenTimingGrouper.segments(from: timings)
+        let whisperKit = try await WhisperModelStore().loadWhisperKit()
+        return try await WhisperTranscriber(whisperKit: whisperKit).transcribe(fileAt: url)
     }
 
     /// `transcribe(url:)`, with its failure caught rather than thrown — so `finishTranscription`

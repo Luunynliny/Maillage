@@ -206,15 +206,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The "Fetch FluidAudio ASR Model" build phase Scripts/build-app.sh triggers downloads
-      # ~600MB from Hugging Face on a cache miss, landing under .fluidaudio-model-cache. Keyed on
-      # the fetch script's own hash so a future change to it (a different precision, a bug fix)
+      # The "Fetch WhisperKit Model" build phase Scripts/build-app.sh triggers downloads ~632MB
+      # from Hugging Face on a cache miss, landing under .whisperkit-model-cache. Keyed on the
+      # fetch script's own hash so a future change to it (a different variant, a bug fix)
       # invalidates the cache automatically — no separate version string to remember to bump.
-      - name: Cache FluidAudio models
+      - name: Cache WhisperKit model
         uses: actions/cache@v4
         with:
-          path: .fluidaudio-model-cache
-          key: fluidaudio-models-${{ hashFiles('Scripts/fetch-fluidaudio-asr-model.sh') }}
+          path: .whisperkit-model-cache
+          key: whisperkit-model-${{ hashFiles('Scripts/fetch-whisper-model.sh') }}
 
       # Signed ad-hoc, which needs no Developer ID and so works on a runner. The version is left
       # at the project's own MARKETING_VERSION here — only `release` knows the real one, and it
