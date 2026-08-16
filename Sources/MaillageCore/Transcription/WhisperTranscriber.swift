@@ -25,16 +25,27 @@ public final class WhisperTranscriber: Transcriber, @unchecked Sendable {
         self.whisperKit = whisperKit
     }
 
+    /// Whisper's well-known "Thank you." / "Thanks for watching" hallucination — stock phrases
+    /// from its YouTube-heavy training data, produced on near-silent audio the model still tries
+    /// to decode something for. `noSpeechProb` is the model's own estimate of whether a segment's
+    /// audio contained speech at all, independent of how confident it was in whatever text it
+    /// produced, so filtering on it (WhisperKit's own documented default threshold for treating a
+    /// segment as silent) drops exactly this failure mode without touching genuine speech — a
+    /// real spoken "thank you" scores low here, since there's real speech underneath it.
+    private static let noSpeechThreshold: Float = 0.6
+
     public func transcribe(fileAt url: URL) async throws -> [TranscriptSegment] {
         let options = DecodingOptions(
             language: nil, detectLanguage: true, skipSpecialTokens: true, wordTimestamps: false)
         let results = try await whisperKit.transcribe(audioPath: url.path, decodeOptions: options)
         return results.flatMap { result in
-            result.segments.map {
-                TranscriptSegment(
-                    offsetSeconds: Int($0.start.rounded()),
-                    text: $0.text.trimmingCharacters(in: .whitespaces))
-            }
+            result.segments
+                .filter { $0.noSpeechProb < Self.noSpeechThreshold }
+                .map {
+                    TranscriptSegment(
+                        offsetSeconds: Int($0.start.rounded()),
+                        text: $0.text.trimmingCharacters(in: .whitespaces))
+                }
         }
     }
 }
