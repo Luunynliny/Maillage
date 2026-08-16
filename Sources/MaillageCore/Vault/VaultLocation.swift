@@ -42,13 +42,6 @@ public struct VaultLocation: Hashable, Sendable {
         assetsDirectory(for: kind).appendingPathComponent("\(id).png")
     }
 
-    /// Path of the voiceprint backing a person, whether or not one exists — same
-    /// "a logo is a file, not a field" shape as ``logoURL(kind:id:)``, in the same
-    /// `assets/people/` directory, just a different extension. Only people have one.
-    public func voiceprintURL(personID: EntityID) -> URL {
-        assetsDirectory(for: .person).appendingPathComponent("\(personID).voiceprint")
-    }
-
     /// Where a meeting's in-progress audio lives while it's being recorded and transcribed:
     /// `.maillage/recordings/<meeting-id>/`. App-private and inside the vault so it travels with
     /// it, and per-meeting rather than one flat folder so deleting a meeting's audio is deleting

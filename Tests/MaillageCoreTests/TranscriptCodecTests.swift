@@ -100,9 +100,9 @@ struct TranscriptCodecTests {
         #expect(decoded == segments)
     }
 
-    // MARK: Speaker tags
+    // MARK: Speaker tags (backward compat only — nothing writes these anymore)
 
-    @Test("An old-format line with no speaker tag still parses, with speaker nil")
+    @Test("An old-format line with no speaker tag still parses")
     func oldFormatLineHasNoSpeaker() {
         let body = "## Transcript\n\n(00:15) Oui, mais il faut wire le canary d'abord."
         let (_, segments) = TranscriptCodec.split(body)
@@ -113,42 +113,26 @@ struct TranscriptCodecTests {
             ])
     }
 
-    @Test("An unresolved speaker tag round-trips")
-    func unresolvedSpeakerTagRoundTrips() {
-        let segments = [
-            TranscriptSegment(
-                offsetSeconds: 15, text: "On va commencer.",
-                speaker: Speaker(track: .mic, slot: 2))
-        ]
-        let body = TranscriptCodec.join(preamble: "", segments: segments)
-        #expect(body.contains("(00:15 #M2) On va commencer."))
-        let (_, decoded) = TranscriptCodec.split(body)
-        #expect(decoded == segments)
+    @Test("An unresolved speaker tag from a meeting recorded before diarization was removed loads")
+    func unresolvedSpeakerTagStillLoads() {
+        let body = "## Transcript\n\n(00:15 #M2) On va commencer."
+        let (_, segments) = TranscriptCodec.split(body)
+        #expect(segments == [TranscriptSegment(offsetSeconds: 15, text: "On va commencer.")])
     }
 
-    @Test("A resolved speaker tag round-trips, including the person id")
-    func resolvedSpeakerTagRoundTrips() {
-        let segments = [
-            TranscriptSegment(
-                offsetSeconds: 15, text: "On va commencer.",
-                speaker: Speaker(track: .system, slot: 0, personID: "marie-dupont"))
-        ]
-        let body = TranscriptCodec.join(preamble: "", segments: segments)
-        #expect(body.contains("(00:15 #S0:marie-dupont) On va commencer."))
-        let (_, decoded) = TranscriptCodec.split(body)
-        #expect(decoded == segments)
+    @Test("A resolved speaker tag with a person id still loads, without a parse error")
+    func resolvedSpeakerTagStillLoads() {
+        let body = "## Transcript\n\n(00:15 #S0:marie-dupont) On va commencer."
+        let (_, segments) = TranscriptCodec.split(body)
+        #expect(segments == [TranscriptSegment(offsetSeconds: 15, text: "On va commencer.")])
     }
 
-    @Test("Mixed diarized and undiarized segments round-trip in the same transcript")
-    func mixedSpeakerAndNoSpeakerRoundTrips() {
-        let segments = [
-            TranscriptSegment(
-                offsetSeconds: 0, text: "Diarized.",
-                speaker: Speaker(track: .mic, slot: 1, personID: "amy-wong")),
-            TranscriptSegment(offsetSeconds: 5, text: "Not diarized."),
-        ]
-        let (_, decoded) = TranscriptCodec.split(
-            TranscriptCodec.join(preamble: "", segments: segments))
-        #expect(decoded == segments)
+    @Test("Nothing written today ever includes a speaker tag")
+    func joinNeverWritesASpeakerTag() {
+        let segments = [TranscriptSegment(offsetSeconds: 15, text: "On va commencer.")]
+        let body = TranscriptCodec.join(preamble: "", segments: segments)
+        #expect(body.contains("(00:15) On va commencer."))
+        #expect(!body.contains("#M"))
+        #expect(!body.contains("#S"))
     }
 }

@@ -7,18 +7,16 @@ import Foundation
 /// section, written by a later phase) from the one part of the body this type actually
 /// understands. The preamble round-trips byte-for-byte, exactly like a person's notes do.
 ///
-/// One line per segment. Timestamp only when diarization wasn't on for this meeting — see
-/// ``TranscriptSegment`` for that case — otherwise a speaker tag follows it, space-separated,
-/// inside the same parens:
+/// One line per segment: a timestamp, then the utterance.
 /// ```
 /// (00:15) Oui, mais il faut wire le canary d'abord.
-/// (00:15 #M2) On va commencer.
-/// (00:15 #M2:marie-dupont) On va commencer.
 /// ```
-/// `#` then a track letter (`M`/`S`) then a slot digit, optionally `:<personID>` once resolved.
-/// Old-format lines (no second token) still parse exactly as before, with ``TranscriptSegment/speaker``
-/// coming back `nil` — this is the whole migration story for meetings recorded before this format
-/// existed, no rewrite needed.
+/// A meeting recorded while this vault still diarized speakers may have a `#M2` or
+/// `#M2:marie-dupont` speaker tag after the timestamp, inside the same parens — ``parseSpeakerTag``
+/// still parses that shape so an old file loads without a parse error, but nothing here writes it
+/// back out or carries it into memory: diarization is gone, and a stale tag is just a second,
+/// ignored token on the line, the same backward-compat story as the retired `organizations:`
+/// frontmatter key.
 ///
 /// The timestamp is `MM:SS`, or `H:MM:SS` once the offset reaches an hour — see
 /// ``formatTimestamp(seconds:)``. The utterance itself is captured to the end of the line, so a
@@ -60,21 +58,23 @@ public enum TranscriptCodec {
         let afterOpenParen = line.index(after: line.startIndex)
         guard let closingParen = line[afterOpenParen...].firstIndex(of: ")") else { return nil }
 
-        // The timestamp is always the first token; a speaker tag, if present, is the second,
-        // space-separated — so split on whitespace before parsing either, rather than handing
-        // the whole parens content to `parseTimestamp`, which only ever expects one token.
+        // The timestamp is always the first token; a leftover speaker tag from a meeting
+        // diarized before this feature was removed, if present, is the second, space-separated
+        // — so split on whitespace before parsing either, rather than handing the whole parens
+        // content to `parseTimestamp`, which only ever expects one token. `parseSpeakerTag` is
+        // called only to confirm the second token really is a stale tag and not something else
+        // hand-typed; its result is discarded either way.
         let parensContent = line[afterOpenParen..<closingParen]
         let tokens = parensContent.split(separator: " ", maxSplits: 1)
         guard let firstToken = tokens.first, let offset = parseTimestamp(String(firstToken))
         else { return nil }
-        let speaker = tokens.count > 1 ? parseSpeakerTag(String(tokens[1])) : nil
+        if tokens.count > 1 { _ = parseSpeakerTag(String(tokens[1])) }
 
         let afterTimestamp = line[line.index(after: closingParen)...]
         guard afterTimestamp.hasPrefix(" ") else { return nil }
         let text = afterTimestamp.dropFirst()
 
-        return TranscriptSegment(
-            offsetSeconds: offset, text: unescape(String(text)), speaker: speaker)
+        return TranscriptSegment(offsetSeconds: offset, text: unescape(String(text)))
     }
 
     /// Rebuilds a full body from a preamble and its segments, in the shape ``split`` expects
@@ -86,52 +86,36 @@ public enum TranscriptCodec {
 
         let lines = segments.map { segment in
             let timestamp = formatTimestamp(seconds: segment.offsetSeconds)
-            let tag = segment.speaker.map { " " + formatSpeakerTag($0) } ?? ""
-            return "(\(timestamp)\(tag)) " + escape(segment.text)
+            return "(\(timestamp)) " + escape(segment.text)
         }
         let transcript = "\(heading)\n\n" + lines.joined(separator: "\n")
 
         return trimmedPreamble.isEmpty ? transcript : "\(trimmedPreamble)\n\n\(transcript)"
     }
 
-    // MARK: Speaker tags
+    // MARK: Speaker tags (backward compat only — nothing writes these anymore)
 
-    /// `#M2` (unresolved) or `#M2:marie-dupont` (resolved) — track letter, slot digit, then an
-    /// optional `:<personID>` once a human has confirmed who it is.
-    private static func formatSpeakerTag(_ speaker: Speaker) -> String {
-        let trackLetter = speaker.track == .mic ? "M" : "S"
-        let base = "#\(trackLetter)\(speaker.slot)"
-        guard let personID = speaker.personID else { return base }
-        return "\(base):\(personID)"
-    }
-
-    /// Parses a speaker tag back, or `nil` for anything that doesn't match the shape — a stray
-    /// second token in a hand-edited file is skipped the same way an unparseable line is.
-    private static func parseSpeakerTag(_ raw: String) -> Speaker? {
-        guard raw.hasPrefix("#") else { return nil }
+    /// Recognizes `#M2` or `#M2:marie-dupont` — a track letter, a slot digit, and an optional
+    /// `:<personID>` — the speaker tag a meeting recorded before diarization was removed may
+    /// still carry. Never called to build anything: only to confirm a line's second token is a
+    /// stale tag and not some other hand-typed text, so `parseLine` can drop it and keep parsing
+    /// the timestamp and text either way. No `Speaker` type exists anymore to parse it into.
+    @discardableResult
+    private static func parseSpeakerTag(_ raw: String) -> Bool {
+        guard raw.hasPrefix("#") else { return false }
         let body = raw.dropFirst()
 
         let trackAndSlot: Substring
-        var personID: EntityID?
         if let colon = body.firstIndex(of: ":") {
             trackAndSlot = body[body.startIndex..<colon]
-            let idPart = body[body.index(after: colon)...]
-            guard !idPart.isEmpty else { return nil }
-            personID = String(idPart)
+            guard !body[body.index(after: colon)...].isEmpty else { return false }
         } else {
             trackAndSlot = body
         }
 
-        guard let trackLetter = trackAndSlot.first else { return nil }
-        let track: AudioTrack
-        switch trackLetter {
-        case "M": track = .mic
-        case "S": track = .system
-        default: return nil
-        }
-        guard let slot = Int(trackAndSlot.dropFirst()) else { return nil }
-
-        return Speaker(track: track, slot: slot, personID: personID)
+        guard let trackLetter = trackAndSlot.first, trackLetter == "M" || trackLetter == "S"
+        else { return false }
+        return Int(trackAndSlot.dropFirst()) != nil
     }
 
     // MARK: Timestamps
