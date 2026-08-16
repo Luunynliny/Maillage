@@ -35,8 +35,15 @@ public final class WhisperTranscriber: Transcriber, @unchecked Sendable {
     private static let noSpeechThreshold: Float = 0.6
 
     public func transcribe(fileAt url: URL) async throws -> [TranscriptSegment] {
+        // Without VAD chunking, a fixed 30s window can span both leading silence and real speech
+        // together — `noSpeechProb` above is computed once per window, not per fragment inside
+        // it, so a hallucination at a window's silent start shares the same (low, "there IS
+        // speech in here somewhere") score as the genuine speech later in it and survives the
+        // filter. VAD chunking (WhisperKit's own built-in energy detector, no extra model needed)
+        // splits on actual voice-activity boundaries first, so each window is homogeneous.
         let options = DecodingOptions(
-            language: nil, detectLanguage: true, skipSpecialTokens: true, wordTimestamps: false)
+            language: nil, detectLanguage: true, skipSpecialTokens: true, wordTimestamps: false,
+            chunkingStrategy: .vad)
         let results = try await whisperKit.transcribe(audioPath: url.path, decodeOptions: options)
         return results.flatMap { result in
             result.segments

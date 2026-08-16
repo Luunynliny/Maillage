@@ -150,16 +150,15 @@ final class SpectrogramModel {
 
 // MARK: - View
 
-/// The bar-spectrogram itself: one group of bars per track, matching the "You"/"Them" framing
-/// the level meters it replaces used.
+/// The bar-spectrogram itself: one group of bars per track.
 struct SpectrogramView: View {
     let model: SpectrogramModel
 
     var body: some View {
         Card {
             HStack(alignment: .bottom, spacing: Theme.Spacing.large) {
-                barGroup(label: "You", bins: model.microphoneBins)
-                barGroup(label: "Them", bins: model.systemAudioBins)
+                barGroup(label: "Microphone", bins: model.microphoneBins)
+                barGroup(label: "Audio System", bins: model.systemAudioBins)
             }
         }
     }
