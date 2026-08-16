@@ -89,12 +89,16 @@ final class MicrophoneRecorder {
         }
     }
 
-    /// Copies the mono channel out to a plain `[Float]` — the shape an `AsyncStream` (or
-    /// anything else off the real-time thread) needs, since the buffer itself is only valid
-    /// for the duration of this callback.
+    /// Copies the mono channel out to a plain `[Float]`, normalized to -1.0...1.0 — the shape
+    /// an `AsyncStream` (or anything else off the real-time thread) needs, since the buffer
+    /// itself is only valid for the duration of this callback. `PCMFormat.target` is 16-bit
+    /// integer PCM (what a WAV file is written in), so this reads `int16ChannelData`, never
+    /// `floatChannelData` — that's `nil` for an Int16 buffer and would silently hand every
+    /// caller an empty array.
     private static func samples(from buffer: AVAudioPCMBuffer) -> [Float] {
-        guard let channel = buffer.floatChannelData?[0] else { return [] }
-        return Array(UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength)))
+        guard let channel = buffer.int16ChannelData?[0] else { return [] }
+        let frameCount = Int(buffer.frameLength)
+        return (0..<frameCount).map { Float(channel[$0]) / 32768.0 }
     }
 
     private static func rootMeanSquare(of buffer: AVAudioPCMBuffer) -> Float {

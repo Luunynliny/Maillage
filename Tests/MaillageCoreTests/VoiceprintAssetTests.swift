@@ -28,12 +28,13 @@ struct VoiceprintAssetTests {
         defer { cleanUp(root) }
 
         let marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
-        #expect(store.setVoiceprint(personID: marie.id, confirming: [1, 0, 0]))
+        #expect(
+            store.setVoiceprint(personID: marie.id, samples: [0.1, 0.2, 0.3], sampleRate: 16_000))
 
         let file = root.appendingPathComponent("assets/people/marie-dupont.voiceprint")
         #expect(FileManager.default.fileExists(atPath: file.path))
         #expect(store.hasVoiceprint(personID: marie.id))
-        #expect(store.voiceprint(personID: marie.id)?.sampleCount == 1)
+        #expect(store.voiceprint(personID: marie.id)?.samples == [0.1, 0.2, 0.3])
 
         // Nothing about it reaches the markdown: the file's presence is the only record.
         let markdown = try String(
@@ -41,17 +42,17 @@ struct VoiceprintAssetTests {
         #expect(!markdown.contains("voiceprint"))
     }
 
-    @Test("A second confirmation updates sample count and blends the embedding")
-    func secondConfirmationUpdates() throws {
+    @Test("A second confirmation replaces the stored sample outright")
+    func secondConfirmationReplaces() throws {
         let (store, root) = try makeStore()
         defer { cleanUp(root) }
 
         let marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
-        #expect(store.setVoiceprint(personID: marie.id, confirming: [1, 0]))
-        #expect(store.setVoiceprint(personID: marie.id, confirming: [0, 1]))
+        #expect(store.setVoiceprint(personID: marie.id, samples: [0.1], sampleRate: 16_000))
+        #expect(store.setVoiceprint(personID: marie.id, samples: [0.2, 0.3], sampleRate: 16_000))
 
         let voiceprint = try #require(store.voiceprint(personID: marie.id))
-        #expect(voiceprint.sampleCount == 2)
+        #expect(voiceprint.samples == [0.2, 0.3])
     }
 
     @Test("Removing a voiceprint deletes the file")
@@ -60,7 +61,7 @@ struct VoiceprintAssetTests {
         defer { cleanUp(root) }
 
         let marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
-        #expect(store.setVoiceprint(personID: marie.id, confirming: [1, 0]))
+        #expect(store.setVoiceprint(personID: marie.id, samples: [0.1], sampleRate: 16_000))
         #expect(store.removeVoiceprint(personID: marie.id))
 
         let file = root.appendingPathComponent("assets/people/marie-dupont.voiceprint")
@@ -77,7 +78,7 @@ struct VoiceprintAssetTests {
         defer { cleanUp(root) }
 
         let jean = try #require(store.createPerson(firstname: "Jean", lastname: "Martin"))
-        #expect(store.setVoiceprint(personID: jean.id, confirming: [1, 0]))
+        #expect(store.setVoiceprint(personID: jean.id, samples: [0.1], sampleRate: 16_000))
 
         #expect(store.renameEntity(kind: .person, from: jean.id, to: "jean-martin-renamed") != nil)
 
@@ -103,7 +104,7 @@ struct VoiceprintAssetTests {
         defer { cleanUp(root) }
 
         let marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
-        #expect(store.setVoiceprint(personID: marie.id, confirming: [1, 0]))
+        #expect(store.setVoiceprint(personID: marie.id, samples: [0.1], sampleRate: 16_000))
         #expect(store.delete(kind: .person, id: marie.id))
 
         #expect(
@@ -128,7 +129,7 @@ struct VoiceprintAssetTests {
         let marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
         #expect(!store.hasVoiceprint(personID: marie.id))
 
-        let voiceprint = Voiceprint(embedding: [1, 0, 0], sampleCount: 1)
+        let voiceprint = Voiceprint(samples: [0.1, 0.2, 0.3], sampleRate: 16_000)
         try JSONEncoder().encode(voiceprint).write(
             to: root.appendingPathComponent("assets/people/marie-dupont.voiceprint"))
         store.load()

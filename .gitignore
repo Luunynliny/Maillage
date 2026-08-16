@@ -24,13 +24,14 @@ dist/
 *.dSYM.zip
 *.dSYM
 
-## WhisperKit model cache
+## FluidAudio model cache
 #
-# .whisperkit-model-cache/ holds the WhisperKit model Scripts/fetch-whisper-model.sh fetches at
-# build time (see the "Fetch WhisperKit Model" build phase in maillage.xcodeproj). Never
-# committed: it's a ~216MB binary CoreML model, regenerated from a plain HTTPS fetch on first
-# build and cached for every build after, on a developer machine and in CI alike.
-.whisperkit-model-cache/
+# .fluidaudio-model-cache/ holds the models Scripts/fetch-fluidaudio-*.sh fetch at build time
+# (see the "Fetch FluidAudio ASR Model" build phase in maillage.xcodeproj) — the streaming ASR
+# model here, diarizer and embedding models in a later phase. Never committed: these are large
+# binary CoreML models, regenerated from a plain HTTPS fetch on first build and cached for every
+# build after, on a developer machine and in CI alike.
+.fluidaudio-model-cache/
 
 ## Playgrounds
 timeline.xctimeline

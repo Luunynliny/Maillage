@@ -1,7 +1,7 @@
+import FluidAudio
 import Foundation
 import FoundationModels
 import Observation
-import WhisperKit
 
 /// Where one recording currently stands.
 public enum MeetingRecorderState: Equatable, Sendable {
@@ -13,9 +13,26 @@ public enum MeetingRecorderState: Equatable, Sendable {
     case done
 }
 
+/// A diarized slot on one meeting's track that hasn't been confirmed against a person yet.
+/// `candidateSamples` is captured once, at Stop, from the audio still on disk at that moment —
+/// this is genuinely the only chance: `finishTranscription` deletes the recording right after,
+/// so a slot resolved later can still relabel the transcript but can never train a voiceprint
+/// from it. `suggestedPersonID` is set only when Sortformer's own acoustic matching recognized a
+/// previously enrolled voice this session — a suggestion to confirm, never applied on its own.
+public struct PendingSpeaker: Identifiable, Sendable {
+    public var id: Speaker { speaker }
+    public let speaker: Speaker
+    public let meetingID: EntityID
+    public let candidateSamples: [Float]
+    public let sampleRate: Int
+    public let suggestedPersonID: EntityID?
+}
+
 /// Drives one recording from Start to a finished transcript: creates the meeting it belongs to,
-/// starts both audio tracks, and on Stop detects the meeting's language, transcribes both
-/// tracks, merges and writes the transcript, then deletes the audio.
+/// starts both audio tracks and their live streaming transcribers (plus, unless the >4-speaker
+/// opt-out is set, a diarizer alongside each) together, and on Stop waits for each track's
+/// trailing audio to flush, merges the final segments, writes the transcript, then deletes the
+/// audio.
 ///
 /// Deliberately not part of `VaultStore` — the store mirrors the vault and every other method
 /// on it completes in one call, where this one runs for as long as a meeting does, well past
@@ -34,30 +51,56 @@ public final class MeetingRecorder {
 
     public let capture = AudioCaptureSession()
 
+    /// The live-growing transcript for each track, as the streaming ASR decodes it — one flat,
+    /// continuously-updating block of text per track, not discrete timestamped rows. That's not
+    /// a placeholder shape: FluidAudio's streaming session only ever hands back a plain running
+    /// transcript while it's listening, and real per-utterance timing only once, at the end (see
+    /// ``StreamingTranscriber``). `MeetingView` reads these while `state == .recording`; once
+    /// Stop runs, the real timestamped segments in `meeting.body` take over.
+    public private(set) var microphoneLiveText = ""
+    public private(set) var systemAudioLiveText = ""
+
+    /// One card per diarized slot still waiting on a human to say who it is — populated at Stop,
+    /// for every meeting this recorder has finished since launch (not just the most recent one),
+    /// and only cleared by ``assignSpeaker(_:to:)``/``dismissPendingSpeaker(_:)``. `MeetingView`
+    /// filters this to its own `meeting.id`.
+    public private(set) var pendingSpeakers: [PendingSpeaker] = []
+
     private let store: VaultStore
-    /// Drain `capture`'s live sample streams for the duration of the recording. No-op for now —
-    /// a later phase replaces these with the actual streaming transcriber — but wiring them up
-    /// here first proves buffers flow end to end, and that consuming them changes nothing about
-    /// how a recording behaves, before anything downstream depends on it.
-    private var microphoneDrainTask: Task<Void, Never>?
-    private var systemAudioDrainTask: Task<Void, Never>?
+    /// Each track's live pipeline for the duration of the recording: ingest buffers as they
+    /// arrive, republish the growing live text, and — once `capture.stop()` finishes the sample
+    /// stream — flush trailing audio and resolve to that track's final segments and detected
+    /// language. `stop()` awaits both directly rather than polling anything.
+    private var microphonePipeline: Task<TrackResult, Error>?
+    private var systemAudioPipeline: Task<TrackResult, Error>?
+
+    private struct TrackResult {
+        var segments: [TranscriptSegment]
+        var language: String?
+        var diarizerSegments: [DiarizerSegment]
+        var recognizedPersonIDs: [Int: EntityID]
+    }
 
     public init(store: VaultStore) {
         self.store = store
     }
 
-    /// Creates the meeting and starts recording into its `.maillage/recordings/<id>/` folder.
-    /// The two happen together because neither means anything without the other: a recording
-    /// with no meeting to attach it to is orphaned audio, and a meeting created before capture
-    /// actually starts would exist with a duration it hasn't earned yet.
+    /// Creates the meeting, loads a fresh streaming transcriber per track, and starts recording
+    /// into its `.maillage/recordings/<id>/` folder. All three happen together because none of
+    /// them mean anything without the others: a recording with no meeting to attach it to is
+    /// orphaned audio, a meeting created before capture actually starts would exist with a
+    /// duration it hasn't earned yet, and audio captured with nothing transcribing it can never
+    /// produce the one thing this feature exists for.
     ///
     /// On failure, whatever this created is undone — the meeting entity included — so a denied
-    /// microphone permission never leaves a zero-second meeting sitting in the vault.
+    /// microphone permission, or a missing bundled model, never leaves a zero-second meeting
+    /// sitting in the vault.
     public func start(
         title: String,
         organization: Wikilink?,
         project: Wikilink?,
-        attendees: [Wikilink]
+        attendees: [Wikilink],
+        disableDiarization: Bool = false
     ) async {
         guard
             let meeting = store.createMeeting(
@@ -73,16 +116,55 @@ public final class MeetingRecorder {
         do {
             try FileManager.default.createDirectory(
                 at: directory, withIntermediateDirectories: true)
+
+            // Loaded before capture starts: a missing or broken bundled model is a reason not to
+            // record at all, not something discovered only once Stop is pressed.
+            let modelStore = FluidAudioModelStore()
+            let microphoneTranscriber = FluidAudioStreamingTranscriber(
+                manager: try await modelStore.loadStreamingASR())
+            let systemAudioTranscriber = FluidAudioStreamingTranscriber(
+                manager: try await modelStore.loadStreamingASR())
+
+            // Never created for the >4-speaker opt-out: no diarizer, no speaker slots, every
+            // segment's `speaker` stays `nil` — the same shape as a meeting recorded before this
+            // feature existed.
+            var microphoneDiarizer: FluidAudioStreamingDiarizer?
+            var systemAudioDiarizer: FluidAudioStreamingDiarizer?
+            if !disableDiarization {
+                let microphoneWrapper = FluidAudioStreamingDiarizer(
+                    diarizer: try await modelStore.loadStreamingDiarizer())
+                let systemAudioWrapper = FluidAudioStreamingDiarizer(
+                    diarizer: try await modelStore.loadStreamingDiarizer())
+                // Primed with every enrolled voice before real audio starts flowing, so a
+                // returning contact is recognized by Sortformer's own matching rather than
+                // showing up as an unresolved slot every meeting.
+                for personID in store.voiceprintIDs {
+                    guard let voiceprint = store.voiceprint(personID: personID) else { continue }
+                    microphoneWrapper.enroll(personID: personID, voiceprint: voiceprint)
+                    systemAudioWrapper.enroll(personID: personID, voiceprint: voiceprint)
+                }
+                microphoneDiarizer = microphoneWrapper
+                systemAudioDiarizer = systemAudioWrapper
+            }
+
+            await microphoneTranscriber.onUpdate { [weak self] text in
+                Task { @MainActor in self?.microphoneLiveText = text }
+            }
+            await systemAudioTranscriber.onUpdate { [weak self] text in
+                Task { @MainActor in self?.systemAudioLiveText = text }
+            }
+
             try await capture.start(
                 microphoneURL: directory.appendingPathComponent("mic.wav"),
                 systemAudioURL: directory.appendingPathComponent("system.wav"))
             state = .recording
-            microphoneDrainTask = Task { [capture] in
-                for await _ in capture.microphoneSamples {}
-            }
-            systemAudioDrainTask = Task { [capture] in
-                for await _ in capture.systemAudioSamples {}
-            }
+
+            microphonePipeline = Self.runPipeline(
+                samples: capture.microphoneSamples, transcriber: microphoneTranscriber,
+                diarizer: microphoneDiarizer, track: .mic)
+            systemAudioPipeline = Self.runPipeline(
+                samples: capture.systemAudioSamples, transcriber: systemAudioTranscriber,
+                diarizer: systemAudioDiarizer, track: .system)
         } catch {
             capture.stop()
             try? FileManager.default.removeItem(at: directory)
@@ -92,11 +174,39 @@ public final class MeetingRecorder {
         }
     }
 
-    /// Stops both tracks, writes the recording's duration, then hands off to transcription in
-    /// the background — this call itself returns immediately, so Stop & Save can dismiss the
-    /// sheet without waiting on a model. Idle if nothing was recording — calling this from a
-    /// sheet's `onDisappear` as a safety net must not throw or misbehave just because Stop was
-    /// already pressed.
+    /// Feeds one track's live samples into its transcriber until `capture.stop()` finishes the
+    /// stream, then flushes it. `nonisolated` and `static` so this runs entirely off the main
+    /// actor — nothing here touches `self`, only the stream and transcriber it's given.
+    ///
+    /// A single buffer's `ingest` failing is tolerated (`try?`) and just drops that buffer's
+    /// audio — a transient decode hiccup shouldn't cost the rest of the session. `finish()`
+    /// failing is not tolerated: it means this track never produced a usable transcript at all,
+    /// and `finishTranscription` needs to know that rather than silently getting an empty one.
+    nonisolated private static func runPipeline(
+        samples: AsyncStream<[Float]>, transcriber: FluidAudioStreamingTranscriber,
+        diarizer: FluidAudioStreamingDiarizer?, track: AudioTrack
+    ) -> Task<TrackResult, Error> {
+        Task {
+            for await buffer in samples {
+                try? await transcriber.ingest(samples: buffer)
+                try? diarizer?.ingest(samples: buffer)
+            }
+            let diarization = try diarizer?.finish()
+            let segments = try await transcriber.finish(
+                track: track, diarizerSegments: diarization?.segments ?? [])
+            let language = await transcriber.detectedLanguage()
+            return TrackResult(
+                segments: segments, language: language,
+                diarizerSegments: diarization?.segments ?? [],
+                recognizedPersonIDs: diarization?.recognizedPersonIDs ?? [:])
+        }
+    }
+
+    /// Stops both tracks, writes the recording's duration, then hands off to finishing
+    /// transcription in the background — this call itself returns immediately, so Stop & Save
+    /// can dismiss without waiting on either track's trailing audio to flush. Idle if nothing was
+    /// recording — calling this from a sheet's `onDisappear` as a safety net must not throw or
+    /// misbehave just because Stop was already pressed.
     public func stop() {
         guard state == .recording, let meetingID else { return }
         let duration = capture.stop()
@@ -112,69 +222,66 @@ public final class MeetingRecorder {
         state = .transcribing
         let directory = store.location.recordingsDirectory(forMeeting: meetingID)
         Task { [weak self] in
-            await self?.transcribe(meetingID: meetingID, directory: directory)
+            await self?.finishTranscription(meetingID: meetingID, directory: directory)
         }
     }
 
-    /// Detect → prompt → transcribe both tracks → merge → write → delete the audio. Every step
-    /// after detection depends on the language it found, and both tracks share one prompt built
-    /// from it — see the design doc's Constraint 2 for why the language is held for the whole
-    /// meeting rather than redetected per track or per chunk.
-    private func transcribe(meetingID: EntityID, directory: URL) async {
+    /// Awaits both tracks' final segments and detected language, merges, writes, deletes the
+    /// audio, then summarises. `capture.stop()` already finished both sample streams in `stop()`,
+    /// so each pipeline task is already on its way to resolving by the time this awaits them —
+    /// this is not a fresh transcription pass, just collecting what streamed in live.
+    private func finishTranscription(meetingID: EntityID, directory: URL) async {
         defer {
             self.meetingID = nil
             if case .failed = state {} else { state = .done }
         }
-        do {
-            let micURL = directory.appendingPathComponent("mic.wav")
-            let systemURL = directory.appendingPathComponent("system.wav")
+        guard let microphonePipeline, let systemAudioPipeline else {
+            state = .failed("No live transcription was running for this meeting.")
+            return
+        }
 
-            let whisperKit = try await WhisperModelStore().loadWhisperKit()
-            let language = try await LanguageDetector(whisperKit: whisperKit)
-                .detect(micTrackAt: micURL, systemTrackAt: systemURL)
+        do {
+            let microphoneResult = try await microphonePipeline.value
+            let systemAudioResult = try await systemAudioPipeline.value
 
             guard var meeting = store.snapshot.meetings[meetingID] else { return }
 
-            let customTerms =
-                store.usedProjectRoles + store.usedRelationLabels
-                + VaultConfig.vocabularyTerms(at: store.location)
-            // `Constants` is WhisperKit's own top-level type, not nested under `WhisperKit` — read
-            // from it rather than hardcode, so this tracks the library if the context size changes.
-            let tokenLimit = (Constants.maxTokenContext / 2) - 1
-            let promptText = VocabularyPrompt.build(
-                meeting: meeting, snapshot: store.snapshot, language: language,
-                customTerms: customTerms,
-                budget: .init(
-                    limit: tokenLimit,
-                    count: { whisperKit.tokenizer?.encode(text: $0).count ?? 0 }))
-            let promptTokens =
-                promptText.isEmpty ? nil : whisperKit.tokenizer?.encode(text: promptText)
-
-            let transcriber = WhisperTranscriber(whisperKit: whisperKit)
-            var micSegments = try await transcriber.transcribe(
-                fileAt: micURL, language: language, promptTokens: promptTokens)
-            var systemSegments = try await transcriber.transcribe(
-                fileAt: systemURL, language: language, promptTokens: promptTokens)
-            if !promptText.isEmpty {
-                micSegments = PromptEchoFilter.strip(micSegments, prompt: promptText)
-                systemSegments = PromptEchoFilter.strip(systemSegments, prompt: promptText)
-            }
-
             let merged = TranscriptMerger.merge(
-                micSegments: micSegments, systemSegments: systemSegments)
+                micSegments: microphoneResult.segments,
+                systemSegments: systemAudioResult.segments)
+
+            // The mic's own detected language wins ties: the person recording is the one this
+            // app is for, where a remote caller's language is a fact about them, not about this
+            // meeting. Falls back to "en" only when neither track ever emitted a language tag at
+            // all — a near-silent recording.
+            let language = microphoneResult.language ?? systemAudioResult.language ?? "en"
 
             meeting.language = language
             meeting.body = TranscriptCodec.join(
                 preamble: TranscriptCodec.split(meeting.body).preamble, segments: merged)
             store.update(meeting)
 
+            // Captured now or never: the next line deletes the only audio this could ever come
+            // from.
+            pendingSpeakers += Self.pendingSpeakers(
+                meetingID: meetingID, track: .mic, result: microphoneResult,
+                audioURL: directory.appendingPathComponent("mic.wav"))
+            pendingSpeakers += Self.pendingSpeakers(
+                meetingID: meetingID, track: .system, result: systemAudioResult,
+                audioURL: directory.appendingPathComponent("system.wav"))
+
             try? FileManager.default.removeItem(at: directory)
 
             state = .summarising
             if SystemLanguageModel.default.availability == .available {
                 do {
+                    let personIDs = Set(merged.compactMap(\.speaker?.personID))
+                    let displayNames = Dictionary(
+                        uniqueKeysWithValues: personIDs.compactMap { id in
+                            store.displayName(for: id).map { (id, $0) }
+                        })
                     let summary = try await FoundationModelsSummarizer().summarize(
-                        merged, language: language)
+                        merged, language: language, displayNames: displayNames)
                     if var summarized = store.snapshot.meetings[meetingID] {
                         summarized.body = TranscriptCodec.join(
                             preamble: summary.markdown, segments: merged)
@@ -190,15 +297,103 @@ public final class MeetingRecorder {
                 }
             }
             // Unavailable (device ineligible, Apple Intelligence off, model not ready): silently
-            // skip. That's a device-capability gap, not a per-meeting problem — a banner on every
-            // meeting on an ineligible Mac would just be noise.
+            // skip. That's a device-capability gap, not a per-meeting problem — a banner on
+            // every meeting on an ineligible Mac would just be noise.
         } catch {
             state = .failed(error.localizedDescription)
             // The recording sheet is long gone by the time transcription fails or succeeds, so
-            // `state` alone is never observed — route through the same banner `VaultStore` already
-            // shows for a failed save or load, rather than adding a second, parallel error surface.
+            // `state` alone is never observed — route through the same banner `VaultStore`
+            // already shows for a failed save or load, rather than adding a second, parallel
+            // error surface.
             let name = store.displayName(for: meetingID) ?? meetingID
             store.lastError = "Couldn't transcribe \"\(name)\": \(error.localizedDescription)"
         }
+    }
+
+    /// One `PendingSpeaker` per distinct slot that actually has transcribed words attributed to
+    /// it — never one for a track that had diarization off (`result.segments` all carry `speaker
+    /// == nil` then), and never one for a slot the diarizer flagged as voice activity but the ASR
+    /// never transcribed anything for, which is otherwise a real case: near-silence on an
+    /// unused mic track can read as a low-confidence "speaker" with no actual speech, and a card
+    /// for it would relabel nothing if confirmed, only add a spurious attendee and voiceprint.
+    /// `nonisolated` and `static`: reads only its own arguments, does its own (small, synchronous)
+    /// file I/O to pull each slot's candidate audio out of the still-on-disk WAV.
+    nonisolated private static func pendingSpeakers(
+        meetingID: EntityID, track: AudioTrack, result: TrackResult, audioURL: URL
+    ) -> [PendingSpeaker] {
+        let slots = Set(result.segments.compactMap(\.speaker?.slot))
+        return slots.map { slot in
+            PendingSpeaker(
+                speaker: Speaker(track: track, slot: slot),
+                meetingID: meetingID,
+                candidateSamples: candidateSamples(
+                    forSlot: slot, in: result.diarizerSegments, audioURL: audioURL),
+                sampleRate: 16_000,
+                suggestedPersonID: result.recognizedPersonIDs[slot])
+        }
+    }
+
+    /// Concatenates one slot's segments, earliest first, up to `maxDuration` seconds — plenty
+    /// for a future `enrollSpeaker` priming, and small enough that this vault's voiceprints stay
+    /// tiny JSON files rather than de facto audio recordings.
+    nonisolated private static func candidateSamples(
+        forSlot slot: Int, in diarizerSegments: [DiarizerSegment], audioURL: URL,
+        maxDuration: Float = 10
+    ) -> [Float] {
+        var collected: [Float] = []
+        var totalDuration: Float = 0
+        for segment in diarizerSegments where segment.speakerIndex == slot {
+            guard totalDuration < maxDuration else { break }
+            guard
+                let samples = WAVSampleReader.samples(
+                    in: audioURL, startTime: segment.startTime, endTime: segment.endTime)
+            else { continue }
+            collected.append(contentsOf: samples)
+            totalDuration += segment.duration
+        }
+        return collected
+    }
+
+    /// Confirms (or corrects) `speaker` as `personID`: relabels every already-written segment for
+    /// that track/slot, adds `personID` to the meeting's attendees if absent, and — since this is
+    /// the one moment this slot's candidate audio still exists at all — saves it as `personID`'s
+    /// voiceprint for next time. Removes the resolved card from ``pendingSpeakers``.
+    public func assignSpeaker(_ speaker: Speaker, to personID: EntityID) {
+        guard let index = pendingSpeakers.firstIndex(where: { $0.speaker == speaker }) else {
+            return
+        }
+        let pending = pendingSpeakers[index]
+        guard var meeting = store.snapshot.meetings[pending.meetingID] else { return }
+
+        let split = TranscriptCodec.split(meeting.body)
+        let relabeled = split.segments.map { segment -> TranscriptSegment in
+            guard segment.speaker?.track == speaker.track, segment.speaker?.slot == speaker.slot
+            else { return segment }
+            var updated = segment
+            updated.speaker?.personID = personID
+            return updated
+        }
+        meeting.body = TranscriptCodec.join(preamble: split.preamble, segments: relabeled)
+
+        if !meeting.attendees.contains(where: { $0.id == personID }) {
+            meeting.attendees.append(Wikilink(personID))
+        }
+        store.update(meeting)
+
+        if !pending.candidateSamples.isEmpty {
+            store.setVoiceprint(
+                personID: personID, samples: pending.candidateSamples,
+                sampleRate: pending.sampleRate)
+        }
+
+        pendingSpeakers.remove(at: index)
+    }
+
+    /// Leaves a slot's segments labeled "Speaker N" for good — the card just goes away, nothing
+    /// is written and no voiceprint is trained. A deliberate v1 scope cut, not an oversight: once
+    /// dismissed (or once a new recording replaces this recorder), that slot's candidate audio is
+    /// gone, so there is nothing left to confirm against later.
+    public func dismissPendingSpeaker(_ speaker: Speaker) {
+        pendingSpeakers.removeAll { $0.speaker == speaker }
     }
 }
