@@ -37,6 +37,11 @@ public final class MeetingRecorder {
     public let capture = AudioCaptureSession()
 
     private let store: VaultStore
+    /// Shown for exactly as long as `capture` is running — see `start()` and `stop()`. Owned
+    /// here rather than by `RootView`, since this is exactly where the go/stop transitions this
+    /// panel needs to track already happen; `RootView` would otherwise have to re-derive the same
+    /// transitions from `capture.isRecording`.
+    private let indicatorPanel = RecordingIndicatorPanel()
 
     public init(store: VaultStore) {
         self.store = store
@@ -74,6 +79,7 @@ public final class MeetingRecorder {
                 microphoneURL: directory.appendingPathComponent("mic.wav"),
                 systemAudioURL: directory.appendingPathComponent("system.wav"))
             state = .recording
+            indicatorPanel.show(capture: capture)
         } catch {
             capture.stop()
             try? FileManager.default.removeItem(at: directory)
@@ -91,6 +97,7 @@ public final class MeetingRecorder {
     public func stop() {
         guard state == .recording, let meetingID else { return }
         let duration = capture.stop()
+        indicatorPanel.hide()
 
         guard var meeting = store.snapshot.meetings[meetingID] else {
             self.meetingID = nil

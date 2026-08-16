@@ -127,8 +127,6 @@ struct MeetingView: View {
                 Spacer(minLength: 0)
                 PrimaryButton("Stop & Save") { activeRecorder?.stop() }
             }
-            levelMeter("You", level: activeRecorder?.capture.microphoneLevel ?? 0)
-            levelMeter("Them", level: activeRecorder?.capture.systemAudioLevel ?? 0)
 
             Divider()
                 .padding(.vertical, Theme.Spacing.xs)
@@ -157,29 +155,6 @@ struct MeetingView: View {
                 selected: $selectedAttendees,
                 kind: .person,
                 prompt: "Search people")
-        }
-    }
-
-    /// A silent "Them" track is the most likely failure in the whole capture path — the
-    /// system tap can fail in ways that don't throw — so this meter is the only place that
-    /// failure is visible at all while it can still be fixed, rather than discovered later
-    /// in an empty transcript.
-    private func levelMeter(_ label: String, level: Float) -> some View {
-        HStack(spacing: Theme.Spacing.small) {
-            Text(label)
-                .font(Theme.Font.caption)
-                .foregroundStyle(Theme.textMuted)
-                .frame(width: 40, alignment: .leading)
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: Theme.Radius.small)
-                        .fill(Theme.bgSecondary)
-                    RoundedRectangle(cornerRadius: Theme.Radius.small)
-                        .fill(Theme.accent)
-                        .frame(width: geometry.size.width * CGFloat(min(level * 4, 1)))
-                }
-            }
-            .frame(height: 6)
         }
     }
 
