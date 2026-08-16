@@ -38,16 +38,24 @@ public enum SpectrumAnalyzer {
         return samples + [Float](repeating: 0, count: size - samples.count)
     }
 
+    /// Built once and kept for the process's lifetime rather than per call — `windowSize` is a
+    /// fixed constant, so there is only ever one setup this analyzer needs, and creating/tearing
+    /// one down on every buffer (hundreds a second, even before throttling) was pure churn. Safe
+    /// to share across concurrent callers: Accelerate documents an `FFTSetup` as safe to use from
+    /// multiple threads at once, so long as nothing calls `vDSP_destroy_fftsetup` concurrently —
+    /// which nothing here ever does.
+    private static let fftSetup: FFTSetup? = vDSP_create_fftsetup(
+        vDSP_Length(log2(Float(windowSize))), FFTRadix(kFFTRadix2))
+
     /// Power (magnitude-squared) per FFT bin — `windowSize / 2` of them, bin `k` centred on
     /// `k * sampleRate / windowSize` Hz. `samples.count` must equal `windowSize`.
     private static func powerSpectrum(of samples: [Float]) -> [Float] {
         let n = windowSize
         let halfN = n / 2
         let log2n = vDSP_Length(log2(Float(n)))
-        guard let setup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else {
+        guard let setup = fftSetup else {
             return [Float](repeating: 0, count: halfN)
         }
-        defer { vDSP_destroy_fftsetup(setup) }
 
         var realPart = [Float](repeating: 0, count: halfN)
         var imaginaryPart = [Float](repeating: 0, count: halfN)

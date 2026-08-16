@@ -31,15 +31,34 @@ public final class RecordingIndicatorPanel {
         model.reset()
         panel.orderFrontRegardless()
         microphoneTask = Task { [model] in
+            var lastUpdate = Date.distantPast
             for await samples in capture.microphoneSamples {
+                guard Self.isDueForUpdate(since: &lastUpdate) else { continue }
                 model.updateMicrophone(with: samples)
             }
         }
         systemAudioTask = Task { [model] in
+            var lastUpdate = Date.distantPast
             for await samples in capture.systemAudioSamples {
+                guard Self.isDueForUpdate(since: &lastUpdate) else { continue }
                 model.updateSystemAudio(with: samples)
             }
         }
+    }
+
+    /// Caps how often a track's buffers actually reach `SpectrumAnalyzer` — the callbacks
+    /// feeding `capture.microphoneSamples`/`systemAudioSamples` run at hundreds of buffers a
+    /// second, but a bar-spectrogram only needs to move at roughly the same 10-15 Hz cadence the
+    /// old level-meter polling used. `minimumUpdateInterval` sits just inside that: skip a buffer
+    /// arriving too soon after the last one actually processed, rather than running a full FFT
+    /// (plus an `@Observable` invalidation) on every single callback for the length of a meeting.
+    private static let minimumUpdateInterval: TimeInterval = 0.08
+
+    private static func isDueForUpdate(since lastUpdate: inout Date) -> Bool {
+        let now = Date()
+        guard now.timeIntervalSince(lastUpdate) >= minimumUpdateInterval else { return false }
+        lastUpdate = now
+        return true
     }
 
     /// Hides the panel and stops consuming. Safe to call even if `show` was never called, the
