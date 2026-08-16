@@ -67,6 +67,26 @@ Watch out for:
   no entitlements file yet. The audio phase will need one (`App/Maillage.entitlements`, referenced
   by `CODE_SIGN_ENTITLEMENTS`) alongside the `NSAudioCaptureUsageDescription` already in
   `App/Info.plist`.
+- **A headless `xcodebuild` (CI, `Scripts/build-app.sh`) needs `-skipPackagePluginValidation
+  -skipMacroValidation`.** `mlx-swift` ships a build-tool plugin (`CudaBuild`, a genuine no-op on
+  macOS — it only does anything under `os(Linux)`) that Xcode otherwise refuses to run without a
+  one-time interactive "Trust & Enable" prompt, which a headless build has nobody to answer.
+  Opening the project in Xcode's own UI still shows that prompt once per machine — accept it, it's
+  expected, not a sign something's wrong.
+- **A fresh machine may be missing the Metal Toolchain**, a separate downloadable Xcode component
+  (not bundled by default in recent Xcode versions) needed to compile `mlx-swift`'s Metal shaders.
+  Its absence surfaces as `cannot execute tool 'metal' due to missing Metal Toolchain` deep in a
+  build log, not as an obvious top-level error. Fix once per machine:
+  `xcodebuild -downloadComponent MetalToolchain` (~690MB).
+- **This app no longer ships a universal binary — MLX is Apple-Silicon-only.** `mlx-swift` and
+  `speech-swift`'s Metal/Float16-dependent code genuinely does not compile for `x86_64`, not just
+  "isn't tested there." `ARCHS = arm64` / `EXCLUDED_ARCHS = x86_64` are set project-wide in
+  `project.pbxproj`, and `Scripts/build-app.sh` additionally passes
+  `ARCHS=arm64 ONLY_ACTIVE_ARCH=YES EXCLUDED_ARCHS=x86_64` on the command line — a project-level
+  `ARCHS` override alone was not enough to stop Xcode's SPM package integration from still
+  attempting an `x86_64` slice of `speech-swift`'s own dependencies. This is a real, deliberate
+  consequence of the MLX migration, not an oversight: **Intel Macs can no longer run this app.**
+  Re-adding Intel support would mean dropping MLX first, not just re-tuning these flags.
 
 Both tools need Xcode's toolchain rather than Command Line Tools. `xcode-select` is already
 pointed at Xcode; if a fresh machine errors out, run
