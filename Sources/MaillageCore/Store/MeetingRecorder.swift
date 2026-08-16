@@ -275,8 +275,13 @@ public final class MeetingRecorder {
             state = .summarising
             if SystemLanguageModel.default.availability == .available {
                 do {
+                    let personIDs = Set(merged.compactMap(\.speaker?.personID))
+                    let displayNames = Dictionary(
+                        uniqueKeysWithValues: personIDs.compactMap { id in
+                            store.displayName(for: id).map { (id, $0) }
+                        })
                     let summary = try await FoundationModelsSummarizer().summarize(
-                        merged, language: language)
+                        merged, language: language, displayNames: displayNames)
                     if var summarized = store.snapshot.meetings[meetingID] {
                         summarized.body = TranscriptCodec.join(
                             preamble: summary.markdown, segments: merged)

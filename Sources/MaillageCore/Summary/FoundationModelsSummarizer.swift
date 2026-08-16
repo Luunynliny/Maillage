@@ -77,23 +77,29 @@ public final class FoundationModelsSummarizer: MeetingSummarizer, Sendable {
 
     public init() {}
 
-    public func summarize(_ segments: [TranscriptSegment], language: String) async throws
-        -> MeetingSummary
-    {
-        try await mapReduce(segments, language: language, windowSize: Self.defaultWindowSize)
+    public func summarize(
+        _ segments: [TranscriptSegment], language: String, displayNames: [EntityID: String]
+    ) async throws -> MeetingSummary {
+        try await mapReduce(
+            segments, language: language, displayNames: displayNames,
+            windowSize: Self.defaultWindowSize)
     }
 
     private func mapReduce(
-        _ segments: [TranscriptSegment], language: String, windowSize: Int
+        _ segments: [TranscriptSegment], language: String, displayNames: [EntityID: String],
+        windowSize: Int
     ) async throws -> MeetingSummary {
         let chunks = TranscriptChunker.chunk(segments, windowSize: windowSize)
         guard let first = chunks.first else {
             return MeetingSummary(headline: "", keyPoints: [], decisions: [], actionItems: [])
         }
         do {
-            var chunkSummaries = [try await summarizeChunk(first, language: language)]
+            var chunkSummaries = [
+                try await summarizeChunk(first, language: language, displayNames: displayNames)
+            ]
             for chunk in chunks.dropFirst() {
-                chunkSummaries.append(try await summarizeChunk(chunk, language: language))
+                chunkSummaries.append(
+                    try await summarizeChunk(chunk, language: language, displayNames: displayNames))
             }
             return chunkSummaries.count == 1
                 ? chunkSummaries[0]
@@ -105,12 +111,14 @@ public final class FoundationModelsSummarizer: MeetingSummarizer, Sendable {
             // stage overflow (many chunks, long combined input) isn't fixed by a smaller window.
             // Upgrade path if that shows up in practice: cap how many chunk summaries reduce()
             // combines per call and reduce in a tree instead of one flat pass.
-            return try await mapReduce(segments, language: language, windowSize: windowSize / 2)
+            return try await mapReduce(
+                segments, language: language, displayNames: displayNames,
+                windowSize: windowSize / 2)
         }
     }
 
     private func summarizeChunk(
-        _ segments: [TranscriptSegment], language: String
+        _ segments: [TranscriptSegment], language: String, displayNames: [EntityID: String]
     ) async throws -> MeetingSummary {
         // Fresh session per call, per Apple's own guidance for single-turn interactions —
         // reusing one session across chunks would accumulate context and burn the same
@@ -119,13 +127,29 @@ public final class FoundationModelsSummarizer: MeetingSummarizer, Sendable {
             instructions:
                 "You summarize one excerpt of a meeting transcript. Respond in \(language)."
         )
-        let transcriptText = segments.map {
-            "(\(TranscriptCodec.formatTimestamp(seconds: $0.offsetSeconds))) \($0.text)"
+        let transcriptText = segments.map { segment in
+            Self.line(for: segment, displayNames: displayNames)
         }.joined(separator: "\n")
         let response = try await session.respond(
             to: "Summarize this meeting transcript excerpt:\n\n\(transcriptText)",
             generating: MeetingSummary.self)
         return response.content
+    }
+
+    /// `(00:15) text` when diarization was off (or this meeting predates it); `(00:15) Marie
+    /// Dupont: text` once a slot is confirmed against a person; `(00:15) Speaker 2: text` for a
+    /// diarized slot nobody has confirmed yet — better attribution for the model's key-points/
+    /// decisions/action-item generation than a flat, speakerless transcript.
+    static func line(for segment: TranscriptSegment, displayNames: [EntityID: String])
+        -> String
+    {
+        let timestamp = TranscriptCodec.formatTimestamp(seconds: segment.offsetSeconds)
+        guard let speaker = segment.speaker else {
+            return "(\(timestamp)) \(segment.text)"
+        }
+        let name =
+            speaker.personID.flatMap { displayNames[$0] } ?? "Speaker \(speaker.slot + 1)"
+        return "(\(timestamp)) \(name): \(segment.text)"
     }
 
     private func reduce(
