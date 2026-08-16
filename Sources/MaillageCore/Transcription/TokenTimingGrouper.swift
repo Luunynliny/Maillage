@@ -13,10 +13,15 @@ public enum TokenTimingGrouper {
     ///
     /// Groups by word, not by raw sub-word token — via FluidAudio's own
     /// ``buildWordTimings(from:)``, so the sub-word joining (SentencePiece's `▁` word-boundary
-    /// marker) is the library's tested logic, not a reimplementation of it here. Nemotron (unlike
-    /// Parakeet) emits inline language-tag tokens (`<fr-FR>`, `<en-US>`, ...) as part of its token
-    /// stream — its own bookkeeping for which language it just decoded, never something anyone
-    /// said — so those are dropped before grouping into segments.
+    /// marker) is the library's tested logic, not a reimplementation of it here. Nemotron decodes
+    /// with inline language-tag tokens (`<fr-FR>`, `<en-US>`, ...) as its own bookkeeping for
+    /// which language it just detected, never something anyone said — but FluidAudio itself
+    /// already excludes those before a `TokenTiming` is ever produced (confirmed against the
+    /// pinned version: `StreamingNemotronMultilingualAsrManager` drops any `langTagTokenIds`
+    /// token before appending it). The bracket filter below is a defensive backstop against any
+    /// other bracket-shaped special token slipping through, not the place tag-stripping actually
+    /// happens — a future FluidAudio version could change that internal behavior, so this stays
+    /// cheap insurance rather than dead weight to delete.
     public static func segments(
         from timings: [TokenTiming], pauseThreshold: TimeInterval = 1.5
     ) -> [TranscriptSegment] {
