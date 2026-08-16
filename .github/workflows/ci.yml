@@ -206,17 +206,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The "Fetch WhisperKit Model" build phase Scripts/build-app.sh triggers downloads ~632MB
-      # from Hugging Face on a cache miss, landing under .whisperkit-model-cache. Keyed on the
-      # fetch script's own hash so a future change to it (a different variant, a bug fix)
-      # invalidates the cache automatically — no separate version string to remember to bump.
-      - name: Cache WhisperKit model
+      # The "Fetch ASR Model" build phase Scripts/build-app.sh triggers downloads Qwen3-ASR
+      # (~700MB) and Silero VAD (~1MB) from Hugging Face on a cache miss, landing under
+      # .asr-model-cache. Keyed on the fetch script's own hash so a future change to it (a
+      # different model, a bug fix) invalidates the cache automatically — no separate version
+      # string to remember to bump.
+      - name: Cache ASR models
         uses: actions/cache@v4
         with:
-          path: .whisperkit-model-cache
-          key: whisperkit-model-${{ hashFiles('Scripts/fetch-whisper-model.sh') }}
+          path: .asr-model-cache
+          key: asr-model-${{ hashFiles('Scripts/fetch-asr-model.sh') }}
 
-      # Same reasoning as the WhisperKit cache above, for the local LLM's "Fetch LLM Model"
+      # Same reasoning as the ASR cache above, for the local LLM's "Fetch LLM Model"
       # build phase — ~830MB from Hugging Face on a cache miss, landing under .llm-model-cache.
       - name: Cache local LLM model
         uses: actions/cache@v4

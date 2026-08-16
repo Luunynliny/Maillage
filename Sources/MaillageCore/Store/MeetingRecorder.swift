@@ -172,7 +172,7 @@ public final class MeetingRecorder {
         meeting.language = language
 
         // Loaded once and shared by both passes below — cleanup and summarization run strictly
-        // sequentially here (unlike the two WhisperKit loads above, which run concurrently on two
+        // sequentially here (unlike the two ASR loads above, which run concurrently on two
         // different tracks), so a second load would just be a redundant multi-second re-read of
         // the same ~840MB of weights from disk for no benefit.
         let localLLM: ModelContainer?
@@ -240,10 +240,12 @@ public final class MeetingRecorder {
 
     /// Loads a fresh batch ASR model and transcribes one track's WAV file top to bottom, grouped
     /// into timestamped segments. `nonisolated` and `static`: touches no recorder state, only the
-    /// file it's given — `finishTranscription` runs both tracks' calls concurrently.
+    /// file it's given — `finishTranscription` runs both tracks' calls concurrently, and
+    /// `StreamingASR` (like the `WhisperKit` instance this replaced) isn't safe to share across
+    /// them, so each track gets its own freshly loaded model.
     nonisolated private static func transcribe(url: URL) async throws -> [TranscriptSegment] {
-        let whisperKit = try await WhisperModelStore().loadWhisperKit()
-        return try await WhisperTranscriber(whisperKit: whisperKit).transcribe(fileAt: url)
+        let streamingASR = try await LocalASRModelStore().loadStreamingASR()
+        return try await LocalASRTranscriber(streamingASR: streamingASR).transcribe(fileAt: url)
     }
 
     /// `transcribe(url:)`, with its failure caught rather than thrown — so `finishTranscription`

@@ -14,7 +14,7 @@ as a force-directed graph clustered by employer.
 | Tests | Swift Testing (`@Test`, `@Suite`, `#expect`, `#require`) — **not** XCTest |
 | YAML | [Yams](https://github.com/jpsim/Yams) (MIT) |
 | Markdown rendering | [swift-markdown-ui](https://github.com/gonzalezreal/swift-markdown-ui) (MIT) |
-| Transcription | [WhisperKit](https://github.com/argmaxinc/argmax-oss-swift) (MIT) |
+| Transcription | [speech-swift](https://github.com/soniqo/speech-swift) (Apache 2.0) running Qwen3-ASR (0.6B, 4-bit MLX) guided by Silero VAD, pinned to a commit SHA — no tagged release existed at the time this was added, so `Package.swift`/`project.pbxproj` name a revision, not a version, and there is no `upToNextMajorVersion` safety net against an upstream break |
 | Summarization/cleanup | [mlx-swift-lm](https://github.com/ml-explore/mlx-swift-lm) (MIT) running Qwen2.5-1.5B-Instruct (Apache 2.0), tokenized via [swift-transformers](https://github.com/huggingface/swift-transformers) (Apache 2.0) |
 
 Swift is a hard requirement: a later phase captures macOS system audio via Core Audio process
