@@ -77,12 +77,14 @@ while IFS= read -r path; do
     curl -fsSL "https://huggingface.co/$repo/resolve/main/$path" -o "$dest"
 done <<<"$files"
 
-# Atomic within the cache directory's own filesystem: the model directory either doesn't exist
-# yet, or is a previous complete download — never a half-written one a concurrent build could see.
-mkdir -p "$model_dir"
-for entry in "${required_dirs[@]}" "${required_files[@]}"; do
-    mv "$staging/$entry" "$model_dir/$entry"
-done
+# Atomic within the cache directory's own filesystem: one `mv` swaps the fully-populated staging
+# directory in for good, so `$model_dir` either doesn't exist yet, or is a previous complete
+# download, or is this one — never a half-written one a concurrent build could see. `rm -rf` first
+# because `mv` of a directory onto an existing directory nests it inside instead of replacing it,
+# which an interrupted prior run (model dir created, manifest never written) would otherwise turn
+# into a staging directory nested inside the old one rather than a clean replacement.
+rm -rf "$model_dir"
+mv "$staging" "$model_dir"
 echo "$files" | sed "s#^#$model_name/#" >"$manifest"
 
 echo "==> Parakeet TDT v3 (int8) ready at $model_dir"
