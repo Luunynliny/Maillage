@@ -130,6 +130,13 @@ struct MeetingView: View {
             levelMeter("You", level: activeRecorder?.capture.microphoneLevel ?? 0)
             levelMeter("Them", level: activeRecorder?.capture.systemAudioLevel ?? 0)
 
+            if !liveTranscriptText.isEmpty {
+                Text(liveTranscriptText)
+                    .font(Theme.Font.body)
+                    .foregroundStyle(Theme.textMuted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             Divider()
                 .padding(.vertical, Theme.Spacing.xs)
 
@@ -189,6 +196,15 @@ struct MeetingView: View {
 
     private var elapsedSeconds: TimeInterval {
         activeRecorder?.capture.elapsedSeconds ?? 0
+    }
+
+    /// Both tracks' in-flight text, mic first — the same track order `TranscriptMerger` breaks
+    /// ties with everywhere else. Only ever non-empty while recording: `MeetingRecorder` clears
+    /// both once Stop hands off to the real, timestamped segments in `meeting.body`.
+    private var liveTranscriptText: String {
+        [activeRecorder?.microphoneLiveText, activeRecorder?.systemAudioLiveText]
+            .compactMap { $0?.nilIfBlank }
+            .joined(separator: "\n")
     }
 
     /// Filtered to the chosen organization so a later project pick can never silently overwrite

@@ -2,9 +2,9 @@ import AVFoundation
 
 /// Converts arbitrary-format PCM into the one format every recording file is written in.
 ///
-/// 16 kHz mono is what `WhisperKit.transcribe(audioArray:)` consumes in the phase after this
-/// one, so nothing resamples between capture and transcription. It is also roughly a tenth the
-/// size of 48 kHz stereo Float32, for audio this app promises to delete once transcribed.
+/// 16 kHz mono is what the streaming ASR consumes directly, so nothing resamples between capture
+/// and transcription. It is also roughly a tenth the size of 48 kHz stereo Float32, for audio
+/// this app promises to delete once transcribed.
 enum PCMFormat {
     /// Force-unwrapped: these parameters (16-bit signed PCM, 16 kHz, mono, interleaved — moot
     /// at one channel, but explicit) are always valid for `AVAudioFormat`, so a `nil` here

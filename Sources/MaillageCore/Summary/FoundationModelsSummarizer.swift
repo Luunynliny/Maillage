@@ -63,13 +63,12 @@ extension MeetingSummary {
 /// fixed-size chunks so a long meeting never exceeds one session's context budget.
 public final class FoundationModelsSummarizer: MeetingSummarizer, Sendable {
     // No stored state — a session is created fresh per call, see `summarizeChunk` — so this is
-    // safely `Sendable` outright, unlike `WhisperTranscriber`'s `@unchecked Sendable` wrapper
-    // around a stored, stateful WhisperKit instance.
+    // safely `Sendable` outright.
 
     /// Chosen against the model's confirmed 4,096-token/session budget: reserving headroom for
     /// instructions, the `@Generable` schema, and generated output, a chunk excerpt should stay
-    /// well under ~2,000 tokens (~7,000-8,000 characters). WhisperKit segments run roughly
-    /// 25-120 characters each, so 50 segments lands around 1,250-6,000 characters — inside
+    /// well under ~2,000 tokens (~7,000-8,000 characters). A short utterance-level segment runs
+    /// roughly 25-120 characters, so 50 segments lands around 1,250-6,000 characters — inside
     /// budget with margin. A heuristic starting point, not a measured number; the halving-retry
     /// below is the actual safety net, not this constant.
     private static let defaultWindowSize = 50

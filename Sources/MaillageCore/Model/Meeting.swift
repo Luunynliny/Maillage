@@ -15,9 +15,8 @@ public struct Meeting: Entity, Codable {
     public var date: CalendarDay?
     /// Length of the recording in seconds, once transcription has run. `nil` until then.
     public var duration: Int?
-    /// The base language `LanguageDetector` found in the recording, e.g. `fr`. `nil` until
-    /// transcription has run; see ``VocabularyPrompt`` for how the detected language anchors
-    /// the vocabulary prompt and the decoder for the rest of the meeting.
+    /// The base language the streaming ASR detected during the recording, e.g. `fr`. `nil`
+    /// until it detects one — see ``StreamingTranscriber/detectedLanguage()``.
     public var language: String?
     /// The organization this meeting was held with, if any. Singular, like ``Person/organization``
     /// and ``Project/organization``: a meeting is with one company at a time.
