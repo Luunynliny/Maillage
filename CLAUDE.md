@@ -40,7 +40,7 @@ Two build systems describe the same sources, deliberately. Pick by what you're d
 
 | Task | Use | Why |
 |---|---|---|
-| Tests, quick compile check | `rtk swift test` | ~0.2s. Xcode's runner takes ~80s for the same 91 tests |
+| Tests, quick compile check | `rtk swift test` | ~0.2s. Xcode's runner takes ~80s for the same 178 tests |
 | Running, debugging, breakpoints | `open maillage.xcodeproj` → scheme **Maillage** → ⌘R | Only path that produces a real `.app` |
 
 `maillage.xcodeproj` has two targets mirroring the package: `MaillageCore.framework` and
@@ -111,7 +111,7 @@ branch  ┘
 | Format & lint | `swift format lint`, SwiftLint, `Scripts/check-build-parity.sh` | Needs no build, so it reports in under a minute |
 | Commit messages | `commitlint` on the PR title and on every commit in the PR | That a merge will actually release something — see Releasing. PRs only |
 | Branch name | `<type>/<slug>` against commitlint's type list | That the branch and the commit type it produces stay in step. PRs only |
-| Tests | `swift test` | The 91 tests, via the fast path |
+| Tests | `swift test` | The 178 tests, via the fast path |
 | Build app bundle | `Scripts/build-app.sh`, then a throwaway DMG | That the project file, `Info.plist` and embedded framework still produce a real, **signed, packageable** `.app` — breakage `swift test` passes straight through |
 | Release | `semantic-release` | Publishes. Push to `main` only |
 
@@ -253,13 +253,16 @@ App/Info.plist                       bundle id, $(MARKETING_VERSION), NSAudioCap
 maillage.xcodeproj/                  committed; shared Maillage scheme
 Sources/Maillage/MaillageApp.swift   @main, WindowGroup, menu commands (no key equivalents)
 Sources/MaillageCore/
-├── Design/     Theme.swift (tokens), Components.swift (Card, Pill, EntityAvatar, EntityLink, SidebarRow, …)
+├── Design/     Theme.swift (tokens), Components/ (Card, Pill, EntityAvatar, EntityLink, SidebarRow, … —
+                one file per primitive)
 ├── Model/      Entity, Person, Organization, Project, Relation, ProjectMembership, Wikilink, CalendarDay
 ├── Vault/      VaultLocation, FrontmatterCodec, VaultReader, VaultWriter, ImageSquarer
-├── Store/      VaultStore — single source of truth
-└── Views/      RootView, SidebarView, CenterPane, EntityDetails, GraphGeometry, Editors,
-                CommandPalette, VaultPicker, and the four subject views (EgoGraphView,
-                OrganizationBubblesView, OrganizationBoardView, ProjectRosterView)
+├── Store/      VaultStore — single source of truth, split across VaultStore.swift (state, loading)
+│               and VaultStore+Derived/+Logos/+CRUD.swift (same type, one file per concern)
+└── Views/      RootView, SidebarView, CenterPane, EntityDetails, GraphGeometry, Editors/
+                (one file per editor + shared fields), CommandPalette, VaultPicker, and the four
+                subject views (EgoGraphView, OrganizationBubblesView, OrganizationBoardView,
+                ProjectRosterView)
 ```
 
 The centre pane picks its representation from what's selected, since each selection is a different
@@ -322,7 +325,7 @@ These are invariants, not preferences — the tests enforce most of them.
 - **Never hardcode a color, radius, spacing or font in a view.** Reference `Theme`. Both light
   and dark are resolved inside `Theme.adaptive`, so use sites never branch on appearance.
 - **The cursor says what's clickable.** `.buttonStyle(.plain)` installs no tracking area, so
-  AppKit leaves the arrow over every control in `Components.swift` unless told otherwise. Each
+  AppKit leaves the arrow over every control in `Design/Components/` unless told otherwise. Each
   one applies `clickableCursor()` itself (text inputs `textCursor()`), so a new button is
   clickable-looking by construction. Pass `clickableCursor(false)` when a control is only
   sometimes clickable — a disabled button or an action-less `Pill` — since a hand promises a
@@ -333,7 +336,7 @@ These are invariants, not preferences — the tests enforce most of them.
 - **A text input's box is bigger than its `TextField`.** Padding, border and placeholder are
   drawn around it, so a click near the edge misses the input and the field reads as dead.
   Whatever draws the box also claims it: `contentShape` plus `onTapGesture` setting the field's
-  own `@FocusState`. `RoleField` in `Editors.swift` is the worked example.
+  own `@FocusState`. `RoleField` in `Views/Editors/EditorFields.swift` is the worked example.
 - **Membership lives on the person** (`organization:`, `projects:`), never duplicated onto the
   org or project. Org/project member lists are derived by scanning people.
 - **One organization per person, and one per project.** `organization:` is singular on both,

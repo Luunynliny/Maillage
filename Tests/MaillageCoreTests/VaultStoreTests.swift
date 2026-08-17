@@ -3,26 +3,12 @@ import Testing
 
 @testable import MaillageCore
 
-/// Each test gets a throwaway vault directory under the system temp folder.
-@MainActor
-private func makeStore() throws -> (store: VaultStore, root: URL) {
-    let root = URL(fileURLWithPath: NSTemporaryDirectory())
-        .appendingPathComponent("maillage-tests-\(UUID().uuidString)", isDirectory: true)
-    let store = VaultStore(location: VaultLocation(root: root))
-    store.load()
-    return (store, root)
-}
-
-private func cleanUp(_ root: URL) {
-    try? FileManager.default.removeItem(at: root)
-}
-
 @MainActor
 @Suite("Vault store")
 struct VaultStoreTests {
     @Test("Creates a person and writes a markdown file")
     func createsPerson() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let marie = try #require(
@@ -41,7 +27,7 @@ struct VaultStoreTests {
 
     @Test("Folds diacritics when slugifying names")
     func slugifiesDiacritics() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let person = try #require(store.createPerson(firstname: "Zoé", lastname: "Müller"))
@@ -50,7 +36,7 @@ struct VaultStoreTests {
 
     @Test("Disambiguates duplicate names instead of overwriting")
     func disambiguatesDuplicates() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let first = try #require(store.createPerson(firstname: "Jean", lastname: "Martin"))
@@ -64,7 +50,7 @@ struct VaultStoreTests {
     /// The core of the storage model: a relation exists in exactly one file.
     @Test("Stores relations one-way and derives the backlink")
     func storesRelationsOneWay() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
@@ -94,7 +80,7 @@ struct VaultStoreTests {
 
     @Test("Removing a relation clears the derived backlink")
     func removesRelation() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
@@ -108,7 +94,7 @@ struct VaultStoreTests {
 
     @Test("Relation labels are derived from use, most-used first")
     func derivesRelationLabels() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         // Nothing to offer until the user has named a relationship themselves.
@@ -140,7 +126,7 @@ struct VaultStoreTests {
 
     @Test("Reloading from disk reproduces the same state")
     func reloadsFromDisk() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
@@ -165,7 +151,7 @@ struct VaultStoreTests {
 
     @Test("Renaming a person rewrites inbound relations")
     func renameRewritesInboundRelations() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
@@ -191,7 +177,7 @@ struct VaultStoreTests {
 
     @Test("Renaming an organization rewrites membership links")
     func renameRewritesMembership() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let acme = try #require(store.createOrganization(name: "Acme Corp"))
@@ -208,7 +194,7 @@ struct VaultStoreTests {
     /// The other inbound link an organization has: a project's owner.
     @Test("Renaming an organization rewrites its projects' owner link")
     func renameRewritesProjectOwner() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let acme = try #require(store.createOrganization(name: "Acme Corp"))
@@ -225,7 +211,7 @@ struct VaultStoreTests {
 
     @Test("Employing someone replaces their previous employer")
     func employmentIsSingular() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let acme = try #require(store.createOrganization(name: "Acme Corp"))
@@ -245,7 +231,7 @@ struct VaultStoreTests {
     /// project file learns nothing about its roster.
     @Test("A project role is written to the person's file, not the project's")
     func storesRoleOnThePerson() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let project = try #require(store.createProject(name: "Maillage"))
@@ -270,7 +256,7 @@ struct VaultStoreTests {
     /// The editor hands over whatever is in the field, so blanks are the store's to reject.
     @Test("A blank role clears the stored one but keeps the membership")
     func clearsProjectRole() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let project = try #require(store.createProject(name: "Maillage"))
@@ -287,7 +273,7 @@ struct VaultStoreTests {
     /// What the project editor saves: it knows the intended roster, not which entries moved.
     @Test("Setting a roster adds, updates and removes memberships to match")
     func setsParticipants() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let project = try #require(store.createProject(name: "Maillage"))
@@ -321,7 +307,7 @@ struct VaultStoreTests {
     /// file rewritten just for being on it.
     @Test("Setting an unchanged roster rewrites nobody")
     func setParticipantsSkipsUnchanged() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let project = try #require(store.createProject(name: "Maillage"))
@@ -345,7 +331,7 @@ struct VaultStoreTests {
     /// would silently leave them attached.
     @Test("Setting an empty roster clears every membership")
     func setParticipantsToEmpty() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let project = try #require(store.createProject(name: "Maillage"))
@@ -361,7 +347,7 @@ struct VaultStoreTests {
     /// Someone on two projects must keep the other one when a roster is applied.
     @Test("Setting a roster leaves other projects alone")
     func setParticipantsLeavesOtherProjects() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let maillage = try #require(store.createProject(name: "Maillage"))
@@ -382,7 +368,7 @@ struct VaultStoreTests {
 
     @Test("Project roles are derived from use, most-used first")
     func derivesProjectRoles() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         #expect(store.usedProjectRoles.isEmpty)
@@ -406,7 +392,7 @@ struct VaultStoreTests {
 
     @Test("Renaming a project keeps the role on the membership")
     func renameKeepsProjectRole() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let project = try #require(store.createProject(name: "Maillage"))
@@ -426,7 +412,7 @@ struct VaultStoreTests {
     /// the order has to be stable and nobody may fall out of it.
     @Test("Groups people by employer with the unaffiliated last")
     func groupsPeopleByOrganization() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let acme = try #require(store.createOrganization(name: "Acme Corp"))
@@ -455,7 +441,7 @@ struct VaultStoreTests {
 
     @Test("Deleting a project scrubs the membership and its role")
     func deleteScrubsProjectMembership() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let project = try #require(store.createProject(name: "Maillage"))
@@ -476,7 +462,7 @@ struct VaultStoreTests {
 
     @Test("Creates a placeholder person with no name")
     func createsPlaceholder() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let head = try #require(
@@ -497,7 +483,7 @@ struct VaultStoreTests {
     /// while still sorting and rendering as unnamed.
     @Test("A placeholder keeps no name, only a descriptor")
     func placeholderHasNoName() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let head = try #require(
@@ -520,7 +506,7 @@ struct VaultStoreTests {
     /// descriptor being replaced by a real name.
     @Test("A placeholder keeps its role through resolution")
     func placeholderKeepsRole() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let head = try #require(
@@ -535,7 +521,7 @@ struct VaultStoreTests {
 
     @Test("Resolving a placeholder renames the file and keeps inbound links intact")
     func resolvesPlaceholder() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
@@ -567,7 +553,7 @@ struct VaultStoreTests {
 
     @Test("Deleting a person scrubs relations pointing at them")
     func deleteScrubsRelations() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
@@ -588,7 +574,7 @@ struct VaultStoreTests {
 
     @Test("Deleting an organization scrubs membership links")
     func deleteScrubsMembership() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let acme = try #require(store.createOrganization(name: "Acme Corp"))
@@ -604,7 +590,7 @@ struct VaultStoreTests {
     /// keeping one that points at nothing.
     @Test("Deleting an organization clears its projects' owner link")
     func deleteScrubsProjectOwner() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let acme = try #require(store.createOrganization(name: "Acme Corp"))
@@ -621,7 +607,7 @@ struct VaultStoreTests {
     /// otherwise it would show on two boards at once.
     @Test("Assigning a project to an organization replaces its previous owner")
     func projectOwnershipIsSingular() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         let acme = try #require(store.createOrganization(name: "Acme Corp"))
@@ -640,7 +626,7 @@ struct VaultStoreTests {
 
     @Test("A malformed file is reported without blocking the rest of the vault")
     func malformedFileIsIsolated() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         _ = store.createPerson(firstname: "Marie", lastname: "Dupont")
@@ -657,7 +643,7 @@ struct VaultStoreTests {
 
     @Test("Filename wins when frontmatter id disagrees")
     func filenameIsAuthoritative() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-tests")
         defer { cleanUp(root) }
 
         try location(root, "people/actual-name.md")
