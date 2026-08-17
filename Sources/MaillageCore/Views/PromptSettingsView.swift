@@ -5,8 +5,10 @@ import SwiftUI
 /// The only thing to configure today is the two prompt templates the local LLM follows for
 /// transcript cleanup and meeting summarization: this is "the user can tweak them" (the reason
 /// those templates live in the vault as plain markdown rather than hardcoded Swift strings) —
-/// pointing at where each file lives and a button to open it in whatever the user already edits
-/// text with, rather than a second, in-app editor for a plain text file that already has one.
+/// pointing at where each file lives and a button that reveals it in Finder, the same "here's the
+/// actual file, do what you want with it" posture `RootView`'s own "Reveal Vault in Finder" menu
+/// item already takes for the vault root, rather than a second, in-app editor for a plain text
+/// file that already has one.
 public struct PromptSettingsView: View {
     @Environment(VaultStore.self) private var store
 
@@ -44,7 +46,7 @@ public struct PromptSettingsView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .textSelection(.enabled)
-                SecondaryButton("Open") { open(template) }
+                SecondaryButton("Show in Finder") { reveal(template) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -56,9 +58,9 @@ public struct PromptSettingsView: View {
 
     /// Seeds the file with its built-in default first if this is the first time anyone's asked
     /// for it — the same lazy-creation `PromptTemplateStore.load` already does before a meeting
-    /// ever reads it, so "Open" always finds something rather than a blank/missing file.
-    private func open(_ template: PromptTemplate) {
+    /// ever reads it, so Finder always has something to select rather than a missing file.
+    private func reveal(_ template: PromptTemplate) {
         _ = PromptTemplateStore.load(template, location: store.location)
-        NSWorkspace.shared.open(url(for: template))
+        NSWorkspace.shared.activateFileViewerSelecting([url(for: template)])
     }
 }
