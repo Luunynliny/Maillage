@@ -7,12 +7,6 @@ struct MaillageApp: App {
     /// One store per app run — every view reads and writes the vault through it.
     @State private var store = VaultStore()
 
-    /// Set once, here, before anything in `MaillageCore` ever touches FluidAudio: with it on, a
-    /// missing or renamed bundled model throws instead of silently reaching for the network,
-    /// matching this app's "no network, ever" rule for on-device models — see
-    /// `FluidAudioModelStore`'s own doc comment for the bundled-model path this then requires.
-    private let fluidAudioOfflineMode: Void = FluidAudioModelStore.enableOfflineMode()
-
     /// Forces the process to be an ordinary foreground app.
     ///
     /// Only matters when the binary is run **without** its `.app` bundle, which is what
@@ -97,6 +91,14 @@ struct MaillageApp: App {
                     NSWorkspace.shared.activateFileViewerSelecting([store.location.root])
                 }
             }
+        }
+
+        // The one exception to "no keyboard shortcuts" above: Settings' ⌘, comes from AppKit
+        // itself, not from a shortcut this app wires up and could get wrong — every Mac app
+        // has it, and unlike the custom shortcuts that were removed, it always fires.
+        Settings {
+            PromptSettingsView()
+                .environment(store)
         }
     }
 }

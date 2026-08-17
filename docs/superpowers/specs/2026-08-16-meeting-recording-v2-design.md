@@ -1,5 +1,7 @@
 # Meeting recording v2: live diarized transcription, and live-editable meeting metadata
 
+**Superseded** — diarization was removed; see the commit history/plan for the batch-transcription redesign.
+
 ## Context
 
 [2026-08-13-meeting-recording-design.md](2026-08-13-meeting-recording-design.md) shipped meeting
