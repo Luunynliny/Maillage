@@ -20,6 +20,25 @@
 #      preserves both. The archive exists so actions/upload-artifact can carry the .app between
 #      CI stages without the same corruption — see the `package` job.
 #
+#   3. -skipPackagePluginValidation/-skipMacroValidation: mlx-swift ships a build-tool plugin
+#      (CudaBuild) that Xcode refuses to run without one-time interactive trust — the same
+#      "Trust & Enable" prompt any package with a plugin or macro shows the first time you build
+#      it in the Xcode UI. A headless xcodebuild has nobody to show that prompt to, so without
+#      these flags every build fails validation before the plugin even runs. Safe to skip here:
+#      the plugin itself is a no-op on macOS (it only does anything when `os(Linux)` and
+#      `SPM_CUDA` isn't "0"). Opening the project in Xcode's own UI still shows the one-time
+#      trust prompt on first build there — that's expected, not a sign this flag is wrong.
+#
+#   4. ARCHS=arm64 ONLY_ACTIVE_ARCH=YES EXCLUDED_ARCHS=x86_64, all three together: mlx-swift is
+#      Apple-Silicon-only (Metal/Float16 code in its own and speech-swift's dependency tree does
+#      not compile for x86_64 at all), so this app can no longer ship as a universal binary.
+#      Release builds default to ARCHS_STANDARD (arm64 *and* x86_64) since ONLY_ACTIVE_ARCH is
+#      YES only for Debug in the project file — and a plain project-level ARCHS override alone
+#      was not enough to stop Xcode's SPM package integration from still attempting an x86_64
+#      slice of speech-swift's dependencies. All three overrides together, on the command line,
+#      is what actually worked when this was diagnosed; if this project ever needs Intel Mac
+#      support again, it would need to drop MLX first, not just these flags.
+#
 # Accepts an optional version to stamp: `build-app.sh 1.2.0` overrides MARKETING_VERSION for the
 # build. With no argument the project's own MARKETING_VERSION is used, which is what you want
 # locally. App/Info.plist reads $(MARKETING_VERSION), so this is the only lever needed.
@@ -39,6 +58,11 @@ build_args=(
     -configuration Release
     -destination 'platform=macOS'
     -derivedDataPath build
+    -skipPackagePluginValidation
+    -skipMacroValidation
+    ARCHS=arm64
+    ONLY_ACTIVE_ARCH=YES
+    EXCLUDED_ARCHS=x86_64
 )
 if [ -n "$version" ]; then
     echo "==> Building Maillage.app at version $version"

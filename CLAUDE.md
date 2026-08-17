@@ -14,17 +14,22 @@ as a force-directed graph clustered by employer.
 | Tests | Swift Testing (`@Test`, `@Suite`, `#expect`, `#require`) — **not** XCTest |
 | YAML | [Yams](https://github.com/jpsim/Yams) (MIT) |
 | Markdown rendering | [swift-markdown-ui](https://github.com/gonzalezreal/swift-markdown-ui) (MIT) |
-| Transcription/diarization | [FluidAudio](https://github.com/FluidInference/FluidAudio) (Apache 2.0) |
+| Transcription | [speech-swift](https://github.com/soniqo/speech-swift) (Apache 2.0) running Qwen3-ASR (0.6B, 4-bit MLX) guided by Silero VAD, pinned to a commit SHA — no tagged release existed at the time this was added, so `Package.swift`/`project.pbxproj` name a revision, not a version, and there is no `upToNextMajorVersion` safety net against an upstream break |
+| Summarization/cleanup | [mlx-swift-lm](https://github.com/ml-explore/mlx-swift-lm) (MIT) running Qwen2.5-1.5B-Instruct (Apache 2.0), tokenized via [swift-transformers](https://github.com/huggingface/swift-transformers) (Apache 2.0) |
 
 Swift is a hard requirement: a later phase captures macOS system audio via Core Audio process
 taps, which has no cross-platform equivalent.
 
-The floor is macOS 26 for `FoundationModels`, which the meeting-recording feature uses for an
+The floor was macOS 26 for `FoundationModels`, which the meeting-recording feature used for an
 on-device summary — see
 [docs/superpowers/specs/2026-08-13-meeting-recording-design.md](docs/superpowers/specs/2026-08-13-meeting-recording-design.md).
-`Package.swift`'s `swift-tools-version` is `6.2` for the same reason: `.macOS(.v26)` is gated on
-that manifest API version. That is unrelated to `.swiftLanguageMode(.v5)` above, which governs how
-the *sources* compile and does not move with it.
+`FoundationModels` has since been dropped entirely in favor of the bundled `mlx-swift-lm` model
+above, which has no comparable OS-version or device-eligibility floor — **whether `.macOS(.v26)`
+still needs to be this high is now an open question, not yet investigated**; something else in the
+app may still require it. `Package.swift`'s `swift-tools-version` is `6.2` for the same reason
+`.macOS(.v26)` is: it's gated on that manifest API version. That is unrelated to
+`.swiftLanguageMode(.v5)` above, which governs how the *sources* compile and does not move with
+either.
 
 **Open source first.** Every dependency added must be OSS with a permissive license, noted in
 the table above with its license.
@@ -62,6 +67,26 @@ Watch out for:
   no entitlements file yet. The audio phase will need one (`App/Maillage.entitlements`, referenced
   by `CODE_SIGN_ENTITLEMENTS`) alongside the `NSAudioCaptureUsageDescription` already in
   `App/Info.plist`.
+- **A headless `xcodebuild` (CI, `Scripts/build-app.sh`) needs `-skipPackagePluginValidation
+  -skipMacroValidation`.** `mlx-swift` ships a build-tool plugin (`CudaBuild`, a genuine no-op on
+  macOS — it only does anything under `os(Linux)`) that Xcode otherwise refuses to run without a
+  one-time interactive "Trust & Enable" prompt, which a headless build has nobody to answer.
+  Opening the project in Xcode's own UI still shows that prompt once per machine — accept it, it's
+  expected, not a sign something's wrong.
+- **A fresh machine may be missing the Metal Toolchain**, a separate downloadable Xcode component
+  (not bundled by default in recent Xcode versions) needed to compile `mlx-swift`'s Metal shaders.
+  Its absence surfaces as `cannot execute tool 'metal' due to missing Metal Toolchain` deep in a
+  build log, not as an obvious top-level error. Fix once per machine:
+  `xcodebuild -downloadComponent MetalToolchain` (~690MB).
+- **This app no longer ships a universal binary — MLX is Apple-Silicon-only.** `mlx-swift` and
+  `speech-swift`'s Metal/Float16-dependent code genuinely does not compile for `x86_64`, not just
+  "isn't tested there." `ARCHS = arm64` / `EXCLUDED_ARCHS = x86_64` are set project-wide in
+  `project.pbxproj`, and `Scripts/build-app.sh` additionally passes
+  `ARCHS=arm64 ONLY_ACTIVE_ARCH=YES EXCLUDED_ARCHS=x86_64` on the command line — a project-level
+  `ARCHS` override alone was not enough to stop Xcode's SPM package integration from still
+  attempting an `x86_64` slice of `speech-swift`'s own dependencies. This is a real, deliberate
+  consequence of the MLX migration, not an oversight: **Intel Macs can no longer run this app.**
+  Re-adding Intel support would mean dropping MLX first, not just re-tuning these flags.
 
 Both tools need Xcode's toolchain rather than Command Line Tools. `xcode-select` is already
 pointed at Xcode; if a fresh machine errors out, run

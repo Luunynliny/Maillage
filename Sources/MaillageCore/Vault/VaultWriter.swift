@@ -33,7 +33,11 @@ public struct VaultWriter {
 
     /// Takes `Data` rather than a `String` so logos go through the same swap as markdown: an
     /// interrupted save can no more leave half a PNG behind than half a profile.
-    private func writeAtomically(_ data: Data, to url: URL) throws {
+    ///
+    /// Public rather than `private`: ``PromptTemplateStore`` reuses this exact atomic-write
+    /// primitive to seed `.maillage/prompts/*.md`, rather than a second write path with the same
+    /// temp-file-then-swap shape.
+    public func writeAtomically(_ data: Data, to url: URL) throws {
         let fm = FileManager.default
         try fm.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -78,36 +82,6 @@ public struct VaultWriter {
         return Set(
             contents
                 .filter { $0.pathExtension.lowercased() == "png" }
-                .map { $0.deletingPathExtension().lastPathComponent })
-    }
-
-    // MARK: Voiceprints
-
-    /// Stores `data` — a small JSON blob, see ``Voiceprint`` — as this person's voiceprint.
-    /// Same "a logo is a file, not a field" shape as ``writeLogo(_:kind:id:)``.
-    public func writeVoiceprint(_ data: Data, personID: EntityID) throws {
-        try writeAtomically(data, to: location.voiceprintURL(personID: personID))
-    }
-
-    /// Removes a person's voiceprint. A no-op when there isn't one, like ``deleteLogo(kind:id:)``.
-    public func deleteVoiceprint(personID: EntityID) throws {
-        let url = location.voiceprintURL(personID: personID)
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
-        try FileManager.default.removeItem(at: url)
-    }
-
-    /// Which people have a voiceprint, read from the asset directory — derived, not stored,
-    /// exactly like ``logoIDs(kind:)``.
-    public func voiceprintIDs() -> Set<EntityID> {
-        guard
-            let contents = try? FileManager.default.contentsOfDirectory(
-                at: location.assetsDirectory(for: .person),
-                includingPropertiesForKeys: nil,
-                options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants])
-        else { return [] }
-        return Set(
-            contents
-                .filter { $0.pathExtension.lowercased() == "voiceprint" }
                 .map { $0.deletingPathExtension().lastPathComponent })
     }
 
@@ -186,22 +160,6 @@ public struct VaultWriter {
                 try FileManager.default.removeItem(at: newLogo)
             }
             try FileManager.default.moveItem(at: oldLogo, to: newLogo)
-        }
-
-        // 2b. Carry the voiceprint across too, only people have one, same reasoning as the
-        // logo above: the filename is the identity, and leaving it behind would orphan it.
-        if kind == .person {
-            let oldVoiceprint = location.voiceprintURL(personID: oldID)
-            if FileManager.default.fileExists(atPath: oldVoiceprint.path) {
-                let newVoiceprint = location.voiceprintURL(personID: newID)
-                try FileManager.default.createDirectory(
-                    at: newVoiceprint.deletingLastPathComponent(), withIntermediateDirectories: true
-                )
-                if FileManager.default.fileExists(atPath: newVoiceprint.path) {
-                    try FileManager.default.removeItem(at: newVoiceprint)
-                }
-                try FileManager.default.moveItem(at: oldVoiceprint, to: newVoiceprint)
-            }
         }
 
         // 3. Repoint every inbound reference.

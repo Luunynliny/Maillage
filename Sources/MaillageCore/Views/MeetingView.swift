@@ -1,3 +1,4 @@
+import AppKit
 import MarkdownUI
 import SwiftUI
 
@@ -9,9 +10,9 @@ import SwiftUI
 ///
 /// The summary and the transcript are two different trust levels of the same body: the
 /// transcript is what ``TranscriptCodec`` guarantees round-trips exactly, the summary is
-/// whatever a later phase's model wrote above it — headings, bullets, bold/italic emphasis
-/// (see the design doc's `MeetingSummary` example) — and is rendered as markdown via
-/// MarkdownUI rather than hand-parsed, the same as the vault file reads in Obsidian.
+/// whatever the local LLM wrote above it directly as markdown — headings, bullets, bold/italic
+/// emphasis — and is rendered as markdown via MarkdownUI rather than hand-parsed, the same as
+/// the vault file reads in Obsidian.
 struct MeetingView: View {
     @Environment(VaultStore.self) private var store
 
@@ -55,7 +56,7 @@ struct MeetingView: View {
                 isDetailVisible: $isDetailVisible, selection: $selection,
                 editorRequest: $editorRequest)
 
-            if isRecordingThisMeeting || isTranscribing || !pendingSpeakers.isEmpty
+            if isRecordingThisMeeting || isTranscribing
                 || !(attendees.isEmpty && segments.isEmpty && preamble.isEmpty)
             {
                 content
@@ -99,9 +100,6 @@ struct MeetingView: View {
                 if !segments.isEmpty {
                     transcriptSection
                 }
-                if !pendingSpeakers.isEmpty {
-                    pendingSpeakersSection
-                }
             }
             .padding(Theme.Spacing.large)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -129,15 +127,6 @@ struct MeetingView: View {
                     .foregroundStyle(Theme.textMuted)
                 Spacer(minLength: 0)
                 PrimaryButton("Stop & Save") { activeRecorder?.stop() }
-            }
-            levelMeter("You", level: activeRecorder?.capture.microphoneLevel ?? 0)
-            levelMeter("Them", level: activeRecorder?.capture.systemAudioLevel ?? 0)
-
-            if !liveTranscriptText.isEmpty {
-                Text(liveTranscriptText)
-                    .font(Theme.Font.body)
-                    .foregroundStyle(Theme.textMuted)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             Divider()
@@ -170,44 +159,12 @@ struct MeetingView: View {
         }
     }
 
-    /// A silent "Them" track is the most likely failure in the whole capture path — the
-    /// system tap can fail in ways that don't throw — so this meter is the only place that
-    /// failure is visible at all while it can still be fixed, rather than discovered later
-    /// in an empty transcript.
-    private func levelMeter(_ label: String, level: Float) -> some View {
-        HStack(spacing: Theme.Spacing.small) {
-            Text(label)
-                .font(Theme.Font.caption)
-                .foregroundStyle(Theme.textMuted)
-                .frame(width: 40, alignment: .leading)
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: Theme.Radius.small)
-                        .fill(Theme.bgSecondary)
-                    RoundedRectangle(cornerRadius: Theme.Radius.small)
-                        .fill(Theme.accent)
-                        .frame(width: geometry.size.width * CGFloat(min(level * 4, 1)))
-                }
-            }
-            .frame(height: 6)
-        }
-    }
-
     private var isRecordingThisMeeting: Bool {
         activeRecorder?.meetingID == meeting.id && activeRecorder?.state == .recording
     }
 
     private var elapsedSeconds: TimeInterval {
         activeRecorder?.capture.elapsedSeconds ?? 0
-    }
-
-    /// Both tracks' in-flight text, mic first — the same track order `TranscriptMerger` breaks
-    /// ties with everywhere else. Only ever non-empty while recording: `MeetingRecorder` clears
-    /// both once Stop hands off to the real, timestamped segments in `meeting.body`.
-    private var liveTranscriptText: String {
-        [activeRecorder?.microphoneLiveText, activeRecorder?.systemAudioLiveText]
-            .compactMap { $0?.nilIfBlank }
-            .joined(separator: "\n")
     }
 
     /// Filtered to the chosen organization so a later project pick can never silently overwrite
@@ -343,66 +300,38 @@ struct MeetingView: View {
 
     private var transcriptSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            SectionHeader("Transcript")
-            VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-                ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
-                    segmentRow(segment)
+            HStack(spacing: Theme.Spacing.small) {
+                SectionHeader("Transcript")
+                if !segments.isEmpty {
+                    IconButton("doc.on.doc", help: "Copy transcript") { copyTranscript() }
+                }
+                Spacer()
+            }
+            VStack(alignment: .leading, spacing: Theme.Spacing.large) {
+                ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
+                    paragraphRow(paragraph)
                 }
             }
         }
     }
 
-    /// Timestamp above the words. A diarized segment also gets a speaker label above that — an
-    /// ``EntityLink`` once a human has confirmed who it is, a ``Pill`` reading "Speaker N" until
-    /// then (per CLAUDE.md's own rule: a `Pill` is for what isn't yet an entity). No speaker
-    /// label at all when diarization was off for this meeting — see ``TranscriptSegment``. No
-    /// left/right alignment or other spatial stand-in either: that would just reintroduce the
-    /// same false distinction visually instead of in text.
-    private func segmentRow(_ segment: TranscriptSegment) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if let speaker = segment.speaker {
-                speakerLabel(speaker)
-            }
-            Text(TranscriptCodec.formatTimestamp(seconds: segment.offsetSeconds))
-                .font(Theme.Font.mono)
-                .foregroundStyle(Theme.textFaint)
-            Text(segment.text)
-                .font(Theme.Font.body)
-                .foregroundStyle(Theme.textNormal)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
+    /// No timestamps and no left/right alignment or other spatial stand-in for who's speaking:
+    /// this vault records no speaker identification, so introducing one visually would just
+    /// reintroduce the same false distinction in a different form.
+    private func paragraphRow(_ paragraph: String) -> some View {
+        Text(paragraph)
+            .font(Theme.Font.body)
+            .foregroundStyle(Theme.textNormal)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    @ViewBuilder
-    private func speakerLabel(_ speaker: Speaker) -> some View {
-        if let personID = speaker.personID {
-            EntityLink(
-                title: store.displayName(for: personID) ?? personID,
-                kind: .person,
-                id: personID,
-                isPlaceholder: store.entity(id: personID)?.asPerson?.placeholder == true
-            ) {
-                selection = personID
-            }
-        } else {
-            Pill("Speaker \(speaker.slot + 1)")
-        }
-    }
-
-    // MARK: Pending speakers
-
-    /// One card per diarized slot nobody has confirmed yet — see ``PendingSpeaker`` for why this
-    /// is the one chance to train a voiceprint from it, not just relabel the transcript.
-    private var pendingSpeakersSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            SectionHeader("Who said this?", trailing: "\(pendingSpeakers.count)")
-            VStack(spacing: Theme.Spacing.medium) {
-                ForEach(pendingSpeakers) { pending in
-                    PendingSpeakerCard(pending: pending, recorder: activeRecorder)
-                }
-            }
-        }
+    /// One paragraph per line, blank-line separated — the same shape ``paragraphRow`` renders,
+    /// so pasting elsewhere reads the same way the transcript reads on screen.
+    private func copyTranscript() {
+        let text = paragraphs.joined(separator: "\n\n")
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     // MARK: Data
@@ -417,11 +346,8 @@ struct MeetingView: View {
         TranscriptCodec.split(meeting.body).segments
     }
 
-    /// Only this meeting's own — `activeRecorder.pendingSpeakers` also carries a since-replaced
-    /// recorder's leftovers from whichever meeting it last finished, if this one hasn't started
-    /// its own recording yet.
-    private var pendingSpeakers: [PendingSpeaker] {
-        activeRecorder?.pendingSpeakers.filter { $0.meetingID == meeting.id } ?? []
+    private var paragraphs: [String] {
+        TranscriptParagraphs.group(segments)
     }
 
     private var subtitle: String {
@@ -429,54 +355,6 @@ struct MeetingView: View {
         let people = "\(count) \(count == 1 ? "attendee" : "attendees")"
         guard let date = meeting.date else { return people }
         return "\(people) · \(date.description)"
-    }
-}
-
-/// One diarized slot, confirmed against an existing person or dismissed. A brand-new contact
-/// isn't created inline here — pick them from the existing sidebar "+" flow first, then confirm
-/// this card against them, the same way an attendee or a project's roster is picked everywhere
-/// else in the app; a second, bespoke "create new" combo box for this one picker isn't worth it.
-private struct PendingSpeakerCard: View {
-    @Environment(VaultStore.self) private var store
-
-    let pending: PendingSpeaker
-    let recorder: MeetingRecorder?
-
-    @State private var selection: Set<EntityID> = []
-
-    var body: some View {
-        Card {
-            HStack(spacing: Theme.Spacing.small) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Speaker \(pending.speaker.slot + 1)")
-                        .font(Theme.Font.body)
-                        .foregroundStyle(Theme.textNormal)
-                    Text(pending.speaker.track == .mic ? "You" : "Them")
-                        .font(Theme.Font.caption)
-                        .foregroundStyle(Theme.textMuted)
-                }
-                Spacer(minLength: 0)
-                SecondaryButton("Not now") { recorder?.dismissPendingSpeaker(pending.speaker) }
-                PrimaryButton("Confirm", isEnabled: selection.first != nil) {
-                    guard let personID = selection.first else { return }
-                    recorder?.assignSpeaker(pending.speaker, to: personID)
-                }
-            }
-
-            MultiSelectField(
-                label: "Who is this?",
-                options: store.allPeople.map { ($0.id, $0.displayName) },
-                selected: $selection,
-                kind: .person,
-                prompt: "Search people",
-                limit: 1
-            )
-        }
-        .onAppear {
-            if let suggested = pending.suggestedPersonID {
-                selection = [suggested]
-            }
-        }
     }
 }
 
