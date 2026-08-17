@@ -59,12 +59,4 @@ public enum PromptTemplateStore {
             Data(template.defaultText.utf8), to: url)
         return template.defaultText
     }
-
-    /// Writes an edited template back to the vault — how ``PromptSettingsView`` saves a change.
-    public static func save(_ template: PromptTemplate, text: String, location: VaultLocation)
-        throws
-    {
-        try VaultWriter(location: location).writeAtomically(
-            Data(text.utf8), to: location.promptURL(named: template.filename))
-    }
 }
