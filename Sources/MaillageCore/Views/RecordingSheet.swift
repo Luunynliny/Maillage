@@ -20,7 +20,6 @@ struct RecordingSheet: View {
     var onStarted: (EntityID) -> Void = { _ in }
 
     @State private var title = ""
-    @State private var moreThanFourSpeakers = false
     @State private var isStarting = false
     @State private var errorMessage: String?
 
@@ -32,15 +31,6 @@ struct RecordingSheet: View {
 
             FormField("Title", placeholder: "Acme standup", text: $title)
                 .disabled(isStarting)
-
-            ToggleField(
-                "More than 4 speakers?",
-                caption:
-                    "More than 4 people speaking through one microphone, or on one call? The "
-                    + "on-device voice model can only tell 4 voices apart per audio source.",
-                isOn: $moreThanFourSpeakers
-            )
-            .disabled(isStarting)
 
             if let errorMessage {
                 Text(errorMessage)
@@ -80,8 +70,7 @@ struct RecordingSheet: View {
         recorder = newRecorder
         Task {
             await newRecorder.start(
-                title: title, organization: nil, project: nil, attendees: [],
-                disableDiarization: moreThanFourSpeakers)
+                title: title, organization: nil, project: nil, attendees: [])
             isStarting = false
             if let meetingID = newRecorder.meetingID {
                 onStarted(meetingID)

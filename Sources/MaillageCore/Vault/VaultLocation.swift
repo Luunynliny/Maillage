@@ -42,13 +42,6 @@ public struct VaultLocation: Hashable, Sendable {
         assetsDirectory(for: kind).appendingPathComponent("\(id).png")
     }
 
-    /// Path of the voiceprint backing a person, whether or not one exists — same
-    /// "a logo is a file, not a field" shape as ``logoURL(kind:id:)``, in the same
-    /// `assets/people/` directory, just a different extension. Only people have one.
-    public func voiceprintURL(personID: EntityID) -> URL {
-        assetsDirectory(for: .person).appendingPathComponent("\(personID).voiceprint")
-    }
-
     /// Where a meeting's in-progress audio lives while it's being recorded and transcribed:
     /// `.maillage/recordings/<meeting-id>/`. App-private and inside the vault so it travels with
     /// it, and per-meeting rather than one flat folder so deleting a meeting's audio is deleting
@@ -66,6 +59,17 @@ public struct VaultLocation: Hashable, Sendable {
     public var recordingsRootDirectory: URL {
         root.appendingPathComponent(".maillage", isDirectory: true)
             .appendingPathComponent("recordings", isDirectory: true)
+    }
+
+    /// Where the local LLM's user-editable prompt templates live: `.maillage/prompts/`. Like
+    /// ``recordingsRootDirectory``, never created eagerly by ``createSkeletonIfNeeded()`` — a
+    /// template file is seeded here the first time a meeting is transcribed
+    /// (``PromptTemplateStore``), not at vault creation, so an unrecorded vault has no prompts a
+    /// user would find and wonder about.
+    public func promptURL(named name: String) -> URL {
+        root.appendingPathComponent(".maillage", isDirectory: true)
+            .appendingPathComponent("prompts", isDirectory: true)
+            .appendingPathComponent("\(name).md")
     }
 
     /// Creates the vault root, the three entity directories, their asset folders, and

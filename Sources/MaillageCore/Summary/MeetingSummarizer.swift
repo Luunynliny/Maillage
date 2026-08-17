@@ -1,18 +1,18 @@
 import Foundation
 
-/// Turns one meeting's merged transcript into a structured summary.
+/// Turns one meeting's merged transcript into a markdown summary, written by the model directly
+/// rather than filled into a structured schema — see `LocalLLMSummarizer`, this protocol's only
+/// implementation, for why: MLX's structured-output story isn't leaned on here, so the model just
+/// writes the same markdown ``TranscriptCodec`` persists as the "## Summary" preamble.
 ///
 /// Map-reduce — chunking, per-chunk summarizing, and merging multiple chunk summaries into one —
 /// is entirely this call's business, hidden behind a single `summarize(_:language:)`, so
 /// `MeetingRecorder` calls this once with the whole transcript and never orchestrates chunking
 /// itself.
 public protocol MeetingSummarizer: Sendable {
-    /// `language` is the meeting's already-detected ISO code (e.g. `"fr"`), the same value the
-    /// streaming transcriber already found — no new detection here. `displayNames` resolves a
-    /// diarized segment's `personID` to the name shown in the transcript excerpt the model reads
-    /// — a plain `[EntityID: String]` rather than a `VaultStore` closure, since `VaultStore` is
-    /// `@MainActor` and this call's own map-reduce chunking is not.
+    /// `language` is the meeting's already-detected ISO code (e.g. `"fr"`), the same value
+    /// `NLLanguageRecognizer` found over the merged transcript — no new detection here.
     func summarize(
-        _ segments: [TranscriptSegment], language: String, displayNames: [EntityID: String]
-    ) async throws -> MeetingSummary
+        _ segments: [TranscriptSegment], language: String
+    ) async throws -> String
 }
