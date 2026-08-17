@@ -15,9 +15,8 @@ public struct Meeting: Entity, Codable {
     public var date: CalendarDay?
     /// Length of the recording in seconds, once transcription has run. `nil` until then.
     public var duration: Int?
-    /// The base language `LanguageDetector` found in the recording, e.g. `fr`. `nil` until
-    /// transcription has run; see ``VocabularyPrompt`` for how the detected language anchors
-    /// the vocabulary prompt and the decoder for the rest of the meeting.
+    /// The meeting's dominant language, e.g. `fr` — detected from the merged transcript once
+    /// transcription finishes, via `NLLanguageRecognizer`. `nil` until then.
     public var language: String?
     /// The organization this meeting was held with, if any. Singular, like ``Person/organization``
     /// and ``Project/organization``: a meeting is with one company at a time.
@@ -29,8 +28,9 @@ public struct Meeting: Entity, Codable {
     public var attendees: [Wikilink]
     public var created: CalendarDay?
     /// Holds the generated "## Summary" and "## Transcript" sections. ``TranscriptCodec``
-    /// reads and writes the latter; the former is written by ``MeetingSummary/markdown`` and
-    /// rendered by `MeetingView`, but opaque text this type never parses.
+    /// reads and writes the latter; the former is markdown text written directly by
+    /// `LocalLLMSummarizer` and rendered by `MeetingView`, but opaque text this type never
+    /// parses.
     public var body: String
 
     public var kind: EntityKind { .meeting }
@@ -105,14 +105,11 @@ public struct Meeting: Entity, Codable {
     }
 }
 
-/// One utterance in a transcript: when and what — never who.
+/// One utterance in a transcript: when and what.
 ///
-/// No speaker field, on purpose: this vault records no speaker identification, and mic vs.
-/// system track is not a substitute for it. That split only labels *who* correctly for a remote
-/// call, where the other party's voice can only physically enter through the system tap. An
-/// in-person meeting recorded on one laptop puts everyone's voice through the mic, so a track
-/// can hold any number of unidentified people — attributing it to "You" would be a guess dressed
-/// up as a fact.
+/// No speaker field: mic vs. system track was never a substitute for identification, since an
+/// in-person meeting puts everyone's voice through the same mic, and attributing that to "You"
+/// would have been a guess dressed up as a fact.
 public struct TranscriptSegment: Hashable, Sendable {
     /// Offset from the start of the recording.
     public var offsetSeconds: Int

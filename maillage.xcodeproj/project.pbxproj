@@ -9,7 +9,13 @@
 /* Begin PBXBuildFile section */
 		000000000000000000000122 /* Yams in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000114 /* Yams */; };
 		000000000000000000000125 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000116 /* MarkdownUI */; };
-		000000000000000000000126 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000118 /* WhisperKit */; };
+		000000000000000000000143 /* Qwen3ASR in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000160 /* Qwen3ASR */; };
+		000000000000000000000155 /* SpeechVAD in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000161 /* SpeechVAD */; };
+		000000000000000000000156 /* AudioCommon in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000162 /* AudioCommon */; };
+		000000000000000000000144 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000148 /* MLXLLM */; };
+		000000000000000000000145 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000149 /* MLXLMCommon */; };
+		000000000000000000000146 /* MLXHuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000150 /* MLXHuggingFace */; };
+		000000000000000000000147 /* Tokenizers in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000151 /* Tokenizers */; };
 		000000000000000000000123 /* MaillageCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000C1 /* MaillageCore.framework */; };
 		000000000000000000000124 /* MaillageCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000C1 /* MaillageCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -64,7 +70,13 @@
 			files = (
 				000000000000000000000122 /* Yams in Frameworks */,
 				000000000000000000000125 /* MarkdownUI in Frameworks */,
-				000000000000000000000126 /* WhisperKit in Frameworks */,
+				000000000000000000000143 /* Qwen3ASR in Frameworks */,
+				000000000000000000000155 /* SpeechVAD in Frameworks */,
+				000000000000000000000156 /* AudioCommon in Frameworks */,
+				000000000000000000000144 /* MLXLLM in Frameworks */,
+				000000000000000000000145 /* MLXLMCommon in Frameworks */,
+				000000000000000000000146 /* MLXHuggingFace in Frameworks */,
+				000000000000000000000147 /* Tokenizers in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -147,7 +159,13 @@
 			packageProductDependencies = (
 				000000000000000000000114 /* Yams */,
 				000000000000000000000116 /* MarkdownUI */,
-				000000000000000000000118 /* WhisperKit */,
+				000000000000000000000160 /* Qwen3ASR */,
+				000000000000000000000161 /* SpeechVAD */,
+				000000000000000000000162 /* AudioCommon */,
+				000000000000000000000148 /* MLXLLM */,
+				000000000000000000000149 /* MLXLMCommon */,
+				000000000000000000000150 /* MLXHuggingFace */,
+				000000000000000000000151 /* Tokenizers */,
 			);
 			productName = MaillageCore;
 			productReference = 0000000000000000000000C1 /* MaillageCore.framework */;
@@ -157,7 +175,8 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 0000000000000000000000F3 /* Build configuration list for PBXNativeTarget "Maillage" */;
 			buildPhases = (
-				000000000000000000000140 /* Fetch WhisperKit Model */,
+				000000000000000000000140 /* Fetch ASR Model */,
+				000000000000000000000154 /* Fetch LLM Model */,
 				0000000000000000000000E5 /* Sources */,
 				0000000000000000000000E6 /* Frameworks */,
 				0000000000000000000000E7 /* Resources */,
@@ -207,7 +226,9 @@
 			packageReferences = (
 				000000000000000000000112 /* XCRemoteSwiftPackageReference "Yams" */,
 				000000000000000000000115 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
-				000000000000000000000117 /* XCRemoteSwiftPackageReference "WhisperKit" */,
+				000000000000000000000141 /* XCRemoteSwiftPackageReference "speech-swift" */,
+				000000000000000000000152 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
+				000000000000000000000153 /* XCRemoteSwiftPackageReference "swift-transformers" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0000000000000000000000A3 /* Products */;
@@ -238,19 +259,34 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		000000000000000000000140 /* Fetch WhisperKit Model */ = {
+		000000000000000000000140 /* Fetch ASR Model */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			inputFileListPaths = (
 			);
-			name = "Fetch WhisperKit Model";
+			name = "Fetch ASR Model";
 			outputFileListPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -euo pipefail\n\"${SRCROOT}/Scripts/fetch-whisper-model.sh\"\nmkdir -p \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/WhisperKitModel\"\nrsync -a --delete \"${SRCROOT}/.whisperkit-model-cache/openai_whisper-small_216MB/\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/WhisperKitModel/openai_whisper-small_216MB/\"\n";
+			shellScript = "set -euo pipefail\n\"${SRCROOT}/Scripts/fetch-asr-model.sh\"\nmkdir -p \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ASRModel\"\nrsync -a --delete \"${SRCROOT}/.asr-model-cache/asr-model/\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ASRModel/\"\n";
+			alwaysOutOfDate = 1;
+		};
+		000000000000000000000154 /* Fetch LLM Model */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			name = "Fetch LLM Model";
+			outputFileListPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\n\"${SRCROOT}/Scripts/fetch-llm-model.sh\"\nmkdir -p \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/LLMModel\"\nrsync -a --delete \"${SRCROOT}/.llm-model-cache/qwen2.5-1.5b-instruct-4bit/\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/LLMModel/qwen2.5-1.5b-instruct-4bit/\"\n";
 			alwaysOutOfDate = 1;
 		};
 /* End PBXShellScriptBuildPhase section */
@@ -285,6 +321,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				EXCLUDED_ARCHS = x86_64;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ENABLE_MODULES = YES;
@@ -324,6 +362,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				EXCLUDED_ARCHS = x86_64;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ENABLE_MODULES = YES;
@@ -512,12 +552,28 @@
 				minimumVersion = 2.4.1;
 			};
 		};
-		000000000000000000000117 /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
+		000000000000000000000141 /* XCRemoteSwiftPackageReference "speech-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/argmaxinc/WhisperKit";
+			repositoryURL = "https://github.com/soniqo/speech-swift";
+			requirement = {
+				kind = revision;
+				revision = 13643ab4361da8f33c8002026c9d357ded0b6896;
+			};
+		};
+		000000000000000000000152 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 1.1.0;
+				minimumVersion = 3.31.4;
+			};
+		};
+		000000000000000000000153 /* XCRemoteSwiftPackageReference "swift-transformers" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/huggingface/swift-transformers";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.3.3;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -533,10 +589,40 @@
 			package = 000000000000000000000115 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
 			productName = MarkdownUI;
 		};
-		000000000000000000000118 /* WhisperKit */ = {
+		000000000000000000000160 /* Qwen3ASR */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 000000000000000000000117 /* XCRemoteSwiftPackageReference "WhisperKit" */;
-			productName = WhisperKit;
+			package = 000000000000000000000141 /* XCRemoteSwiftPackageReference "speech-swift" */;
+			productName = Qwen3ASR;
+		};
+		000000000000000000000161 /* SpeechVAD */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 000000000000000000000141 /* XCRemoteSwiftPackageReference "speech-swift" */;
+			productName = SpeechVAD;
+		};
+		000000000000000000000162 /* AudioCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 000000000000000000000141 /* XCRemoteSwiftPackageReference "speech-swift" */;
+			productName = AudioCommon;
+		};
+		000000000000000000000148 /* MLXLLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 000000000000000000000152 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLLM;
+		};
+		000000000000000000000149 /* MLXLMCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 000000000000000000000152 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLMCommon;
+		};
+		000000000000000000000150 /* MLXHuggingFace */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 000000000000000000000152 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXHuggingFace;
+		};
+		000000000000000000000151 /* Tokenizers */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 000000000000000000000153 /* XCRemoteSwiftPackageReference "swift-transformers" */;
+			productName = Tokenizers;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -7,10 +7,17 @@ import Foundation
 /// section, written by a later phase) from the one part of the body this type actually
 /// understands. The preamble round-trips byte-for-byte, exactly like a person's notes do.
 ///
-/// One line per segment, timestamp only — see ``TranscriptSegment`` for why there's no speaker:
+/// One line per segment: a timestamp, then the utterance.
 /// ```
 /// (00:15) Oui, mais il faut wire le canary d'abord.
 /// ```
+/// A meeting recorded while this vault still diarized speakers may have a `#M2` or
+/// `#M2:marie-dupont` speaker tag after the timestamp, inside the same parens — ``parseSpeakerTag``
+/// still parses that shape so an old file loads without a parse error, but nothing here writes it
+/// back out or carries it into memory: diarization is gone, and a stale tag is just a second,
+/// ignored token on the line, the same backward-compat story as the retired `organizations:`
+/// frontmatter key.
+///
 /// The timestamp is `MM:SS`, or `H:MM:SS` once the offset reaches an hour — see
 /// ``formatTimestamp(seconds:)``. The utterance itself is captured to the end of the line, so a
 /// literal `(` or `)` inside it — someone saying a parenthetical — needs no escaping. A literal
@@ -41,17 +48,27 @@ public enum TranscriptCodec {
         return (preamble, segments)
     }
 
-    /// Parses one `(timestamp) text` line by hand rather than with a regular expression — the
-    /// shape is fixed and narrow enough that scanning for the two delimiters directly is no
-    /// harder to follow than a pattern with numbered capture groups would be, and it sidesteps
-    /// needing a force-unwrapped or force-tried regex for what is, either way, a
+    /// Parses one `(timestamp [speakerTag]) text` line by hand rather than with a regular
+    /// expression — the shape is fixed and narrow enough that scanning for the delimiters
+    /// directly is no harder to follow than a pattern with numbered capture groups would be, and
+    /// it sidesteps needing a force-unwrapped or force-tried regex for what is, either way, a
     /// compile-time-fixed pattern.
     private static func parseLine(_ line: String) -> TranscriptSegment? {
         guard line.hasPrefix("(") else { return nil }
         let afterOpenParen = line.index(after: line.startIndex)
-        guard let closingParen = line[afterOpenParen...].firstIndex(of: ")"),
-            let offset = parseTimestamp(String(line[afterOpenParen..<closingParen]))
+        guard let closingParen = line[afterOpenParen...].firstIndex(of: ")") else { return nil }
+
+        // The timestamp is always the first token; a leftover speaker tag from a meeting
+        // diarized before this feature was removed, if present, is the second, space-separated
+        // — so split on whitespace before parsing either, rather than handing the whole parens
+        // content to `parseTimestamp`, which only ever expects one token. `parseSpeakerTag` is
+        // called only to confirm the second token really is a stale tag and not something else
+        // hand-typed; its result is discarded either way.
+        let parensContent = line[afterOpenParen..<closingParen]
+        let tokens = parensContent.split(separator: " ", maxSplits: 1)
+        guard let firstToken = tokens.first, let offset = parseTimestamp(String(firstToken))
         else { return nil }
+        if tokens.count > 1 { _ = parseSpeakerTag(String(tokens[1])) }
 
         let afterTimestamp = line[line.index(after: closingParen)...]
         guard afterTimestamp.hasPrefix(" ") else { return nil }
@@ -68,11 +85,37 @@ public enum TranscriptCodec {
         guard !segments.isEmpty else { return trimmedPreamble }
 
         let lines = segments.map { segment in
-            "(\(formatTimestamp(seconds: segment.offsetSeconds))) " + escape(segment.text)
+            let timestamp = formatTimestamp(seconds: segment.offsetSeconds)
+            return "(\(timestamp)) " + escape(segment.text)
         }
         let transcript = "\(heading)\n\n" + lines.joined(separator: "\n")
 
         return trimmedPreamble.isEmpty ? transcript : "\(trimmedPreamble)\n\n\(transcript)"
+    }
+
+    // MARK: Speaker tags (backward compat only — nothing writes these anymore)
+
+    /// Recognizes `#M2` or `#M2:marie-dupont` — a track letter, a slot digit, and an optional
+    /// `:<personID>` — the speaker tag a meeting recorded before diarization was removed may
+    /// still carry. Never called to build anything: only to confirm a line's second token is a
+    /// stale tag and not some other hand-typed text, so `parseLine` can drop it and keep parsing
+    /// the timestamp and text either way. No `Speaker` type exists anymore to parse it into.
+    @discardableResult
+    private static func parseSpeakerTag(_ raw: String) -> Bool {
+        guard raw.hasPrefix("#") else { return false }
+        let body = raw.dropFirst()
+
+        let trackAndSlot: Substring
+        if let colon = body.firstIndex(of: ":") {
+            trackAndSlot = body[body.startIndex..<colon]
+            guard !body[body.index(after: colon)...].isEmpty else { return false }
+        } else {
+            trackAndSlot = body
+        }
+
+        guard let trackLetter = trackAndSlot.first, trackLetter == "M" || trackLetter == "S"
+        else { return false }
+        return Int(trackAndSlot.dropFirst()) != nil
     }
 
     // MARK: Timestamps
@@ -93,7 +136,10 @@ public enum TranscriptCodec {
     /// Parses `"MM:SS"` or `"H:MM:SS"` back into seconds, or `nil` for anything else —
     /// including an empty string, so a stray `()` in hand-edited text is skipped as an
     /// unparseable line rather than read as a zero-second timestamp.
-    private static func parseTimestamp(_ raw: String) -> Int? {
+    ///
+    /// Internal rather than `private`: ``LocalLLMTranscriptCleaner``'s own lenient line parser
+    /// reuses this for the same `(mm:ss)`/`(h:mm:ss)` shape rather than re-implementing it.
+    static func parseTimestamp(_ raw: String) -> Int? {
         let parts = raw.split(separator: ":")
         guard (2...3).contains(parts.count) else { return nil }
         let numbers = parts.compactMap { Int($0) }

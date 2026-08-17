@@ -24,13 +24,20 @@ dist/
 *.dSYM.zip
 *.dSYM
 
-## WhisperKit model cache
+## ASR model cache
 #
-# .whisperkit-model-cache/ holds the WhisperKit model Scripts/fetch-whisper-model.sh fetches at
-# build time (see the "Fetch WhisperKit Model" build phase in maillage.xcodeproj). Never
-# committed: it's a ~216MB binary CoreML model, regenerated from a plain HTTPS fetch on first
-# build and cached for every build after, on a developer machine and in CI alike.
-.whisperkit-model-cache/
+# .asr-model-cache/ holds the Qwen3-ASR + Silero VAD MLX models Scripts/fetch-asr-model.sh fetches
+# at build time (see the "Fetch ASR Model" build phase in maillage.xcodeproj). Never committed:
+# these are large binary MLX weights, regenerated from a plain HTTPS fetch on first build and
+# cached for every build after, on a developer machine and in CI alike.
+.asr-model-cache/
+
+## Local LLM model cache
+#
+# .llm-model-cache/ holds the MLX-format LLM Scripts/fetch-llm-model.sh fetches at build time
+# (see the "Fetch LLM Model" build phase in maillage.xcodeproj), for the same reason and on the
+# same schedule as .asr-model-cache/ above.
+.llm-model-cache/
 
 ## Playgrounds
 timeline.xctimeline
@@ -84,3 +91,6 @@ fastlane/test_output
 
 # macOS
 .DS_Store
+
+# Git worktrees used for isolated feature work
+.worktrees/

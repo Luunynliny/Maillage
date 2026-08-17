@@ -27,13 +27,21 @@ final class MicrophoneRecorder {
     private let engine = AVAudioEngine()
     private var file: AVAudioFile?
     private var converter: PCMConverter?
+    private var onBuffer: (@Sendable ([Float]) -> Void)?
 
     /// Root-mean-square of the most recent buffer, 0 (silence) to roughly 1. Read by
     /// ``AudioCaptureSession`` for the level meter; not filtered or smoothed here, since how
     /// a level meter *moves* is a UI concern, not a capture one.
     let level = LockedValue<Float>(0)
 
-    func start(to url: URL) throws {
+    /// `onBuffer`, if given, is handed the same converted 16 kHz mono samples as they're
+    /// written to `url` — a live tap for a streaming transcriber, not a substitute for the
+    /// file. Called on the same real-time thread as the write, so it must be as cheap as
+    /// everything else in ``process(_:)`` and must not itself touch actor-isolated state; a
+    /// `Sendable` closure over something thread-safe (an `AsyncStream.Continuation`, say) is
+    /// the intended shape, not a capture of `self`.
+    func start(to url: URL, onBuffer: (@Sendable ([Float]) -> Void)? = nil) throws {
+        self.onBuffer = onBuffer
         let input = engine.inputNode
         // The input's own format, whatever the hardware actually is — never assumed, since
         // built-in mics, USB interfaces and Bluetooth headsets all report different ones.
@@ -66,6 +74,7 @@ final class MicrophoneRecorder {
         engine.stop()
         file = nil
         converter = nil
+        onBuffer = nil
         level.set(0)
     }
 
@@ -75,6 +84,21 @@ final class MicrophoneRecorder {
         level.set(Self.rootMeanSquare(of: buffer))
         guard let converted = converter?.convert(buffer) else { return }
         try? file?.write(from: converted)
+        if let onBuffer {
+            onBuffer(Self.samples(from: converted))
+        }
+    }
+
+    /// Copies the mono channel out to a plain `[Float]`, normalized to -1.0...1.0 — the shape
+    /// an `AsyncStream` (or anything else off the real-time thread) needs, since the buffer
+    /// itself is only valid for the duration of this callback. `PCMFormat.target` is 16-bit
+    /// integer PCM (what a WAV file is written in), so this reads `int16ChannelData`, never
+    /// `floatChannelData` — that's `nil` for an Int16 buffer and would silently hand every
+    /// caller an empty array.
+    private static func samples(from buffer: AVAudioPCMBuffer) -> [Float] {
+        guard let channel = buffer.int16ChannelData?[0] else { return [] }
+        let frameCount = Int(buffer.frameLength)
+        return (0..<frameCount).map { Float(channel[$0]) / 32768.0 }
     }
 
     private static func rootMeanSquare(of buffer: AVAudioPCMBuffer) -> Float {

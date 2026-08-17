@@ -1,3 +1,4 @@
+import AppKit
 import MarkdownUI
 import SwiftUI
 
@@ -9,9 +10,9 @@ import SwiftUI
 ///
 /// The summary and the transcript are two different trust levels of the same body: the
 /// transcript is what ``TranscriptCodec`` guarantees round-trips exactly, the summary is
-/// whatever a later phase's model wrote above it — headings, bullets, bold/italic emphasis
-/// (see the design doc's `MeetingSummary` example) — and is rendered as markdown via
-/// MarkdownUI rather than hand-parsed, the same as the vault file reads in Obsidian.
+/// whatever the local LLM wrote above it directly as markdown — headings, bullets, bold/italic
+/// emphasis — and is rendered as markdown via MarkdownUI rather than hand-parsed, the same as
+/// the vault file reads in Obsidian.
 struct MeetingView: View {
     @Environment(VaultStore.self) private var store
 
@@ -24,6 +25,30 @@ struct MeetingView: View {
     /// because nothing was ever added," which otherwise look identical.
     let activeRecorder: MeetingRecorder?
 
+    /// Seeded from `meeting` once, at init, then only ever written to by the recording banner's
+    /// own pickers — never read back from `meeting` afterward. That mirrors how the old
+    /// `RecordingSheet` held these locally: this view calls `store.update` to push a change out,
+    /// but the picker's own selection is what's on screen, not a reflection of the store. The
+    /// caller must give this view a fresh identity per meeting (`.id(meeting.id)`) so switching
+    /// between two meetings doesn't carry one's edits onto the other.
+    @State private var selectedOrganizations: Set<EntityID>
+    @State private var selectedProjects: Set<EntityID>
+    @State private var selectedAttendees: Set<EntityID>
+
+    init(
+        meeting: Meeting, selection: Binding<EntityID?>, editorRequest: Binding<EditorRequest?>,
+        isDetailVisible: Binding<Bool>, activeRecorder: MeetingRecorder?
+    ) {
+        self.meeting = meeting
+        self._selection = selection
+        self._editorRequest = editorRequest
+        self._isDetailVisible = isDetailVisible
+        self.activeRecorder = activeRecorder
+        _selectedOrganizations = State(initialValue: meeting.organization.map { [$0.id] } ?? [])
+        _selectedProjects = State(initialValue: meeting.project.map { [$0.id] } ?? [])
+        _selectedAttendees = State(initialValue: Set(meeting.attendees.map(\.id)))
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             CenterPaneHeader(
@@ -31,7 +56,9 @@ struct MeetingView: View {
                 isDetailVisible: $isDetailVisible, selection: $selection,
                 editorRequest: $editorRequest)
 
-            if isTranscribing || !(attendees.isEmpty && segments.isEmpty && preamble.isEmpty) {
+            if isRecordingThisMeeting || isTranscribing
+                || !(attendees.isEmpty && segments.isEmpty && preamble.isEmpty)
+            {
                 content
             } else {
                 EmptyStateView(
@@ -42,12 +69,23 @@ struct MeetingView: View {
                 )
             }
         }
+        .onChange(of: selectedOrganizations) { _, newValue in
+            syncOrganizationWhileRecording(newValue)
+        }
+        .onChange(of: selectedProjects) { _, newValue in
+            deriveOrganizationFromProject(newValue)
+            syncProjectWhileRecording(newValue)
+        }
+        .onChange(of: selectedAttendees) { _, newValue in syncAttendeesWhileRecording(newValue) }
     }
 
     private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.large) {
-                if !attendees.isEmpty {
+                if isRecordingThisMeeting {
+                    recordingBanner
+                }
+                if !attendees.isEmpty, !isRecordingThisMeeting {
                     attendeesSection
                 }
                 if isTranscribing {
@@ -66,6 +104,113 @@ struct MeetingView: View {
             .padding(Theme.Spacing.large)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    // MARK: Recording
+
+    /// This *is* the "you are being recorded" indicator the design doc requires — a French
+    /// legal obligation, not only GDPR — now that starting a recording jumps straight here
+    /// instead of leaving it behind a modal. As long as this meeting is the one recording,
+    /// this banner is the first thing in the pane, above everything else, and it's the only
+    /// place Stop & Save lives.
+    private var recordingBanner: some View {
+        Card {
+            HStack(spacing: Theme.Spacing.small) {
+                Circle()
+                    .fill(Theme.projectColor)
+                    .frame(width: 8, height: 8)
+                Text("Recording…")
+                    .font(Theme.Font.body)
+                    .foregroundStyle(Theme.textNormal)
+                Text(TranscriptCodec.formatTimestamp(seconds: Int(elapsedSeconds)))
+                    .font(Theme.Font.mono)
+                    .foregroundStyle(Theme.textMuted)
+                Spacer(minLength: 0)
+                PrimaryButton("Stop & Save") { activeRecorder?.stop() }
+            }
+
+            Divider()
+                .padding(.vertical, Theme.Spacing.xs)
+
+            MultiSelectField(
+                label: "Organization",
+                options: store.allOrganizations.map { ($0.id, $0.displayName) },
+                selected: $selectedOrganizations,
+                kind: .organization,
+                prompt: "Search organizations",
+                limit: 1
+            )
+
+            MultiSelectField(
+                label: "Project",
+                options: projectOptions,
+                selected: $selectedProjects,
+                kind: .project,
+                prompt: "Search projects",
+                limit: 1
+            )
+
+            MultiSelectField(
+                label: "Attendees",
+                options: store.allPeople.map { ($0.id, $0.displayName) },
+                selected: $selectedAttendees,
+                kind: .person,
+                prompt: "Search people")
+        }
+    }
+
+    private var isRecordingThisMeeting: Bool {
+        activeRecorder?.meetingID == meeting.id && activeRecorder?.state == .recording
+    }
+
+    private var elapsedSeconds: TimeInterval {
+        activeRecorder?.capture.elapsedSeconds ?? 0
+    }
+
+    /// Filtered to the chosen organization so a later project pick can never silently overwrite
+    /// it — falls back to every project when no organization is set yet.
+    private var projectOptions: [(EntityID, String)] {
+        guard let organizationID = selectedOrganizations.first else {
+            return store.allProjects.map { ($0.id, $0.displayName) }
+        }
+        return store.projects(inOrganization: organizationID).map { ($0.id, $0.displayName) }
+    }
+
+    /// Organization always follows the chosen project, never the other way around — a project
+    /// belongs to exactly one organization, so picking one can't leave a mismatch to validate
+    /// against. Clearing the project leaves the derived organization in place, since it's still
+    /// meaningful on its own.
+    private func deriveOrganizationFromProject(_ newValue: Set<EntityID>) {
+        guard let projectID = newValue.first,
+            let organization = store.allProjects.first(where: { $0.id == projectID })?.organization
+        else { return }
+        selectedOrganizations = [organization.id]
+    }
+
+    /// Organization, project and attendees all stay live, so every change while recording is
+    /// written straight to the meeting rather than waiting for a Save this view doesn't have.
+    private func syncOrganizationWhileRecording(_ newValue: Set<EntityID>) {
+        guard isRecordingThisMeeting, var updated = store.snapshot.meetings[meeting.id] else {
+            return
+        }
+        updated.organization = newValue.first.map(Wikilink.init)
+        store.update(updated)
+    }
+
+    private func syncProjectWhileRecording(_ newValue: Set<EntityID>) {
+        guard isRecordingThisMeeting, var updated = store.snapshot.meetings[meeting.id] else {
+            return
+        }
+        updated.project = newValue.first.map(Wikilink.init)
+        store.update(updated)
+    }
+
+    private func syncAttendeesWhileRecording(_ newValue: Set<EntityID>) {
+        guard isRecordingThisMeeting, var updated = store.snapshot.meetings[meeting.id] else {
+            return
+        }
+        updated.attendees = newValue.sorted().map(Wikilink.init)
+        store.update(updated)
     }
 
     // MARK: Transcribing
@@ -155,30 +300,38 @@ struct MeetingView: View {
 
     private var transcriptSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-            SectionHeader("Transcript")
-            VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
-                ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
-                    segmentRow(segment)
+            HStack(spacing: Theme.Spacing.small) {
+                SectionHeader("Transcript")
+                if !segments.isEmpty {
+                    IconButton("doc.on.doc", help: "Copy transcript") { copyTranscript() }
+                }
+                Spacer()
+            }
+            VStack(alignment: .leading, spacing: Theme.Spacing.large) {
+                ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
+                    paragraphRow(paragraph)
                 }
             }
         }
     }
 
-    /// Timestamp above the words, nothing else — no speaker name, since neither track can be
-    /// honestly attributed to one person (see ``TranscriptSegment``). No left/right alignment
-    /// or other spatial stand-in either: that would just reintroduce the same false distinction
-    /// visually instead of in text.
-    private func segmentRow(_ segment: TranscriptSegment) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(TranscriptCodec.formatTimestamp(seconds: segment.offsetSeconds))
-                .font(Theme.Font.mono)
-                .foregroundStyle(Theme.textFaint)
-            Text(segment.text)
-                .font(Theme.Font.body)
-                .foregroundStyle(Theme.textNormal)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
+    /// No timestamps and no left/right alignment or other spatial stand-in for who's speaking:
+    /// this vault records no speaker identification, so introducing one visually would just
+    /// reintroduce the same false distinction in a different form.
+    private func paragraphRow(_ paragraph: String) -> some View {
+        Text(paragraph)
+            .font(Theme.Font.body)
+            .foregroundStyle(Theme.textNormal)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// One paragraph per line, blank-line separated — the same shape ``paragraphRow`` renders,
+    /// so pasting elsewhere reads the same way the transcript reads on screen.
+    private func copyTranscript() {
+        let text = paragraphs.joined(separator: "\n\n")
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     // MARK: Data
@@ -191,6 +344,10 @@ struct MeetingView: View {
 
     private var segments: [TranscriptSegment] {
         TranscriptCodec.split(meeting.body).segments
+    }
+
+    private var paragraphs: [String] {
+        TranscriptParagraphs.group(segments)
     }
 
     private var subtitle: String {
