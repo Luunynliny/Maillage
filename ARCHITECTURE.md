@@ -302,12 +302,12 @@ meeting green, chosen as the one hue free of the other three); a separate seven-
 excludes purple, since a cluster that looked the same as the selection accent would read as a
 lie.
 
-`Design/Components.swift` holds the reusable primitives, two of which encode real gotchas worth
-knowing before touching a view:
+`Design/Components/` holds the reusable primitives, one file per primitive, two of which encode
+real gotchas worth knowing before touching a view:
 
 - **`clickableCursor()`** exists because AppKit only swaps the pointer over a view with a
   tracking area, and `.buttonStyle(.plain)` installs none: every plain button in the app would
-  otherwise show a plain arrow. It's applied by every clickable control in `Components.swift`
+  otherwise show a plain arrow. It's applied by every clickable control in `Design/Components/`
   by construction, and explicitly passed `false` on a control that's only *sometimes*
   clickable (a disabled button, an action-less `Pill`), since a hand cursor over a dead control
   promises a click that does nothing.

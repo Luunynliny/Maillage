@@ -4,19 +4,6 @@ import Testing
 
 @testable import MaillageCore
 
-@MainActor
-private func makeStore() throws -> (store: VaultStore, root: URL) {
-    let root = URL(fileURLWithPath: NSTemporaryDirectory())
-        .appendingPathComponent("maillage-logo-tests-\(UUID().uuidString)", isDirectory: true)
-    let store = VaultStore(location: VaultLocation(root: root))
-    store.load()
-    return (store, root)
-}
-
-private func cleanUp(_ root: URL) {
-    try? FileManager.default.removeItem(at: root)
-}
-
 /// A one-pixel square of `color`, already in the stored format — enough to be a logo without
 /// exercising ``ImageSquarer``, which has its own suite.
 private func pngData(_ color: NSColor) throws -> Data {
@@ -36,7 +23,7 @@ private func pngData(_ color: NSColor) throws -> Data {
 struct EntityLogoTests {
     @Test("Setting a logo writes a PNG named after the entity")
     func writesTheFile() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-logo-tests")
         defer { cleanUp(root) }
 
         let marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
@@ -58,7 +45,7 @@ struct EntityLogoTests {
     /// them one file between them.
     @Test("Ids that collide across kinds get separate logos")
     func partitionsByKind() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-logo-tests")
         defer { cleanUp(root) }
 
         let person = try #require(store.createPerson(firstname: "Acme", lastname: nil))
@@ -84,7 +71,7 @@ struct EntityLogoTests {
 
     @Test("Removing a logo deletes the file")
     func removesTheFile() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-logo-tests")
         defer { cleanUp(root) }
 
         let acme = try #require(store.createOrganization(name: "Acme Corp"))
@@ -101,7 +88,7 @@ struct EntityLogoTests {
     /// *and* silently blank the avatar.
     @Test("Renaming an entity carries its logo across")
     func renameCarriesTheLogo() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-logo-tests")
         defer { cleanUp(root) }
 
         let jean = try #require(store.createPerson(firstname: "Jean", lastname: "Martin"))
@@ -125,7 +112,7 @@ struct EntityLogoTests {
     /// you had before you had the name has to survive it.
     @Test("Resolving a placeholder carries its logo to the real id")
     func resolvingCarriesTheLogo() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-logo-tests")
         defer { cleanUp(root) }
 
         let head = try #require(
@@ -147,7 +134,7 @@ struct EntityLogoTests {
     /// the id — `marie-dupont` deleted and re-added would come back wearing the old logo.
     @Test("Deleting an entity deletes its logo")
     func deleteRemovesTheLogo() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-logo-tests")
         defer { cleanUp(root) }
 
         let marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
@@ -169,7 +156,7 @@ struct EntityLogoTests {
     /// plain folder you can edit by hand, exactly as backlinks are derived from other files.
     @Test("A hand-placed PNG is picked up on load")
     func derivesFromDisk() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-logo-tests")
         defer { cleanUp(root) }
 
         let marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
@@ -187,7 +174,7 @@ struct EntityLogoTests {
     /// its glyph rather than the view trapping on a decode that failed.
     @Test("A PNG that won't decode reads as no logo rather than crashing")
     func toleratesACorruptFile() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-logo-tests")
         defer { cleanUp(root) }
 
         let marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
@@ -202,7 +189,7 @@ struct EntityLogoTests {
 
     @Test("Replacing a logo shows the new image, not the cached one")
     func replacingInvalidatesTheCache() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-logo-tests")
         defer { cleanUp(root) }
 
         let acme = try #require(store.createOrganization(name: "Acme Corp"))
@@ -218,7 +205,7 @@ struct EntityLogoTests {
 
     @Test("A vault skeleton includes an asset folder per logo-supporting kind")
     func createsAssetDirectories() throws {
-        let (_, root) = try makeStore()
+        let (_, root) = try makeStore(prefix: "maillage-logo-tests")
         defer { cleanUp(root) }
 
         for kind in EntityKind.allCases where kind.supportsLogo {
@@ -232,7 +219,7 @@ struct EntityLogoTests {
 
     @Test("A kind with no logos of its own gets no asset folder")
     func skipsAssetDirectoryForMeetings() throws {
-        let (_, root) = try makeStore()
+        let (_, root) = try makeStore(prefix: "maillage-logo-tests")
         defer { cleanUp(root) }
 
         #expect(!EntityKind.meeting.supportsLogo)
