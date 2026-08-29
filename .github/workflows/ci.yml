@@ -18,78 +18,49 @@ permissions:
   contents: read
 
 env:
-  # `macos-26`, and specifically Xcode 26.6, because that is what this repo is developed against:
-  # `swift format` ships with the toolchain, so a CI pin older than the local one means `make
-  # format` rewrites files by rules CI then judges by different ones. It bit exactly once — Xcode
-  # 16.4's swift-format 6.1 predates `reflowMultilineStringLiterals` becoming a string, so it
-  # rejected `.swift-format` outright and reported every file as unreadable. Keep this in step
-  # with the Xcode the vault is actually built with.
-  #
-  # Still pinned to a version rather than `latest-stable` so a runner image update can't change
-  # the compiler — or the formatter's default rules — under the project without a commit that
-  # says so. 26.6 is the current default on `macos-26`.
-  DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
-  # Matches the version this repo's `.swiftlint.yml` was verified against. Unpinned, a new
-  # release can introduce rules the config has never been checked against and turn CI red on a
-  # commit that changed nothing.
-  SWIFTLINT_VERSION: '0.65.0'
-  # The release tooling is pinned in package-lock.json; this only fixes the runtime it runs on.
-  NODE_VERSION: '22'
+  # 24, not 22: the server runs its TypeScript directly, and Node 24 strips types with no flag.
+  # Everything else the pipeline needs is pinned in package-lock.json; this only fixes the runtime.
+  NODE_VERSION: '24'
 
 # The pipeline is a chain, cheapest gate first, so a failure costs the least it can and the reason
 # is never buried under an unrelated one:
 #
 #     quality ┐
-#     commits ├─→ test ─→ package ─→ release   (release: push to main only)
+#     commits ├─→ test ─→ build ─→ release   (release: push to main only)
 #     branch  ┘
 #
-# The first three need no build and report in under a minute; `test` compiles the package;
-# `package` produces the real signed `.app`; `release` versions, tags and publishes it. Nothing
-# downstream starts until everything upstream is green.
+# The first three need no bundle and report in under a minute; `test` runs the suite; `build`
+# proves the client still bundles; `release` versions, tags and publishes. Nothing downstream
+# starts until everything upstream is green.
 jobs:
   # ---------------------------------------------------------------------------------------------
   # Stage 1 — three checks that need no build, so they run together and report almost immediately.
   # ---------------------------------------------------------------------------------------------
 
   quality:
-    name: Format & lint
-    runs-on: macos-26
+    name: Format & types
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Show toolchain
-        run: |
-          swift --version
-          xcodebuild -version
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
-      # `swift format` ships with the toolchain, so there is nothing to install and nothing that
-      # can drift: the formatter is whatever the pinned Xcode provides. Config in `.swift-format`.
+      - run: npm ci
+
+      # Prettier owns layout and TypeScript owns everything else. There is deliberately no linter
+      # in between: this config reports zero violations today, so anything either tool prints is
+      # new. Add one when it earns its keep, not before.
       - name: Check formatting
-        run: swift format lint --recursive --strict Sources Tests
+        run: npx prettier --check .
 
-      # From the release artifact rather than Homebrew, which would silently upgrade.
-      - name: Install SwiftLint ${{ env.SWIFTLINT_VERSION }}
-        run: |
-          set -euo pipefail
-          curl -fsSL -o swiftlint.zip \
-            "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/SwiftLintBinary.artifactbundle.zip"
-          unzip -q swiftlint.zip -d swiftlint-bundle
-          binary="$(find swiftlint-bundle -type f -name swiftlint -path '*macos*' | head -1)"
-          chmod +x "$binary"
-          echo "SWIFTLINT=$PWD/$binary" >> "$GITHUB_ENV"
-          "$binary" version
-
-      # `--strict` because this config produces zero violations today: every rule left enabled is
-      # one the codebase actually satisfies, so a warning here is a regression, not background
-      # noise to be scrolled past.
-      - name: SwiftLint
-        run: $SWIFTLINT lint --strict --reporter github-actions-logging
-
-      # The two build systems describe the same sources and nothing else notices when their
-      # versions drift apart. Also guards that `App/Info.plist` still defers to MARKETING_VERSION,
-      # which is what lets a release stamp its own version. See the script's header.
-      - name: Check build parity
-        run: ./Scripts/check-build-parity.sh
+      # `erasableSyntaxOnly` is on in tsconfig, so this also guards the one constraint Node's
+      # type stripping imposes on `server/` and `shared/`: no enums, no namespaces, no parameter
+      # properties. Without it the server would only fail at the moment someone runs it.
+      - name: Typecheck
+        run: npx tsc --noEmit
 
   # Conventional Commits are load-bearing here, not a style preference: merges into `main` are
   # squash-only, so the PR title becomes the single commit on `main` and is the only thing
@@ -162,7 +133,7 @@ jobs:
           exit 1
 
   # ---------------------------------------------------------------------------------------------
-  # Stage 2 — the tests, once the cheap checks agree there is something worth compiling.
+  # Stage 2 — the tests, once the cheap checks agree there is something worth running.
   # ---------------------------------------------------------------------------------------------
 
   test:
@@ -171,119 +142,75 @@ jobs:
     # `commits` and `branch-name` are skipped on `push`, and a skipped need would otherwise skip
     # this job too. `!failure() && !cancelled()` treats skipped as fine and blocks on red.
     if: ${{ !failure() && !cancelled() }}
-    runs-on: macos-26
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache SwiftPM dependencies
-        uses: actions/cache@v4
+      - uses: actions/setup-node@v4
         with:
-          path: .build
-          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
-          restore-keys: spm-${{ runner.os }}-
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
-      # The SwiftPM path, which is the fast one: ~0.2s for the suite, against ~80s through
-      # Xcode's test runner. The seeded-vault suite skips itself here rather than failing, since
-      # a runner has no `~/Documents/Maillage` — see `SeededVaultTests`.
+      - run: npm ci
+
+      # Includes the golden-file suite: every file in `shared/__fixtures__/vault` must decode and
+      # re-encode byte for byte. That is the gate on the vault format, and it is why a save in the
+      # running app produces a diff of only what changed.
       - name: Run tests
-        run: swift test
+        run: npx vitest run
 
   # ---------------------------------------------------------------------------------------------
-  # Stage 3 — build the artifact that actually ships. Replaces the old `build` job, which only
-  # asked whether the app compiled: this asks whether it compiles, signs, and packages, and keeps
-  # the result. Compiling twice per push to keep both would buy nothing.
+  # Stage 3 — prove the client still bundles. Types passing is not the same as Vite resolving every
+  # import, and this is the cheapest thing that asks the second question.
   # ---------------------------------------------------------------------------------------------
 
-  package:
-    name: Build app bundle
+  build:
+    name: Build the client
     needs: test
-    # Same reason `test` needs this: `package` is downstream of `commits` and
-    # `branch-name`, which are skipped on `push` — and GitHub's default
-    # `success()` treats a skipped job as unsuccessful, which would silently
-    # skip packaging (and therefore release) on every push, main included.
+    # Same reason `test` needs this: `build` is downstream of `commits` and `branch-name`, which
+    # are skipped on `push` — and GitHub's default `success()` treats a skipped job as
+    # unsuccessful, which would silently skip this (and therefore release) on every push.
     if: ${{ !failure() && !cancelled() }}
-    runs-on: macos-26
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # The "Fetch ASR Model" build phase Scripts/build-app.sh triggers downloads Qwen3-ASR
-      # (~700MB) and Silero VAD (~1MB) from Hugging Face on a cache miss, landing under
-      # .asr-model-cache. Keyed on the fetch script's own hash so a future change to it (a
-      # different model, a bug fix) invalidates the cache automatically — no separate version
-      # string to remember to bump.
-      - name: Cache ASR models
-        uses: actions/cache@v4
+      - uses: actions/setup-node@v4
         with:
-          path: .asr-model-cache
-          key: asr-model-${{ hashFiles('Scripts/fetch-asr-model.sh') }}
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
-      # Same reasoning as the ASR cache above, for the local LLM's "Fetch LLM Model"
-      # build phase — ~830MB from Hugging Face on a cache miss, landing under .llm-model-cache.
-      - name: Cache local LLM model
-        uses: actions/cache@v4
-        with:
-          path: .llm-model-cache
-          key: llm-model-${{ hashFiles('Scripts/fetch-llm-model.sh') }}
+      - run: npm ci
 
-      # Signed ad-hoc, which needs no Developer ID and so works on a runner. The version is left
-      # at the project's own MARKETING_VERSION here — only `release` knows the real one, and it
-      # rebuilds nothing: it restamps this exact bundle. See Scripts/build-app.sh.
-      - name: Build Maillage.app
-        run: ./Scripts/build-app.sh
-
-      # A DMG built on a PR is thrown away, but building one is the only way to know the packaging
-      # works before it is a release's problem. Version is a placeholder, hence the odd number.
-      - name: Smoke-test packaging
-        run: |
-          set -euo pipefail
-          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
-            dist/Maillage.app/Contents/Info.plist)
-          ./Scripts/make-dmg.sh dist/Maillage.app "$version"
-
-      # The .zip, not the .app: upload-artifact zips what it is given, and a plain zip drops the
-      # symlinks and signature inside MaillageCore.framework. `ditto` made this one, and `release`
-      # unpacks it with `ditto` too, so the bundle survives the trip intact.
-      - name: Upload the app bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: Maillage-app
-          path: dist/Maillage.app.zip
-          if-no-files-found: error
-          retention-days: 7
+      - name: Build
+        run: npx vite build
 
   # ---------------------------------------------------------------------------------------------
-  # Stage 4 — publish. Only on a push to `main`, which given squash-only merges means "a PR was
-  # merged". Computes the version from the commits, restamps the bundle from `package` with it,
-  # wraps it in a DMG, tags, and creates the GitHub release.
+  # Stage 4 — version, tag and publish. Push to main only.
+  #
+  # No artifact is attached: the app is source that runs with `npm ci && npm start`, so a release
+  # is its tag and its notes, plus GitHub's own source archives.
   # ---------------------------------------------------------------------------------------------
 
   release:
     name: Release
-    needs: package
-    # `!failure() && !cancelled()` for the same reason `package` needs it: a custom `if` doesn't
-    # exempt this job from GitHub's default "every job in the transitive needs chain must have
-    # succeeded" gate. `commits` and `branch-name`, two hops up via `package` → `test`, are
-    # skipped on every push — main's included — which without this guard skips `release` too,
-    # regardless of the event/ref check below ever being reached.
+    needs: build
     if: ${{ !failure() && !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-    runs-on: macos-26
-    # Deliberately NOT the workflow's `ci-${{ github.ref }}` group, whose `cancel-in-progress`
-    # would be actively dangerous here: semantic-release creates and pushes the tag *before*
-    # calling the publish plugins and has no rollback, so a cancel landing in that window leaves a
-    # tag on `main` with no release attached and no commits left for the next run to analyze.
-    # Queue releases instead of racing them.
+    runs-on: ubuntu-latest
+    # Deliberately not the workflow's cancelling group. semantic-release pushes the tag *before*
+    # calling its publish plugins and cannot roll back, so a cancel in that window leaves a tag on
+    # `main` with no release and no commits left for the next run to analyze.
     concurrency:
       group: release-main
       cancel-in-progress: false
     permissions:
-      contents: write # create the release, push the tag
-      issues: write # comment on released issues
-      pull-requests: write # comment on released PRs
+      contents: write
+      issues: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
-          # semantic-release needs every commit and tag since the last release to work out the
-          # bump, and the credentials to push the new tag.
+          # semantic-release reads every tag and every commit since the last one.
           fetch-depth: 0
           persist-credentials: true
 
@@ -294,26 +221,6 @@ jobs:
 
       - run: npm ci
 
-      - name: Download the app bundle
-        uses: actions/download-artifact@v4
-        with:
-          name: Maillage-app
-          path: artifact
-
-      # ditto, matching how `package` archived it: preserves the framework's symlinks and the
-      # ad-hoc signature that `unzip` would quietly destroy.
-      - name: Unpack the app bundle
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          ditto -x -k artifact/Maillage.app.zip dist
-          codesign --verify --deep --strict dist/Maillage.app
-
-      # Stamps the computed version into the bundle from `package` rather than rebuilding it: a
-      # second xcodebuild would cost minutes and, worse, could produce a different binary than the
-      # one the pipeline just tested. Only Info.plist changes, so the bundle is re-signed after.
-      #
-      # This is also why `prepareCmd` can simply wrap dist/Maillage.app — by then it is versioned.
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
