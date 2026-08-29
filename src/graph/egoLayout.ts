@@ -8,13 +8,17 @@
 import type { EntityID } from '../../shared/types.ts'
 import type { Network, NetworkEdge } from './network.ts'
 import type { Point, Size } from './geometry.ts'
-import { controlPoint, onCircle, quadPoint, ringRadius } from './geometry.ts'
+import { controlPoint, onEllipse, quadPoint, ringRadii } from './geometry.ts'
 
 const SUBJECT_RADIUS = 30
 const HORIZONTAL_MARGIN = 140
 const VERTICAL_MARGIN = 84
 /** How far apart sibling edges between the same pair bow, as a share of their length. */
 const PAIR_SPREAD = 0.16
+/** Where along an edge its label sits. Not 0.5 — see the comment where it is used. */
+const LABEL_T = 0.62
+/** The innermost ring's share of the outermost's radius, when there is more than one. */
+const INNERMOST = 0.45
 
 /** Node size falls off with distance, so how far out someone is reads without counting rings. */
 const HOP_RADIUS = [SUBJECT_RADIUS, 24, 18, 15]
@@ -54,7 +58,7 @@ export interface LayoutInput {
 export function layoutEgo({ network, size, cluster, name }: LayoutInput): EgoLayout {
   const center: Point = { x: size.width / 2, y: size.height / 2 }
   const maxHop = Math.max(1, ...network.nodes.map((node) => node.hop))
-  const outer = ringRadius(size, HORIZONTAL_MARGIN, VERTICAL_MARGIN, SUBJECT_RADIUS * 3)
+  const outer = ringRadii(size, HORIZONTAL_MARGIN, VERTICAL_MARGIN, SUBJECT_RADIUS * 3)
 
   const nodes: LayoutNode[] = []
   for (let hop = 0; hop <= maxHop; hop += 1) {
@@ -69,13 +73,23 @@ export function layoutEgo({ network, size, cluster, name }: LayoutInput): EgoLay
           a.id.localeCompare(b.id),
       )
     // The outermost ring always lands on `outer`, so depth 1 puts its single ring exactly where
-    // the one-hop graph always put it.
-    const radius = hop === 0 ? 0 : (outer * hop) / maxHop
+    // the one-hop graph always put it. Inner rings are spaced from INNERMOST rather than from
+    // zero: at three hops, evenly dividing the radius squeezes the first ring — usually the
+    // busiest one — into a third of the space while the outermost sits nearly empty.
+    const scale = maxHop === 1 ? 1 : INNERMOST + ((1 - INNERMOST) * (hop - 1)) / (maxHop - 1)
     ring.forEach((node, index) => {
       nodes.push({
         id: node.id,
         hop,
-        center: hop === 0 ? center : onCircle(center, radius, (2 * Math.PI * index) / ring.length),
+        center:
+          hop === 0
+            ? center
+            : onEllipse(
+                center,
+                outer.rx * scale,
+                outer.ry * scale,
+                (2 * Math.PI * index) / ring.length,
+              ),
         radius: HOP_RADIUS[Math.min(hop, HOP_RADIUS.length - 1)]!,
         cluster: cluster(node.id),
       })
@@ -101,7 +115,9 @@ export function layoutEgo({ network, size, cluster, name }: LayoutInput): EgoLay
     edges.push({
       ...edge,
       control,
-      labelPoint: quadPoint(from.center, control, to.center, 0.5),
+      // Off-centre on purpose: on a spoke, the true midpoint sits at half the ring radius, which
+      // is exactly where every other spoke's midpoint sits too. Pushing them out spreads them.
+      labelPoint: quadPoint(from.center, control, to.center, LABEL_T),
     })
   }
 

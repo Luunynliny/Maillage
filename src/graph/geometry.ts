@@ -17,25 +17,48 @@ export const GRAPH_MARGIN_SHARE = 0.18
 export const GRAPH_HIT_SLOP = 8
 
 /**
- * The largest ring that fits, treating the margins reserved for labels as caps rather than fixed
- * reserves: a narrow window shrinks its margins before it shrinks the ring below `floor`.
+ * The largest ring that fits each axis, treating the margins reserved for labels as caps rather
+ * than fixed reserves: a narrow window shrinks its margins before it shrinks the ring below
+ * `floor`.
+ *
+ * Two radii rather than one because a window is wider than it is tall. A circle inscribed in a
+ * 16:9 pane leaves a third of the width empty on each side and crowds every label into the middle
+ * third — which at three hops is the difference between a graph and a knot.
  */
+export function ringRadii(
+  size: Size,
+  horizontal: number,
+  vertical: number,
+  floor: number,
+): { rx: number; ry: number } {
+  const marginX = Math.min(horizontal, size.width * GRAPH_MARGIN_SHARE)
+  const marginY = Math.min(vertical, size.height * GRAPH_MARGIN_SHARE)
+  return {
+    rx: Math.max(floor, size.width / 2 - marginX),
+    ry: Math.max(floor, size.height / 2 - marginY),
+  }
+}
+
+/** The largest *circle* that fits, for anything that has to stay round. */
 export function ringRadius(
   size: Size,
   horizontal: number,
   vertical: number,
   floor: number,
 ): number {
-  const marginX = Math.min(horizontal, size.width * GRAPH_MARGIN_SHARE)
-  const marginY = Math.min(vertical, size.height * GRAPH_MARGIN_SHARE)
-  return Math.max(floor, Math.min(size.width / 2 - marginX, size.height / 2 - marginY))
+  const { rx, ry } = ringRadii(size, horizontal, vertical, floor)
+  return Math.min(rx, ry)
 }
 
 /** Angle 0 is straight up and increases clockwise, so labels read around the ring like a clock. */
 export function onCircle(center: Point, radius: number, angle: number): Point {
+  return onEllipse(center, radius, radius, angle)
+}
+
+export function onEllipse(center: Point, rx: number, ry: number, angle: number): Point {
   return {
-    x: center.x + radius * Math.sin(angle),
-    y: center.y - radius * Math.cos(angle),
+    x: center.x + rx * Math.sin(angle),
+    y: center.y - ry * Math.cos(angle),
   }
 }
 

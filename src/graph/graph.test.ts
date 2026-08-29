@@ -2,7 +2,15 @@ import { describe, expect, test } from 'vitest'
 import type { Person, VaultSnapshot } from '../../shared/types.ts'
 import { bubbleRadius, packBubbles } from './bubblePacking.ts'
 import { layoutEgo } from './egoLayout.ts'
-import { arrowhead, controlPoint, distance, onCircle, ringRadius, trimmed } from './geometry.ts'
+import {
+  arrowhead,
+  controlPoint,
+  distance,
+  onCircle,
+  ringRadii,
+  ringRadius,
+  trimmed,
+} from './geometry.ts'
 import { traverse } from './network.ts'
 
 const SIZE = { width: 800, height: 600 }
@@ -192,17 +200,49 @@ describe('layoutEgo', () => {
     person('c'),
   ])
 
+  const layout1 = plain(snapshot, 'root', 1)
+
   test('the subject sits at the centre of the pane', () => {
-    const layout = plain(snapshot, 'root', 1)
-    expect(layout.byID.get('root')!.center).toEqual({ x: 400, y: 300 })
+    expect(layout1.byID.get('root')!.center).toEqual({ x: 400, y: 300 })
   })
 
-  test('depth 1 puts its one ring exactly where the old one-hop graph put it', () => {
-    const layout = plain(snapshot, 'root', 1)
-    const radius = ringRadius(SIZE, 140, 84, 90)
-    for (const node of layout.nodes.filter((n) => n.hop === 1)) {
-      expect(distance(node.center, { x: 400, y: 300 })).toBeCloseTo(radius)
+  test('depth 1 puts everyone on one ring around the subject', () => {
+    // The ring is an ellipse, not a circle: a pane is wider than it is tall, and a circle
+    // inscribed in it wastes a third of the width on each side.
+    const { rx, ry } = ringRadii(SIZE, 140, 84, 90)
+    for (const node of layout1.nodes.filter((n) => n.hop === 1)) {
+      const dx = (node.center.x - 400) / rx
+      const dy = (node.center.y - 300) / ry
+      expect(Math.hypot(dx, dy)).toBeCloseTo(1)
     }
+  })
+
+  test('the ring uses the width of a wide pane, not just its height', () => {
+    const wide = layoutEgo({
+      network: traverse(
+        vault([
+          person('root', [
+            ['a', 'knows'],
+            ['b', 'knows'],
+            ['c', 'knows'],
+            ['d', 'knows'],
+          ]),
+          person('a'),
+          person('b'),
+          person('c'),
+          person('d'),
+        ]),
+        'root',
+        1,
+      ),
+      size: { width: 1400, height: 600 },
+      cluster: () => null,
+      name: (id) => id,
+    })
+    const spread =
+      Math.max(...wide.nodes.map((n) => n.center.x)) -
+      Math.min(...wide.nodes.map((n) => n.center.x))
+    expect(spread).toBeGreaterThan(600)
   })
 
   test('a second hop lands outside the first', () => {
@@ -210,6 +250,16 @@ describe('layoutEgo', () => {
     const ringOf = (hop: number) =>
       distance(layout.nodes.find((n) => n.hop === hop)!.center, { x: 400, y: 300 })
     expect(ringOf(2)).toBeGreaterThan(ringOf(1))
+  })
+
+  test('a label sits off the midpoint, where spokes do not all cross', () => {
+    // Every spoke's true midpoint is the same distance from the subject, so at 0.5 the labels
+    // would all land on one small circle and pile onto each other.
+    const edge = layout1.edges[0]!
+    const from = layout1.byID.get(edge.from)!.center
+    const to = layout1.byID.get(edge.to)!.center
+    const midpoint = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }
+    expect(distance(edge.labelPoint, midpoint)).toBeGreaterThan(4)
   })
 
   test('nodes shrink as they get further out, so distance reads without counting rings', () => {
