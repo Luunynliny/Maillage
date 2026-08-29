@@ -42,7 +42,7 @@ Four layers, each with one job:
 - **Views** render whatever the store currently holds and route every mutation back through it.
   No view calls `fetch` directly.
 - **Store** (`src/vault/store.tsx`) is the client's single source of truth: one `VaultSnapshot`,
-  the indexes derived from it, and every mutation. It is the port of the Swift `VaultStore`.
+  the indexes derived from it, and every mutation.
 - **Transport** is a dozen typed `fetch` wrappers. Every mutating call answers with the _whole_
   vault, freshly read, so the client can never hold a snapshot that disagrees with the disk.
 - **Vault** (`server/vault.ts` plus the codec in `shared/`) is where markdown-with-frontmatter
@@ -63,8 +63,8 @@ cached in between, which is why there is no cache-invalidation code anywhere in 
 
 Every entity is a plain object with a `kind` discriminant (`'person' | 'organization' |
 'project'`), an `id` that is always equal to the vault filename stem, a `body` holding the free
-markdown below the frontmatter, and its own fields. `AnyEntity` is the union; TypeScript narrows
-it on `kind`, which is why there is no type-erasure wrapper of the sort the Swift version needed.
+markdown below the frontmatter, and its own fields. `AnyEntity` is the union and TypeScript
+narrows it on `kind`, so there is no type-erasure wrapper anywhere.
 
 Cross-entity links are never nested objects and never wrapper types: an `organization` field is
 just an `EntityID`, and the `[[…]]` syntax exists only inside the codec. `parseWikilink` decodes
@@ -101,7 +101,7 @@ in this repo with a genuinely hard requirement: **decode then encode must reprod
 for byte.** A vault is a git repository. A save that re-quoted a scalar or re-indented a list would
 put a diff on every file it touched, forever.
 
-Meeting that against files written by Swift's Yams took three specific decisions, all tested:
+Holding to that against the files a vault already contains took three decisions, all tested:
 
 - `indentSeq: false` — sequences sit flush with their key, not indented under it.
 - `lineWidth: 0` — a long list of wikilinks is never folded mid-array.
@@ -116,12 +116,10 @@ Key order comes from construction order, so `frontmatterOf` reads as the on-disk
 is the only thing that ever expands a file's YAML.
 
 `splitFrontmatter` returns the body trimmed, and `joinFrontmatter` always writes exactly one blank
-line after the closing fence and one newline at the end — which is what Yams produced, and is why
-existing vaults round-trip unchanged rather than gaining or losing a line on first save.
+line after the closing fence and one newline at the end — the shape existing vault files already
+have, which is why they round-trip unchanged rather than gaining or losing a line on first save.
 
 ## Server
-
-`server/vault.ts` is the port of the Swift `Vault/` layer.
 
 `readVault` walks each kind's directory, decodes every file, and — the identity rule made concrete
 — **overwrites whatever `id:` the frontmatter claims with the actual filename stem**. A parse
@@ -177,12 +175,6 @@ different question — see the table in [CLAUDE.md](CLAUDE.md). Selection itself
 reference living in `App`, mirrored into `location.hash`, so a reload and the browser's own back
 button both land where you were. It carries the kind because ids only collide _across_ kinds:
 `people/acme.md` and `projects/acme.md` can both exist.
-
-A whole category of code from the Swift version is simply absent here, and that is the point:
-`clickableCursor` — AppKit swaps the pointer only over a view with a tracking area, which
-`.buttonStyle(.plain)` never installs — is `cursor: pointer`; `FlowLayout`, a hand-written `Layout`
-conformance, is `flex-wrap: wrap`; and the load-bearing rule about attaching hit-testing _before_
-`.position()` describes a problem SVG does not have.
 
 ## The graphs
 

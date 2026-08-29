@@ -32,11 +32,6 @@ Deliberately absent, each for a reason worth keeping:
 - **No image library.** Logo squaring runs on a `<canvas>` in the browser.
 - **No linter.** Prettier owns layout, `tsc --noEmit` owns everything else.
 
-This was a native macOS SwiftUI app until v1.0.0. Swift was a hard requirement only because a
-planned phase captured macOS system audio via Core Audio process taps; when meeting recording was
-dropped, nothing left in the CRM needed a native app — it reads and writes text files and draws a
-graph. `git log` before `v1.0.0` has the whole Swift tree if it is ever wanted back.
-
 ## Running
 
 ```
@@ -76,8 +71,8 @@ Watch out for:
 
 **There is no linter, on purpose.** Prettier decides layout and TypeScript decides the rest; the
 gap between them is small enough that a third tool would mostly generate opinions to configure
-away. If one is added later it must not fight Prettier — that is the mistake the Swift version
-had to work around by disabling every layout rule in SwiftLint.
+away. If one is added later it must not fight Prettier: two tools that each undo the other's
+work is a configuration you never finish tuning.
 
 **`shared/__fixtures__/` is excluded from Prettier.** Those files are real vault files, compared
 byte for byte; reformatting them would silently change what the golden test asserts.
@@ -235,8 +230,8 @@ created: '2026-08-06'
 Met at the Paris conference.
 ```
 
-Anything else in the folder is ignored, not an error. A vault written by the Swift version still
-has `meetings/` and `.maillage/` in it; nothing reads them and nothing deletes them.
+The reader walks only these three directories and `assets/`. Anything else in the folder is
+ignored rather than an error, so keeping unrelated notes beside the vault is fine.
 
 ## Rules
 

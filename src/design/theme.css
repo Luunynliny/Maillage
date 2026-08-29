@@ -143,8 +143,7 @@ button {
   color: inherit;
 }
 
-/* The web gives this away: a control that does something shows a hand, and one that does not,
- * does not. The native app needed a tracking-area helper on every single button for this. */
+/* A control that does something shows a hand, and one that does not, does not. */
 button:not(:disabled),
 [role='button']:not([aria-disabled='true']) {
   cursor: pointer;

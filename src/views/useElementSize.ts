@@ -1,5 +1,4 @@
-// Both graphs lay out from the pane's measured size, the way the SwiftUI original read a
-// GeometryReader.
+// Both graphs lay out from the pane's measured size, so they need it before they can draw.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Size } from '../graph/geometry.ts'

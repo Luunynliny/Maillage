@@ -1,7 +1,7 @@
 // The whole `---\nyaml\n---\nbody` file format, in one place.
 //
-// The hard requirement here is byte-for-byte round-tripping: this codec replaced Swift's Yams, and
-// a vault is a git repository. If opening a person and saving them unchanged rewrote quoting, key
+// The hard requirement here is byte-for-byte round-tripping, because a vault is a git
+// repository. If opening a person and saving them unchanged rewrote quoting, key
 // order or list indentation, every save would produce a diff nobody asked for. `frontmatter.test.ts`
 // gates that against real vault files; treat a failure there as "the codec is not done".
 
@@ -34,7 +34,7 @@ export interface SplitFile {
 /**
  * Split a file into its YAML half and its markdown half. The body comes back trimmed, because
  * `encode` always writes exactly one blank line after the closing fence and one newline at the end
- * — which is what Yams produced, so existing vaults round-trip unchanged.
+ * — the shape existing vault files already have, so they round-trip unchanged.
  */
 export function splitFrontmatter(text: string): SplitFile {
   const match = FENCE.exec(text)
@@ -247,7 +247,7 @@ function omitEmpty(fields: Record<string, unknown>): Record<string, unknown> {
 }
 
 /**
- * `indentSeq: false` and `lineWidth: 0` match what Yams emitted: sequences flush with their key,
+ * `indentSeq: false` and `lineWidth: 0` match the files already on disk: sequences flush with their key,
  * and a long list of wikilinks is never folded mid-array.
  *
  * The explicit quoting pass is the part that would otherwise drift. A wikilink has to be quoted

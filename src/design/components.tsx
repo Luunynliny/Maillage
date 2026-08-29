@@ -1,6 +1,5 @@
 // The reusable primitives. One file rather than fourteen: every one of them is a handful of lines,
-// and the SwiftUI original only split them up because each carried a cursor-tracking workaround
-// the browser makes unnecessary.
+// and a file each would be more navigating than reading.
 
 import type { CSSProperties, ReactNode } from 'react'
 import { useState } from 'react'

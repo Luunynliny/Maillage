@@ -15,9 +15,8 @@ import { KIND_DIRECTORY, ENTITY_KINDS } from './types.ts'
 const FIXTURES = fileURLToPath(new URL('./__fixtures__/vault', import.meta.url))
 
 describe('golden files', () => {
-  // Every file in the fixture vault was written by the Swift app's Yams encoder. Decoding and
-  // re-encoding one must reproduce it byte for byte, or every save in the new app would rewrite
-  // quoting and indentation across a git-tracked vault.
+  // Real files from a real vault. Decoding and re-encoding one must reproduce it byte for byte,
+  // or every save would rewrite quoting and indentation across a git-tracked folder of notes.
   for (const kind of ENTITY_KINDS) {
     const dir = join(FIXTURES, KIND_DIRECTORY[kind])
     for (const file of readdirSync(dir).filter((name) => name.endsWith('.md'))) {
@@ -155,7 +154,7 @@ describe('encodeEntity', () => {
     expect(encoded).toContain("projects:\n- '[[atlas]]'\n- to: '[[maillage]]'\n  role: Lead\n")
   })
 
-  test('sequences are flush with their key, as Yams wrote them', () => {
+  test('sequences are flush with their key, not indented under it', () => {
     const encoded = encodeEntity({
       ...base,
       relations: [{ to: 'jean-martin', label: 'manager of' }],

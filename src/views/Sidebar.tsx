@@ -39,7 +39,7 @@ export function Sidebar({
 
   return (
     <nav className="sidebar">
-      {/* The whole band is the way back to the overview, as it was in the native app. */}
+      {/* The whole band is the way back to the overview. */}
       <button className="sidebar-brand" onClick={() => onSelect(null)} type="button">
         maillage
       </button>
