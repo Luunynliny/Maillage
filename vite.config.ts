@@ -9,6 +9,7 @@ export default defineConfig({
   build: { outDir: 'dist', emptyOutDir: true },
   test: {
     environment: 'node',
-    include: ['{shared,server,src}/**/*.test.ts'],
+    // release.test.ts sits at the root, beside the .releaserc.json it checks.
+    include: ['{shared,server,src}/**/*.test.ts', '*.test.ts'],
   },
 })
