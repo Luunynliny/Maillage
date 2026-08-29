@@ -1,0 +1,4 @@
+dist/
+node_modules/
+package-lock.json
+shared/__fixtures__/

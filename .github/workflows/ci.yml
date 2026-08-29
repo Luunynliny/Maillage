@@ -32,9 +32,9 @@ env:
   # Matches the version this repo's `.swiftlint.yml` was verified against. Unpinned, a new
   # release can introduce rules the config has never been checked against and turn CI red on a
   # commit that changed nothing.
-  SWIFTLINT_VERSION: "0.65.0"
+  SWIFTLINT_VERSION: '0.65.0'
   # The release tooling is pinned in package-lock.json; this only fixes the runtime it runs on.
-  NODE_VERSION: "22"
+  NODE_VERSION: '22'
 
 # The pipeline is a chain, cheapest gate first, so a failure costs the least it can and the reason
 # is never buried under an unrelated one:

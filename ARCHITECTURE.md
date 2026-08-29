@@ -85,18 +85,18 @@ relations live
 on exactly one side of the link**, and the other side's view of them is always derived:
 `VaultStore.rebuildBacklinks()` inverts `Relation`s into `Backlink`s, `members(ofOrganization:)`
 and `participants(ofProject:)` scan every person rather than reading a stored roster. Nothing
-about a meeting is ever pointed *at*: a meeting reads a person/org/project's identity, but
+about a meeting is ever pointed _at_: a meeting reads a person/org/project's identity, but
 deleting or renaming one of those has to reach into every meeting file to fix it up (see
 `VaultWriter.rename` below), because there's no inverse index to walk.
 
 The four concrete types:
 
-| Type | Frontmatter fields | Notable quirks |
-|---|---|---|
-| `Person` | `id, type, firstname, lastname, email, role, placeholder, descriptor, organization, projects, relations, created` | `organization` is singular; a retired plural `organizations` key still decodes (first element wins) so old vaults load, but only the singular form is ever written back; a file migrates forward the next time it's saved. `displayName` falls back to `descriptor` (for an unresolved placeholder), then to the raw `id`. |
-| `Organization` | `id, type, name, domain, created` | No membership field; see the derived-backlinks note above. |
-| `Project` | `id, type, name, status, organization, created` | `status` is `.active \| .paused \| .done`. Same singular/legacy-plural `organization` quirk as `Person`. No roster field; derived the same way. |
-| `Meeting` | `id, type, title, date, duration, language, organization, project, attendees, created` | `attendees` is a flat, hand-maintained list; there is no speaker identification anywhere in the app (see below). `duration` and `language` are `nil` until transcription finishes. `body` holds a `## Summary` block (opaque LLM markdown) followed by a `## Transcript` block (owned by `TranscriptCodec`). |
+| Type           | Frontmatter fields                                                                                                | Notable quirks                                                                                                                                                                                                                                                                                                             |
+| -------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Person`       | `id, type, firstname, lastname, email, role, placeholder, descriptor, organization, projects, relations, created` | `organization` is singular; a retired plural `organizations` key still decodes (first element wins) so old vaults load, but only the singular form is ever written back; a file migrates forward the next time it's saved. `displayName` falls back to `descriptor` (for an unresolved placeholder), then to the raw `id`. |
+| `Organization` | `id, type, name, domain, created`                                                                                 | No membership field; see the derived-backlinks note above.                                                                                                                                                                                                                                                                 |
+| `Project`      | `id, type, name, status, organization, created`                                                                   | `status` is `.active \| .paused \| .done`. Same singular/legacy-plural `organization` quirk as `Person`. No roster field; derived the same way.                                                                                                                                                                            |
+| `Meeting`      | `id, type, title, date, duration, language, organization, project, attendees, created`                            | `attendees` is a flat, hand-maintained list; there is no speaker identification anywhere in the app (see below). `duration` and `language` are `nil` until transcription finishes. `body` holds a `## Summary` block (opaque LLM markdown) followed by a `## Transcript` block (owned by `TranscriptCodec`).               |
 
 `ProjectMembership` (`to: Wikilink`, `role: String?`) has hand-written `Codable` that accepts
 either a bare `"[[project-id]]"` or a `{to, role}` mapping, and collapses back to the bare form
@@ -123,7 +123,7 @@ and `TranscriptCodec` deal in) has only `offsetSeconds` and `text`, by design.
 
 `VaultLocation` wraps a single root folder (default `~/Documents/Maillage`) and computes every
 path anyone else needs: `people|organizations|projects|meetings/<id>.md`,
-`assets/<kind>/<id>.png` (partitioned by kind, since an id is only unique *within* a kind),
+`assets/<kind>/<id>.png` (partitioned by kind, since an id is only unique _within_ a kind),
 `.maillage/recordings/<meeting-id>/` (created only once a recording starts, cleaned up once its
 transcript is written), and `.maillage/prompts/<name>.md` (seeded lazily on first use, not at
 vault creation).
@@ -165,7 +165,7 @@ renamed file itself:
    `projects[].to.id`, whichever applies to the renamed kind.
 5. `repointMeetings` walks every meeting and rewrites `attendees[].id` / `organization?.id` /
    `project?.id` the same way (split into its own method to stay under the project's
-   cyclomatic-complexity budget). Meetings need no *inbound* repointing of their own, since
+   cyclomatic-complexity budget). Meetings need no _inbound_ repointing of their own, since
    nothing points at a meeting.
 
 `ImageSquarer` normalizes every logo to a 512×512 PNG regardless of source format or aspect
@@ -184,7 +184,7 @@ no third-party image library is in the dependency table for a reason.
 (the four `[EntityID: T]` dictionaries `VaultReader` produced), `backlinkIndex` and `logoIDs`
 (both derived, rebuilt from `snapshot` and the `assets/` folder respectively, never stored on
 disk), and `lastError` for UI display. A private `logoImages` cache holds decoded `NSImage`s
-but is deliberately kept *outside* `@Observable` storage: filling it during a view's render
+but is deliberately kept _outside_ `@Observable` storage: filling it during a view's render
 body would otherwise risk a SwiftUI re-render loop; views instead watch `logoIDs`, which only
 changes when a logo is actually added or removed.
 
@@ -198,7 +198,7 @@ Every read the views do goes through a small, purely-derived query surface:
 Every write goes through the same shape: build/mutate a value, call `writer.write(_:)`, store
 the result back into the matching `snapshot` dictionary, `rebuildBacklinks()`. The one method
 worth calling out specifically is `setParticipants(ofProject:to:)`, because it's a diff, not a
-replace: given the *entire* intended roster, it adds a `ProjectMembership` for anyone new,
+replace: given the _entire_ intended roster, it adds a `ProjectMembership` for anyone new,
 updates a role in place only if it actually changed, removes the membership for anyone dropped,
 and only the people whose entry actually changed get written to disk. `resolvePlaceholder`
 composes two of these primitives: it fills in a placeholder's real identity, then (if the
@@ -231,13 +231,13 @@ name beside the graph, so that metadata moved into the center pane's own collaps
 instead. `CenterPane` picks its content from what's selected, because each selection is a
 genuinely different question:
 
-| Selection | View | Because |
-|---|---|---|
-| Nothing | `OrganizationBubblesView` | "How is the whole network organized by employer?" |
-| An organization | `OrganizationBoardView` | "What is this company working on, and who's on it?" |
-| A person | `EgoGraphView` | "Who does this person relate to?" |
-| A project | `ProjectRosterView` | "Who's staffed on this, and in what role?" |
-| A meeting | `MeetingView` | "What was said, and what was decided?" |
+| Selection       | View                      | Because                                             |
+| --------------- | ------------------------- | --------------------------------------------------- |
+| Nothing         | `OrganizationBubblesView` | "How is the whole network organized by employer?"   |
+| An organization | `OrganizationBoardView`   | "What is this company working on, and who's on it?" |
+| A person        | `EgoGraphView`            | "Who does this person relate to?"                   |
+| A project       | `ProjectRosterView`       | "Who's staffed on this, and in what role?"          |
+| A meeting       | `MeetingView`             | "What was said, and what was decided?"              |
 
 The two graphs (bubbles, ego) and the two lists (board, roster) are laid out, never simulated:
 a force-directed layout settles somewhere slightly different on every launch, and "Acme is the
@@ -254,7 +254,7 @@ narrow window shrinks the margins before it shrinks the ring below `floor`. `onC
 radius:angle:)` places a point with angle 0 straight up and increasing clockwise, so labels read
 around the ring the way numbers read around a clock face. `trimmed(from:to:gap:)` shortens an
 edge's endpoints by each node's `radius + gap` so lines touch the rim rather than vanishing
-under the node. `arrowhead(at:approaching:)` builds its triangle from the *curve's* tangent at
+under the node. `arrowhead(at:approaching:)` builds its triangle from the _curve's_ tangent at
 the tip, not the straight chord between endpoints, so an arrowhead on a bowed edge actually
 points along the curve.
 
@@ -262,7 +262,7 @@ points along the curve.
 into circle positions:
 
 1. Each group's radius is `min(minRadius + 26·√(headcount − 1), maxRadius)`
-   (`minRadius = 44`, `maxRadius = 150`). Square-root growth ties *area*, not radius, to
+   (`minRadius = 44`, `maxRadius = 150`). Square-root growth ties _area_, not radius, to
    headcount; doubling the radius would otherwise imply 4× the headcount.
 2. Groups are sorted biggest-first (ties broken by name), with the "no organization" bucket
    always placed last regardless of size, so the single biggest circle claims the center.
@@ -280,7 +280,7 @@ into circle positions:
 
 1. The subject sits fixed at the pane's center (`subjectRadius = 30`); the ring radius comes
    from the same `ringRadius` helper (`horizontal = 140, vertical = 84, floor = 90`).
-2. Every neighbour reachable by *any* relation (inbound or outbound) is deduped to one node,
+2. Every neighbour reachable by _any_ relation (inbound or outbound) is deduped to one node,
    then sorted by employer-cluster position, then name, then id, so colleagues cluster
    together and the order never changes between launches.
 3. Nodes are placed evenly around the ring at `angle = 2π·i/count` (`neighbourRadius = 24`).
@@ -288,7 +288,7 @@ into circle positions:
    relations between the same two people), each edge's curve is bowed apart from its siblings:
    `bow = pairSpread · (ordinal − (count−1)/2) · 2` (`pairSpread = 0.16`), and the control point
    for the curve is the midpoint offset perpendicular to the straight line by `bow ×
-   lineLength`. Each edge's label sits at half that same offset, so it reads near its curve
+lineLength`. Each edge's label sits at half that same offset, so it reads near its curve
    without sitting directly on top of it.
 
 ### Design system
@@ -308,15 +308,15 @@ real gotchas worth knowing before touching a view:
 - **`clickableCursor()`** exists because AppKit only swaps the pointer over a view with a
   tracking area, and `.buttonStyle(.plain)` installs none: every plain button in the app would
   otherwise show a plain arrow. It's applied by every clickable control in `Design/Components/`
-  by construction, and explicitly passed `false` on a control that's only *sometimes*
+  by construction, and explicitly passed `false` on a control that's only _sometimes_
   clickable (a disabled button, an action-less `Pill`), since a hand cursor over a dead control
   promises a click that does nothing.
 - **Modifier ordering around `.position(...)`**: `.position()` returns a view sized to its
-  *entire parent*, drawing its child at one point inside that full-size view. Attaching
-  `.onHover`/`.onTapGesture`/`.contentShape` *after* `.position()` therefore claims the whole
+  _entire parent_, drawing its child at one point inside that full-size view. Attaching
+  `.onHover`/`.onTapGesture`/`.contentShape` _after_ `.position()` therefore claims the whole
   pane, not just the visual node, and because the last view in a `ZStack` wins that claim,
   every node except the one drawn last would go dead. Both graphs attach every interactive
-  modifier *before* `.position()` for exactly this reason.
+  modifier _before_ `.position()` for exactly this reason.
 
 `EntityAvatar` is the one component standing for an entity everywhere: a stored logo if one
 exists, else a hollow outline for an unresolved placeholder, else the kind's SF Symbol on a
@@ -339,12 +339,12 @@ Two independent recorders converge on the same format (16kHz mono 16-bit PCM, vi
 `PCMConverter`) and are coordinated by `AudioCaptureSession`:
 
 - **`SystemAudioTap`** wraps a Core Audio process tap: `CATapDescription
-  (monoGlobalTapButExcludeProcesses:)` excludes maillage's own process (resolved via
+(monoGlobalTapButExcludeProcesses:)` excludes maillage's own process (resolved via
   `kAudioHardwarePropertyTranslatePIDToProcessObject`) so the app never records its own output,
   wrapped in a private aggregate device and read via an `AudioDeviceCreateIOProcIDWithBlock`
   callback on Core Audio's real-time thread.
 - **`MicrophoneRecorder`** is the ordinary half: `AVAudioEngine.inputNode.installTap(onBus:)`.
-- **`AudioCaptureSession.start(microphoneURL:systemAudioURL:)`** starts system audio *first*:
+- **`AudioCaptureSession.start(microphoneURL:systemAudioURL:)`** starts system audio _first_:
   the tap/aggregate-device setup is measurably slower to spin up than `AVAudioEngine.start()`,
   so starting the slow one first keeps the two tracks' true start times close together. If
   either half fails, the other is torn back down, so a recording never silently captures only
@@ -367,7 +367,7 @@ leftover recording directory whose meeting already has a non-empty transcript.
 runs **once per finished WAV file, after Stop**, not live, despite the API's name. Silero VAD
 walks the whole file first; only voiced spans reach the ASR model, and any continuous voiced
 span longer than 10 seconds is force-split. Language is passed as `nil` on every call, which
-makes Qwen3-ASR auto-detect language *per VAD-bounded segment*, finer-grained than "detect
+makes Qwen3-ASR auto-detect language _per VAD-bounded segment_, finer-grained than "detect
 once for the whole meeting," and the mechanism this pipeline actually relies on for
 code-switching support. There is no confidence score to gate hallucinated output on (the
 model's own `TranscriptionResult.confidence` is always `0.0`), so the VAD gate is the only

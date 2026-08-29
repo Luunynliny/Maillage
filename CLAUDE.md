@@ -6,16 +6,16 @@ as a force-directed graph clustered by employer.
 
 ## Stack
 
-| Piece | Choice |
-|---|---|
-| Language | Swift 6 (`.swiftLanguageMode(.v5)`), SwiftUI, macOS 26+ |
-| Build | Two paths — SwiftPM for tests, `maillage.xcodeproj` for running (see Building) |
-| State | `@Observable` + `@MainActor` `VaultStore`, injected via `.environment(store)` |
-| Tests | Swift Testing (`@Test`, `@Suite`, `#expect`, `#require`) — **not** XCTest |
-| YAML | [Yams](https://github.com/jpsim/Yams) (MIT) |
-| Markdown rendering | [swift-markdown-ui](https://github.com/gonzalezreal/swift-markdown-ui) (MIT) |
-| Transcription | [speech-swift](https://github.com/soniqo/speech-swift) (Apache 2.0) running Qwen3-ASR (0.6B, 4-bit MLX) guided by Silero VAD, pinned to a commit SHA — no tagged release existed at the time this was added, so `Package.swift`/`project.pbxproj` name a revision, not a version, and there is no `upToNextMajorVersion` safety net against an upstream break |
-| Summarization/cleanup | [mlx-swift-lm](https://github.com/ml-explore/mlx-swift-lm) (MIT) running Qwen2.5-1.5B-Instruct (Apache 2.0), tokenized via [swift-transformers](https://github.com/huggingface/swift-transformers) (Apache 2.0) |
+| Piece                 | Choice                                                                                                                                                                                                                                                                                                                                                        |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Language              | Swift 6 (`.swiftLanguageMode(.v5)`), SwiftUI, macOS 26+                                                                                                                                                                                                                                                                                                       |
+| Build                 | Two paths — SwiftPM for tests, `maillage.xcodeproj` for running (see Building)                                                                                                                                                                                                                                                                                |
+| State                 | `@Observable` + `@MainActor` `VaultStore`, injected via `.environment(store)`                                                                                                                                                                                                                                                                                 |
+| Tests                 | Swift Testing (`@Test`, `@Suite`, `#expect`, `#require`) — **not** XCTest                                                                                                                                                                                                                                                                                     |
+| YAML                  | [Yams](https://github.com/jpsim/Yams) (MIT)                                                                                                                                                                                                                                                                                                                   |
+| Markdown rendering    | [swift-markdown-ui](https://github.com/gonzalezreal/swift-markdown-ui) (MIT)                                                                                                                                                                                                                                                                                  |
+| Transcription         | [speech-swift](https://github.com/soniqo/speech-swift) (Apache 2.0) running Qwen3-ASR (0.6B, 4-bit MLX) guided by Silero VAD, pinned to a commit SHA — no tagged release existed at the time this was added, so `Package.swift`/`project.pbxproj` name a revision, not a version, and there is no `upToNextMajorVersion` safety net against an upstream break |
+| Summarization/cleanup | [mlx-swift-lm](https://github.com/ml-explore/mlx-swift-lm) (MIT) running Qwen2.5-1.5B-Instruct (Apache 2.0), tokenized via [swift-transformers](https://github.com/huggingface/swift-transformers) (Apache 2.0)                                                                                                                                               |
 
 Swift is a hard requirement: a later phase captures macOS system audio via Core Audio process
 taps, which has no cross-platform equivalent.
@@ -28,7 +28,7 @@ above, which has no comparable OS-version or device-eligibility floor — **whet
 still needs to be this high is now an open question, not yet investigated**; something else in the
 app may still require it. `Package.swift`'s `swift-tools-version` is `6.2` for the same reason
 `.macOS(.v26)` is: it's gated on that manifest API version. That is unrelated to
-`.swiftLanguageMode(.v5)` above, which governs how the *sources* compile and does not move with
+`.swiftLanguageMode(.v5)` above, which governs how the _sources_ compile and does not move with
 either.
 
 **Open source first.** Every dependency added must be OSS with a permissive license, noted in
@@ -38,10 +38,10 @@ the table above with its license.
 
 Two build systems describe the same sources, deliberately. Pick by what you're doing:
 
-| Task | Use | Why |
-|---|---|---|
-| Tests, quick compile check | `rtk swift test` | ~0.2s. Xcode's runner takes ~80s for the same 178 tests |
-| Running, debugging, breakpoints | `open maillage.xcodeproj` → scheme **Maillage** → ⌘R | Only path that produces a real `.app` |
+| Task                            | Use                                                  | Why                                                     |
+| ------------------------------- | ---------------------------------------------------- | ------------------------------------------------------- |
+| Tests, quick compile check      | `rtk swift test`                                     | ~0.2s. Xcode's runner takes ~80s for the same 178 tests |
+| Running, debugging, breakpoints | `open maillage.xcodeproj` → scheme **Maillage** → ⌘R | Only path that produces a real `.app`                   |
 
 `maillage.xcodeproj` has two targets mirroring the package: `MaillageCore.framework` and
 `Maillage.app`, which embeds it. Both use **buildable folders** (`PBXFileSystemSynchronizedRootGroup`)
@@ -68,7 +68,7 @@ Watch out for:
   by `CODE_SIGN_ENTITLEMENTS`) alongside the `NSAudioCaptureUsageDescription` already in
   `App/Info.plist`.
 - **A headless `xcodebuild` (CI, `Scripts/build-app.sh`) needs `-skipPackagePluginValidation
-  -skipMacroValidation`.** `mlx-swift` ships a build-tool plugin (`CudaBuild`, a genuine no-op on
+-skipMacroValidation`.** `mlx-swift` ships a build-tool plugin (`CudaBuild`, a genuine no-op on
   macOS — it only does anything under `os(Linux)`) that Xcode otherwise refuses to run without a
   one-time interactive "Trust & Enable" prompt, which a headless build has nobody to answer.
   Opening the project in Xcode's own UI still shows that prompt once per machine — accept it, it's
@@ -106,25 +106,25 @@ commits ├─→ test ─→ package ─→ release      release: push to main 
 branch  ┘
 ```
 
-| Stage | Runs | Guards |
-|---|---|---|
-| Format & lint | `swift format lint`, SwiftLint, `Scripts/check-build-parity.sh` | Needs no build, so it reports in under a minute |
-| Commit messages | `commitlint` on the PR title and on every commit in the PR | That a merge will actually release something — see Releasing. PRs only |
-| Branch name | `<type>/<slug>` against commitlint's type list | That the branch and the commit type it produces stay in step. PRs only |
-| Tests | `swift test` | The 178 tests, via the fast path |
-| Build app bundle | `Scripts/build-app.sh`, then a throwaway DMG | That the project file, `Info.plist` and embedded framework still produce a real, **signed, packageable** `.app` — breakage `swift test` passes straight through |
-| Release | `semantic-release` | Publishes. Push to `main` only |
+| Stage            | Runs                                                            | Guards                                                                                                                                                          |
+| ---------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Format & lint    | `swift format lint`, SwiftLint, `Scripts/check-build-parity.sh` | Needs no build, so it reports in under a minute                                                                                                                 |
+| Commit messages  | `commitlint` on the PR title and on every commit in the PR      | That a merge will actually release something — see Releasing. PRs only                                                                                          |
+| Branch name      | `<type>/<slug>` against commitlint's type list                  | That the branch and the commit type it produces stay in step. PRs only                                                                                          |
+| Tests            | `swift test`                                                    | The 178 tests, via the fast path                                                                                                                                |
+| Build app bundle | `Scripts/build-app.sh`, then a throwaway DMG                    | That the project file, `Info.plist` and embedded framework still produce a real, **signed, packageable** `.app` — breakage `swift test` passes straight through |
+| Release          | `semantic-release`                                              | Publishes. Push to `main` only                                                                                                                                  |
 
-| Target | What it does |
-|---|---|
-| `make check` | Every pre-build stage CI runs |
-| `make format` | Rewrites sources to match `.swift-format` (CI only *checks*) |
-| `make lint` | SwiftLint — needs `brew install swiftlint` |
-| `make parity` | Just the two-build-system check |
-| `make build` | The shippable `.app` into `dist/`, by the same script CI uses |
-| `make dmg` | `dist/Maillage-0.0.0-dev.dmg`, exactly as a release would build it |
-| `make commits` | `commitlint` over this branch, against `origin/main` |
-| `make release-dry` | The version and notes a merge would produce. Publishes nothing |
+| Target             | What it does                                                       |
+| ------------------ | ------------------------------------------------------------------ |
+| `make check`       | Every pre-build stage CI runs                                      |
+| `make format`      | Rewrites sources to match `.swift-format` (CI only _checks_)       |
+| `make lint`        | SwiftLint — needs `brew install swiftlint`                         |
+| `make parity`      | Just the two-build-system check                                    |
+| `make build`       | The shippable `.app` into `dist/`, by the same script CI uses      |
+| `make dmg`         | `dist/Maillage-0.0.0-dev.dmg`, exactly as a release would build it |
+| `make commits`     | `commitlint` over this branch, against `origin/main`               |
+| `make release-dry` | The version and notes a merge would produce. Publishes nothing     |
 
 `test` needs all three of the first stage, and carries `if: ${{ !failure() && !cancelled() }}`
 because `commits` and `branch-name` are skipped on a `push` — without it, a skipped need would skip
@@ -134,11 +134,11 @@ Both quality tools are **pinned**: the runner uses Xcode 26.6 (so `swift format`
 change under the repo) on `macos-26`, and SwiftLint by release version.
 
 **Keep the CI pin in step with the local Xcode.** `swift format` ships with the toolchain, so it
-is not a dependency CI installs — it is whatever Xcode the runner selects. Pin CI *older* than the
+is not a dependency CI installs — it is whatever Xcode the runner selects. Pin CI _older_ than the
 machine that runs `make format` and the two disagree by construction: the local formatter rewrites
 files, CI's judges them by different rules, and `.swift-format` keys the local one understands can
 be ones CI has never heard of. That is a config the older tool rejects outright, and a rejected
-config fails *every* file at once — which reads like the whole codebase is misformatted rather than
+config fails _every_ file at once — which reads like the whole codebase is misformatted rather than
 like a version skew.
 
 Watch out for:
@@ -146,24 +146,24 @@ Watch out for:
 - **`swift format` owns layout; SwiftLint owns semantics, and the split is load-bearing.** The two
   genuinely disagree — `swift format` adds trailing commas to multiline literals that SwiftLint's
   `trailing_comma` removes, and puts a lone `{` on its own line after a wrapped signature, which
-  `opening_brace` calls a violation. Every layout rule is therefore *disabled* in `.swiftlint.yml`
+  `opening_brace` calls a violation. Every layout rule is therefore _disabled_ in `.swiftlint.yml`
   rather than tuned. Re-enable one and `make format` and `make lint` will each undo the other's
   work forever. Add layout preferences to `.swift-format`, never to `.swiftlint.yml`.
 - **`.swift-format` must keep `"indentation": { "spaces": 4 }`.** The tool's default is 2, which
   disagrees with every file here — dropping the key reports ~7,000 violations that are all the
   config's fault.
-- **SwiftLint runs `--strict`**, so a *warning* fails the build. That is deliberate: the config
+- **SwiftLint runs `--strict`**, so a _warning_ fails the build. That is deliberate: the config
   reports zero violations today, so anything it prints is new. Both configs carry a comment for
   every rule relaxed and why (`identifier_name` allows `to`, the frontmatter key; `large_tuple`
   allows the derived `(person:role:)` pair).
-- **A skipped test needs `.enabled(if:)`, not `#require`.** A failed `#require` *fails* the test;
+- **A skipped test needs `.enabled(if:)`, not `#require`.** A failed `#require` _fails_ the test;
   it does not skip it. `SeededVaultTests` reads the real `~/Documents/Maillage` and must skip
   where there is none, which is every CI run.
-- **No check is *required* yet.** The repo is private on a free plan, so branch protection returns
+- **No check is _required_ yet.** The repo is private on a free plan, so branch protection returns
   403 (`Upgrade to GitHub Pro or make this repository public`). Every gate above is advisory until
   the repo goes public or Pro — a red PR can still be merged. That is a real gap, not an oversight.
   Once either is true, mark `Format & lint`, `Commit messages`, `Branch name`, `Tests` and
-  `Build app bundle` required on `main`. Not `Release`: it only runs *after* a merge, so requiring
+  `Build app bundle` required on `main`. Not `Release`: it only runs _after_ a merge, so requiring
   it would block every PR on a job that cannot run yet.
 
 ## Releasing
@@ -172,14 +172,14 @@ Merging into `main` publishes a GitHub Release: generated notes, both source arc
 `Maillage-<version>.dmg`. Nothing about it is typed by hand — **the version is computed from the
 commit messages**, which is why Conventional Commits are machinery here rather than a style.
 
-| Piece | Where |
-|---|---|
+| Piece                        | Where                                                                          |
+| ---------------------------- | ------------------------------------------------------------------------------ |
 | Version, tag, notes, publish | `semantic-release`, config in `.releaserc.json`, pinned in `package-lock.json` |
-| Message rules | `commitlint.config.js` (`config-conventional`, `header-max-length` 100) |
-| The app | `Scripts/build-app.sh` — Release config, ad-hoc signed, into `dist/` |
-| The version stamp | `Scripts/stamp-version.sh` — rewrites `Info.plist` and re-signs |
-| The DMG | `Scripts/make-dmg.sh` — `hdiutil`, app beside an `/Applications` symlink |
-| The install note | `Scripts/release-appendix.sh` — appended to every release body |
+| Message rules                | `commitlint.config.js` (`config-conventional`, `header-max-length` 100)        |
+| The app                      | `Scripts/build-app.sh` — Release config, ad-hoc signed, into `dist/`           |
+| The version stamp            | `Scripts/stamp-version.sh` — rewrites `Info.plist` and re-signs                |
+| The DMG                      | `Scripts/make-dmg.sh` — `hdiutil`, app beside an `/Applications` symlink       |
+| The install note             | `Scripts/release-appendix.sh` — appended to every release body                 |
 
 The bump comes from the commit type: `fix:` → patch, `feat:` → minor, `feat!:` or a
 `BREAKING CHANGE:` footer → major. Everything else (`chore:`, `ci:`, `docs:`, `style:`, `test:`,
@@ -195,11 +195,11 @@ Preview any of this before merging with `make release-dry`.
 
 The repository settings this depends on are already set, and all three matter:
 
-| Setting → | Value | Because |
-|---|---|---|
-| Merge commits / rebase merging | **off** | Only squashing puts one conventional commit on `main` |
-| Squash commit title | **PR title** | The title CI lints is the one that gets parsed. `COMMIT_OR_PR_TITLE` silently uses the *commit's* subject on a one-commit PR |
-| Squash commit message | **blank** | See below — a PR body is prose, and `commit-analyzer` reads a commit body as data |
+| Setting →                      | Value        | Because                                                                                                                      |
+| ------------------------------ | ------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| Merge commits / rebase merging | **off**      | Only squashing puts one conventional commit on `main`                                                                        |
+| Squash commit title            | **PR title** | The title CI lints is the one that gets parsed. `COMMIT_OR_PR_TITLE` silently uses the _commit's_ subject on a one-commit PR |
+| Squash commit message          | **blank**    | See below — a PR body is prose, and `commit-analyzer` reads a commit body as data                                            |
 
 Watch out for:
 
@@ -207,20 +207,20 @@ Watch out for:
   single commit on `main` and is the only thing `commit-analyzer` reads. A perfectly conventional
   branch under a `chore:` PR title ships nothing. Re-enabling merge commits changes what gets
   parsed — every commit, not the title — and makes the notes unreadable.
-- **Leave the squash message blank; never `PR_BODY`.** A commit *body* is parsed, not quoted: a
+- **Leave the squash message blank; never `PR_BODY`.** A commit _body_ is parsed, not quoted: a
   `BREAKING CHANGE:` line anywhere in it forces a major release, and anything shaped like
   `thing#ref` becomes a "closes" link. PR #1's body documents Obsidian's `[[id#heading]]` syntax,
   which with `PR_BODY` set made the release notes claim to close issue `id#heading` — a repository
   that does not exist. Prose written for people should not be able to decide a version number.
 - **The version has exactly one source: `MARKETING_VERSION`.** `App/Info.plist` must keep
   `$(MARKETING_VERSION)`; the app target sets `GENERATE_INFOPLIST_FILE = NO`, so a literal there
-  *wins silently* over the version the release passes in, and ships an app whose About window
+  _wins silently_ over the version the release passes in, and ships an app whose About window
   disagrees with the DMG it came in. `Scripts/check-build-parity.sh` now fails on that.
 - **Never edit a version to release, and never commit a changelog.** No commit lands on `main` from
-  a release — no `CHANGELOG.md`, no `chore(release)` — because the release body *is* the changelog
+  a release — no `CHANGELOG.md`, no `chore(release)` — because the release body _is_ the changelog
   and a bot commit on `main` would force a `main`→`develop` back-merge after every ship. `main`
   stays linear; `develop` never diverges.
-- **The app is built once.** `package` compiles and signs it; `release` restamps *that bundle* with
+- **The app is built once.** `package` compiles and signs it; `release` restamps _that bundle_ with
   the computed version rather than rebuilding, so the binary that ships is the one the pipeline
   tested. The `.app` travels between stages as a `ditto` archive: `upload-artifact` zips its
   payload, and a plain zip drops the symlinks and signature inside `MaillageCore.framework`.
@@ -230,8 +230,8 @@ Watch out for:
   Anything that edits a bundle afterwards must re-sign it, inside-out (framework, then app).
 - **The DMG can't be notarized** (no Developer ID, same reason as ad-hoc signing), so macOS
   quarantines it on download and calls it unopenable. `Scripts/release-appendix.sh` puts the way
-  past that *in the release body*, beside the download, rather than in a document nobody reads.
-- **Don't cancel a running release.** semantic-release pushes the tag *before* calling its publish
+  past that _in the release body_, beside the download, rather than in a document nobody reads.
+- **Don't cancel a running release.** semantic-release pushes the tag _before_ calling its publish
   plugins and cannot roll back, so a cancel in that window leaves a tag on `main` with no release
   and no commits left for the next run to analyze. Hence the `release` job's own `release-main`
   concurrency group with `cancel-in-progress: false`, deliberately not the workflow's cancelling one.
@@ -301,13 +301,13 @@ lastname: Dupont
 email: marie@example.com
 role: Head of Engineering
 placeholder: false
-organization: "[[acme-corp]]"
+organization: '[[acme-corp]]'
 projects:
-  - to: "[[maillage]]"
+  - to: '[[maillage]]'
     role: Lead
-  - "[[atlas]]"
+  - '[[atlas]]'
 relations:
-  - to: "[[jean-martin]]"
+  - to: '[[jean-martin]]'
     label: manager of
 created: '2026-08-06'
 ---
@@ -319,7 +319,7 @@ Met at the Paris conference.
 
 These are invariants, not preferences — the tests enforce most of them.
 
-- **Relations are one-way; backlinks are derived.** A relation is written *only* to the source
+- **Relations are one-way; backlinks are derived.** A relation is written _only_ to the source
   person's file. Never write an inverse edge. `VaultStore.rebuildBacklinks()` inverts them in
   memory so the target can show "Referenced by", exactly like Obsidian.
 - **Never hardcode a color, radius, spacing or font in a view.** Reference `Theme`. Both light
@@ -331,7 +331,7 @@ These are invariants, not preferences — the tests enforce most of them.
   sometimes clickable — a disabled button or an action-less `Pill` — since a hand promises a
   click that does nothing. In the two graphs the `Canvas` draws only the edges and every node is
   its own SwiftUI view, so each node carries its own `.onHover` and `.clickableCursor` — attached
-  *before* `.position`, since `.position` returns a pane-sized view and anything interactive on
+  _before_ `.position`, since `.position` returns a pane-sized view and anything interactive on
   its result claims the whole pane.
 - **A text input's box is bigger than its `TextField`.** Padding, border and placeholder are
   drawn around it, so a click near the edge misses the input and the field reads as dead.
@@ -357,10 +357,10 @@ These are invariants, not preferences — the tests enforce most of them.
   save, so an abandoned sheet writes nothing. `VaultStore.setParticipants(ofProject:to:)` takes
   the whole intended roster and writes only the people whose entry actually changed. Detail and
   centre panes are display-only.
-- **A logo is a file, not a field.** `assets/<kind>/<id>.png`, and its presence *is* the fact —
+- **A logo is a file, not a field.** `assets/<kind>/<id>.png`, and its presence _is_ the fact —
   `VaultStore.logoIDs` is derived by scanning `assets/` at load, like backlinks and membership, so
   there is no `logo:` key that can point at a deleted file and dropping a PNG in via Finder works.
-  Partitioned by kind because ids only collide *across* kinds (`availableID` checks one folder, so
+  Partitioned by kind because ids only collide _across_ kinds (`availableID` checks one folder, so
   `people/acme.md` and `projects/acme.md` can coexist). Always 512×512 centre-cropped PNG from
   `ImageSquarer`, which is the single place the format, the size and the crop are decided —
   anything macOS can decode goes in, including SVG, and PNG is the only lossless format with
@@ -368,12 +368,12 @@ These are invariants, not preferences — the tests enforce most of them.
   to the kind's SF Symbol on a disc in the kind's `Theme` hue, so colour coding survives as the
   default. Picked in the editors and applied **on save**, like membership.
 - **A link to an entity is an `EntityLink`, not a `Pill`.** Avatar plus name, underlined on hover.
-  A pill's tinted capsule was both the affordance *and* the identification; a logo identifies
+  A pill's tinted capsule was both the affordance _and_ the identification; a logo identifies
   better, and two capsules per row crowded out the role beside them — which on a roster is what
   the pane is read for. `Pill` stays for what isn't an entity: relation labels, and the removable
   tokens in the editors.
 - **The filename is the identity.** `id` is the filename slug and the only link target;
-  frontmatter `id` disagreeing with the filename loses. Renaming therefore *must* go through
+  frontmatter `id` disagreeing with the filename loses. Renaming therefore _must_ go through
   `VaultWriter.rename`, which rewrites every inbound `[[id]]` and moves the logo with the
   markdown — including when `resolvePlaceholder` turns `_head-of-aa` into a real slug.
 - **Dates are `CalendarDay`, never `Date`.** Yams serializes `Date` as a UTC timestamp, which
@@ -403,6 +403,7 @@ These are invariants, not preferences — the tests enforce most of them.
   `Scripts/check-build-parity.sh` fails if that becomes a literal again.
 
 <!-- rtk-instructions v2 -->
+
 # RTK (Rust Token Killer) - Token-Optimized Commands
 
 ## Golden Rule
@@ -410,6 +411,7 @@ These are invariants, not preferences — the tests enforce most of them.
 **Always prefix commands with `rtk`**. If RTK has a dedicated filter, it uses it. If not, it passes through unchanged. This means RTK is always safe to use.
 
 **Important**: Even in command chains with `&&`, use `rtk`:
+
 ```bash
 # ❌ Wrong
 git add . && git commit -m "msg" && git push
@@ -421,6 +423,7 @@ rtk git add . && rtk git commit -m "msg" && rtk git push
 ## RTK Commands by Workflow
 
 ### Build & Compile (80-90% savings)
+
 ```bash
 rtk cargo build         # Cargo build output
 rtk cargo check         # Cargo check output
@@ -432,6 +435,7 @@ rtk next build          # Next.js build with route metrics (87%)
 ```
 
 ### Test (60-99% savings)
+
 ```bash
 rtk cargo test          # Cargo test failures only (90%)
 rtk go test             # Go test failures only (90%)
@@ -445,6 +449,7 @@ rtk test <cmd>          # Generic test wrapper - failures only
 ```
 
 ### Git (59-80% savings)
+
 ```bash
 rtk git status          # Compact status
 rtk git log             # Compact log (works with all git flags)
@@ -463,6 +468,7 @@ rtk git worktree        # Compact worktree
 Note: Git passthrough works for ALL subcommands, even those not explicitly listed.
 
 ### GitHub (26-87% savings)
+
 ```bash
 rtk gh pr view <num>    # Compact PR view (87%)
 rtk gh pr checks        # Compact PR checks (79%)
@@ -472,6 +478,7 @@ rtk gh api              # Compact API responses (26%)
 ```
 
 ### JavaScript/TypeScript Tooling (70-90% savings)
+
 ```bash
 rtk pnpm list           # Compact dependency tree (70%)
 rtk pnpm outdated       # Compact outdated packages (80%)
@@ -483,6 +490,7 @@ rtk uv run <cmd>        # Compact uv project command output
 ```
 
 ### Files & Search (60-75% savings)
+
 ```bash
 rtk ls <path>           # Tree format, compact (65%)
 rtk read <file>         # Code reading with filtering (60%)
@@ -491,6 +499,7 @@ rtk find <pattern>      # Find grouped by directory (70%)
 ```
 
 ### Analysis & Debug (70-90% savings)
+
 ```bash
 rtk err <cmd>           # Filter errors only from any command
 rtk log <file>          # Deduplicated logs with counts
@@ -502,6 +511,7 @@ rtk diff                # Ultra-compact diffs
 ```
 
 ### Infrastructure (85% savings)
+
 ```bash
 rtk docker ps           # Compact container list
 rtk docker images       # Compact image list
@@ -511,12 +521,14 @@ rtk kubectl logs        # Deduplicated pod logs
 ```
 
 ### Network (65-70% savings)
+
 ```bash
 rtk curl <url>          # Compact HTTP responses (70%)
 rtk wget <url>          # Compact download output (65%)
 ```
 
 ### Meta Commands
+
 ```bash
 rtk gain                # View token savings statistics
 rtk gain --history      # View command history with savings
@@ -528,16 +540,17 @@ rtk init --global       # Add RTK to ~/.claude/CLAUDE.md
 
 ## Token Savings Overview
 
-| Category | Commands | Typical Savings |
-|----------|----------|-----------------|
-| Tests | vitest, playwright, cargo test | 90-99% |
-| Build | next, tsc, lint, prettier | 70-87% |
-| Git | status, log, diff, add, commit | 59-80% |
-| GitHub | gh pr, gh run, gh issue | 26-87% |
-| Package Managers | pnpm, npm, npx | 70-90% |
-| Files | ls, read, grep, find | 60-75% |
-| Infrastructure | docker, kubectl | 85% |
-| Network | curl, wget | 65-70% |
+| Category         | Commands                       | Typical Savings |
+| ---------------- | ------------------------------ | --------------- |
+| Tests            | vitest, playwright, cargo test | 90-99%          |
+| Build            | next, tsc, lint, prettier      | 70-87%          |
+| Git              | status, log, diff, add, commit | 59-80%          |
+| GitHub           | gh pr, gh run, gh issue        | 26-87%          |
+| Package Managers | pnpm, npm, npx                 | 70-90%          |
+| Files            | ls, read, grep, find           | 60-75%          |
+| Infrastructure   | docker, kubectl                | 85%             |
+| Network          | curl, wget                     | 65-70%          |
 
 Overall average: **60-90% token reduction** on common development operations.
+
 <!-- /rtk-instructions -->
