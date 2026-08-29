@@ -1,0 +1,161 @@
+/*
+ * Every colour, radius, spacing and font size in the app is one of these. No component writes a
+ * literal — that rule is what let the whole palette move between light and dark without a single
+ * view branching on appearance.
+ *
+ * The values are Obsidian's own CSS variables, which is where the app's look came from.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* Surfaces */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f6f8;
+  --bg-surface: #ffffff;
+  --bg-hover: rgba(0, 0, 0, 0.05);
+  --bg-overlay: rgba(0, 0, 0, 0.28);
+
+  /* Text */
+  --text-normal: #1f2124;
+  --text-muted: #5c5f66;
+  --text-faint: #8a8f98;
+
+  /* Accent — purple means "selected", everywhere and only. */
+  --accent: #7c5ce0;
+  --accent-hover: #6a49d4;
+  --accent-contrast: #ffffff;
+
+  /* Lines */
+  --border: #e3e5e8;
+  --border-strong: #c9ccd1;
+
+  /* One fixed hue per kind, so a colour identifies a thing before its label is read. */
+  --person: #7c5ce0;
+  --organization: #2f7fd1;
+  --project: #c98a1e;
+  --placeholder: #9aa0a6;
+  --danger: #c8442f;
+
+  /*
+   * Which employer, inside the two graphs. Purple is deliberately absent: a cluster that looked
+   * like the selection accent would be reading as a lie.
+   */
+  --cluster-0: #2f7fd1;
+  --cluster-1: #1f9b8e;
+  --cluster-2: #c98a1e;
+  --cluster-3: #cf5573;
+  --cluster-4: #7f9a2e;
+  --cluster-5: #b055b0;
+  --cluster-6: #b26b45;
+  --cluster-none: #9aa0a6;
+
+  --radius-small: 4px;
+  --radius-medium: 6px;
+  --radius-large: 10px;
+
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+
+  --hairline: 1px;
+
+  --font-title: 600 22px/1.25 var(--font-family);
+  --font-heading: 600 15px/1.35 var(--font-family);
+  --font-body: 400 13px/1.5 var(--font-family);
+  --font-caption: 400 11px/1.4 var(--font-family);
+  --font-section: 600 10px/1.4 var(--font-family);
+  --font-query: 400 16px/1.4 var(--font-family);
+  --font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif;
+
+  --avatar-row: 20px;
+  --avatar-table: 28px;
+  --avatar-header: 40px;
+  --avatar-card: 34px;
+  --avatar-card-member: 26px;
+  --avatar-well: 64px;
+
+  --width-sidebar: 260px;
+  --width-board-card: 260px;
+  --width-roster-role: 150px;
+  --width-roster-employer: 190px;
+  --height-details-max: 340px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-primary: #1e1e1e;
+    --bg-secondary: #262626;
+    --bg-surface: #2a2a2a;
+    --bg-hover: rgba(255, 255, 255, 0.07);
+    --bg-overlay: rgba(0, 0, 0, 0.5);
+
+    --text-normal: #dcddde;
+    --text-muted: #999da3;
+    --text-faint: #6e7176;
+
+    --accent: #8b6cef;
+    --accent-hover: #9d83f2;
+
+    --border: #333333;
+    --border-strong: #4a4a4a;
+
+    --person: #8b6cef;
+    --organization: #4d97e0;
+    --project: #d9a441;
+    --placeholder: #7a8087;
+    --danger: #e06a55;
+
+    --cluster-0: #4d97e0;
+    --cluster-1: #33b3a4;
+    --cluster-2: #d9a441;
+    --cluster-3: #e0748e;
+    --cluster-4: #9cb844;
+    --cluster-5: #c86fc8;
+    --cluster-6: #cb845c;
+    --cluster-none: #7a8087;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-normal);
+  font: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* A control that does something shows a hand, and one that does not, does not. */
+button:not(:disabled),
+[role='button']:not([aria-disabled='true']) {
+  cursor: pointer;
+}
+
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

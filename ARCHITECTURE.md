@@ -1,68 +1,77 @@
 # Architecture
 
-This document explains how maillage is actually built at runtime: the model layer, the
-vault that stores everything as markdown, `VaultStore` as the single writer, the five
-center-pane views and the layout algorithms behind the two graphs, and the meeting-recording
-pipeline that turns raw audio into a transcript and summary on-device via MLX.
+This document explains how maillage is actually built at runtime: the four layers, the codec that
+turns a markdown file into a value and back, the server that owns the vault, and the layout
+algorithms behind the two graphs.
 
-It does **not** cover build systems, CI, releasing, the vault file format, or the app's
-invariant rules. Those are documented exhaustively in [CLAUDE.md](CLAUDE.md), and this doc
-links out to it rather than repeating it. Read that first if you need to build or ship the
-app; read this one to understand how the code that runs is put together.
+It does **not** cover the build, CI, releasing, the vault file format, or the app's invariant
+rules. Those are documented exhaustively in [CLAUDE.md](CLAUDE.md), and this doc links out to it
+rather than repeating it. Read that first if you need to run or ship the app; read this one to
+understand how the code that runs is put together.
 
 ## Layer map
 
 ```
- Views        RootView, SidebarView, CenterPane
-                        |
-                        |  read / write
-                        v
- Store        VaultStore (single writer)      MeetingRecorder (owned by RootView,
-                        ^                        its own state machine)
-                        |  read / write               |  starts
-                        |                             v
- Vault        VaultReader, VaultWriter,     Audio ->  AudioCaptureSession
-              FrontmatterCodec,                    -> speech-swift ASR
-              TranscriptCodec, ImageSquarer        -> mlx-swift-lm LLM (cleanup + summary)
-                        |                                    |
-                        v                                    |  writes transcript + summary
-              people/organizations/projects/                 |
-              meetings/*.md + assets/*.png    <---------------
-              (the vault folder on disk)         (back into VaultStore, above)
+  browser                                     │  node
+                                              │
+  Views          App, Sidebar, CenterPane     │
+  src/views/     EntityDetails, NetworkGraph  │
+                 panes, Editors, Palette      │
+                        │                     │
+                        │ read / mutate       │
+                        ▼                     │
+  Store          VaultProvider (context)      │
+  src/vault/     snapshot + derived indexes   │
+                        │                     │
+                        │ fetch               │
+                        ├─────────────────────┤
+                        │                     ▼
+  Transport      api.ts  ───── HTTP ─────►  server/index.ts
+                                              │
+                                              ▼
+                                            server/vault.ts
+                                            shared/frontmatter.ts
+                                              │
+                                              ▼
+                                            people/ organizations/ projects/
+                                            assets/**.png    (the folder on disk)
 ```
 
 Four layers, each with one job:
 
-- **Views** render whatever `VaultStore` currently holds and route every mutation back
-  through it. No view talks to the filesystem directly.
-- **Store** (`VaultStore`, `MeetingRecorder`) is the only thing that reads or writes the
-  vault. `VaultStore` is a single `@Observable @MainActor` object; `MeetingRecorder` is a
-  separate object for the same reason a database connection pool doesn't live inside a web
-  framework's router: a recording is a long-running process with its own state machine, not
-  a single atomic call.
-- **Vault** (`VaultReader`/`VaultWriter`/codecs) is where markdown-with-frontmatter becomes
-  Swift values and back, and where the atomic-write guarantee lives.
-- **Audio → Transcription → Summarization** is a pipeline that only exists while a meeting is
-  being recorded or just finished recording; it hands its output to `VaultStore` like anything
-  else and otherwise has no presence in the running app.
+- **Views** render whatever the store currently holds and route every mutation back through it.
+  No view calls `fetch` directly.
+- **Store** (`src/vault/store.tsx`) is the client's single source of truth: one `VaultSnapshot`,
+  the indexes derived from it, and every mutation.
+- **Transport** is a dozen typed `fetch` wrappers. Every mutating call answers with the _whole_
+  vault, freshly read, so the client can never hold a snapshot that disagrees with the disk.
+- **Vault** (`server/vault.ts` plus the codec in `shared/`) is where markdown-with-frontmatter
+  becomes values and back, and where the atomic-write guarantee lives. It is the only module in
+  the app that touches the filesystem.
 
-## Model layer
+The line down the middle is the interesting one. Everything that has to be _consistent_ — a
+rename that repoints thirty files, a delete that scrubs every reference, a roster diff — is on the
+server side of it: one function, one process. Everything that has to be _fast_ — sorting,
+grouping, laying out a graph — is on the browser side, recomputed from the snapshot. Nothing is
+cached in between, which is why there is no cache-invalidation code anywhere in this repo.
 
-`Sources/MaillageCore/Model/`
+## Shared layer
 
-Every entity conforms to `Entity: Identifiable, Hashable, Sendable`: an `id: EntityID`
-(a plain `String`, always equal to the vault filename stem), a `kind: EntityKind`, a
-`displayName`, and a `body: String` (the free markdown below the YAML frontmatter). `EntityKind`
-is `.person | .organization | .project | .meeting`, and carries per-kind UI facts: directory
-name, plural label, SF Symbol fallback, and whether the kind supports a logo (meetings don't).
-`AnyEntity` type-erases the four concrete types into one enum so the sidebar, command palette,
-and graphs can hold a mixed list.
+`shared/` — imported by both halves, so it holds no `document` and no `node:fs`.
 
-Cross-entity links are never nested objects. They're always a `Wikilink`, a single-field
-wrapper around an `EntityID` that encodes as `"[[id]]"` and decodes tolerantly (accepts a bare
-id, and strips Obsidian's `[[id|display]]` / `[[id#heading]]` suffixes down to just the target).
-`Wikilink.slugify` is the one place a display name becomes an id: fold diacritics and case,
-replace non-alphanumerics with single dashes, trim the ends.
+### The model
+
+Every entity is a plain object with a `kind` discriminant (`'person' | 'organization' |
+'project'`), an `id` that is always equal to the vault filename stem, a `body` holding the free
+markdown below the frontmatter, and its own fields. `AnyEntity` is the union and TypeScript
+narrows it on `kind`, so there is no type-erasure wrapper anywhere.
+
+Cross-entity links are never nested objects and never wrapper types: an `organization` field is
+just an `EntityID`, and the `[[…]]` syntax exists only inside the codec. `parseWikilink` decodes
+tolerantly — it accepts a bare id and strips Obsidian's `[[id|display]]` and `[[id#heading]]`
+forms down to the target — while only the bare `[[id]]` is ever written. `slugify` is the one
+place a display name becomes an id: fold diacritics and case, collapse non-alphanumerics to single
+dashes, trim the ends.
 
 ```
 STORED (written to a file)
@@ -70,419 +79,196 @@ STORED (written to a file)
   Person   --projects: ProjectMembership----------> Project
   Person   --relations: Relation, one-way---------> Person
   Project  --organization------------------------> Organization
-  Meeting  --organization, project, attendees------> Organization, Project, Person
-             (read-only: Meeting reads these, nothing points back at a Meeting)
 
-DERIVED (computed in memory at load time, never persisted)
+DERIVED (computed in memory, never persisted)
   Organization <-- members -------- scans every Person.organization
   Project      <-- participants --- scans every Person.projects
   Person       <-- backlinks ------ inverts every Person.relations
 ```
 
-The stored rows are what's actually written to a file; the derived rows are computed in
-memory at load time and never persisted. This is deliberate throughout: **membership and
-relations live
-on exactly one side of the link**, and the other side's view of them is always derived:
-`VaultStore.rebuildBacklinks()` inverts `Relation`s into `Backlink`s, `members(ofOrganization:)`
-and `participants(ofProject:)` scan every person rather than reading a stored roster. Nothing
-about a meeting is ever pointed *at*: a meeting reads a person/org/project's identity, but
-deleting or renaming one of those has to reach into every meeting file to fix it up (see
-`VaultWriter.rename` below), because there's no inverse index to walk.
+**Membership and relations live on exactly one side of the link**, and the other side's view of
+them is always derived. That is not an optimisation. It is the reason a fact about Marie is only
+ever in `people/marie-dupont.md`, and so can never be half-updated.
 
-The four concrete types:
+`CalendarDay` is a `'YYYY-MM-DD'` string rather than a `Date`, because a `Date` is a UTC instant
+and serializing one shifts the calendar day backward for anyone east of UTC. String compare is
+also the correct chronological compare for that format, so ordering needs no code at all.
 
-| Type | Frontmatter fields | Notable quirks |
-|---|---|---|
-| `Person` | `id, type, firstname, lastname, email, role, placeholder, descriptor, organization, projects, relations, created` | `organization` is singular; a retired plural `organizations` key still decodes (first element wins) so old vaults load, but only the singular form is ever written back; a file migrates forward the next time it's saved. `displayName` falls back to `descriptor` (for an unresolved placeholder), then to the raw `id`. |
-| `Organization` | `id, type, name, domain, created` | No membership field; see the derived-backlinks note above. |
-| `Project` | `id, type, name, status, organization, created` | `status` is `.active \| .paused \| .done`. Same singular/legacy-plural `organization` quirk as `Person`. No roster field; derived the same way. |
-| `Meeting` | `id, type, title, date, duration, language, organization, project, attendees, created` | `attendees` is a flat, hand-maintained list; there is no speaker identification anywhere in the app (see below). `duration` and `language` are `nil` until transcription finishes. `body` holds a `## Summary` block (opaque LLM markdown) followed by a `## Transcript` block (owned by `TranscriptCodec`). |
+### The codec
 
-`ProjectMembership` (`to: Wikilink`, `role: String?`) has hand-written `Codable` that accepts
-either a bare `"[[project-id]]"` or a `{to, role}` mapping, and collapses back to the bare form
-on encode whenever `role` is empty, so an untouched membership stays byte-identical across
-saves, and adding a role is the only thing that ever expands a file's YAML. `Relation`
-(`to: Wikilink`, `label: String`) is stored only on the source person; `Backlink` is its
-purely-in-memory inverse (not `Codable`; it's never written anywhere).
+`shared/frontmatter.ts` is the whole `---\nyaml\n---\nbody` format in one place, and the one module
+in this repo with a genuinely hard requirement: **decode then encode must reproduce the file byte
+for byte.** A vault is a git repository. A save that re-quoted a scalar or re-indented a list would
+put a diff on every file it touched, forever.
 
-`CalendarDay` (`year, month, day`) exists instead of `Date` because Yams serializes a bare
-`Date` as a UTC timestamp, which shifts the calendar day backward for anyone east of UTC.
-Decode tries a quoted string first, falls back to reinterpreting a bare-YAML `Date` in UTC to
-recover the intended day; encode always writes `'yyyy-MM-dd'`.
+Holding to that against the files a vault already contains took three decisions, all tested:
 
-**A `Speaker`/`Voiceprint` model existed for one commit and was fully removed.** All that
-survives is backward-compatibility parsing in `TranscriptCodec`: a transcript line written
-while the app briefly diarized speakers may carry a stale `#M2` or `#M2:person-id` tag after
-its timestamp, and `parseLine` recognizes and discards it. Nothing parses it into a value, and
-nothing ever writes one back out. `TranscriptSegment` (the in-memory unit both the ASR pipeline
-and `TranscriptCodec` deal in) has only `offsetSeconds` and `text`, by design.
+- `indentSeq: false` — sequences sit flush with their key, not indented under it.
+- `lineWidth: 0` — a long list of wikilinks is never folded mid-array.
+- An explicit quoting pass. A wikilink opens with `[` so it _must_ be quoted, and `yaml` would
+  reach for double quotes; a `YYYY-MM-DD` day needs no quotes at all under YAML 1.2 and `yaml`
+  would emit it bare — but a bare date is a timestamp to any reader still on YAML 1.1, which is
+  exactly the ambiguity `CalendarDay` exists to avoid. Both are pinned to single quotes by walking
+  the document and setting `Scalar.QUOTE_SINGLE`, rather than hoping a heuristic agrees.
 
-## Vault layer
+Key order comes from construction order, so `frontmatterOf` reads as the on-disk key order.
+`ProjectMembership` encodes back to a bare `'[[id]]'` whenever its role is empty, so adding a role
+is the only thing that ever expands a file's YAML.
 
-`Sources/MaillageCore/Vault/`
+`splitFrontmatter` returns the body trimmed, and `joinFrontmatter` always writes exactly one blank
+line after the closing fence and one newline at the end — the shape existing vault files already
+have, which is why they round-trip unchanged rather than gaining or losing a line on first save.
 
-`VaultLocation` wraps a single root folder (default `~/Documents/Maillage`) and computes every
-path anyone else needs: `people|organizations|projects|meetings/<id>.md`,
-`assets/<kind>/<id>.png` (partitioned by kind, since an id is only unique *within* a kind),
-`.maillage/recordings/<meeting-id>/` (created only once a recording starts, cleaned up once its
-transcript is written), and `.maillage/prompts/<name>.md` (seeded lazily on first use, not at
-vault creation).
+## Server
 
-`FrontmatterCodec` is the whole `---\nyaml\n---\nbody` format in one place: `split` finds the
-fences and returns `(yaml, body)` such that `body` round-trips byte-for-byte; `decode` runs
-`Yams.YAMLDecoder` over the yaml half; `encode` runs `Yams.YAMLEncoder` with `sortKeys = false`
-(preserves each type's declared key order, so saves diff cleanly) and `width = -1` (stops
-libyaml line-wrapping a long list of wikilinks mid-array).
+`readVault` walks each kind's directory, decodes every file, and — the identity rule made concrete
+— **overwrites whatever `id:` the frontmatter claims with the actual filename stem**. A parse
+failure becomes a `VaultLoadIssue` and everything else still loads: one bad file never takes down
+the vault. Logo ids come from scanning `assets/`, so a logo's presence on disk _is_ the fact and
+there is no field that can point at a file that is gone.
 
-`TranscriptCodec` does the same job one level down, for the `## Transcript` section of a
-`Meeting.body`: `split` treats everything above the heading as an opaque `preamble` (the
-LLM-written summary) and parses everything below line-by-line into `[TranscriptSegment]`;
-`join` rebuilds it, omitting the heading entirely when there are no segments yet. Its
-`formatTimestamp`/`parseTimestamp` (`MM:SS` below an hour, `H:MM:SS` at or above) are shared
-with `Meeting.formattedDuration`, so the two can never disagree on units.
+Everything written goes through one primitive: write the bytes to a same-directory temp file, then
+`rename` it into place. Same directory means the rename is atomic, so a crash mid-save leaves the
+destination wholly old or wholly new, never half written. Entity files and PNGs alike.
 
-`VaultReader.load()` walks each `EntityKind`'s directory, decodes every file, and, in the
-identity rule made concrete, **overwrites whatever `id:` the frontmatter claims with the
-actual filename stem**. A parse failure becomes a `VaultLoadIssue` (surfaced in the sidebar)
-rather than aborting the whole load; one bad file never takes down the vault.
+Three operations touch more than their own file, and are the reason the server exists at all
+rather than the browser writing through a thin proxy:
 
-`VaultWriter` is where every mutation lands, and everything it writes (a `.md` entity file, a
-`.png` logo, a `.maillage/prompts/*.md` template) goes through the same primitive,
-`writeAtomically(_:to:)`: write the bytes to a same-directory temp file
-(`.<filename>.tmp-<uuid>`) via `Data.write(options: .atomic)`, then swap it into place with
-`FileManager.replaceItemAt` (or a plain `moveItem` if nothing exists at the destination yet).
-A crash or force-quit mid-save can therefore never leave a half-written file: the destination
-is always either wholly the old version or wholly the new one.
+- **`renameEntity`** rejects a target that already exists, re-encodes the entity under the new id,
+  deletes the old file, moves the logo across, then walks every person rewriting `relations[].to`,
+  `organization` and `projects[].to`, and every project rewriting `organization`. Renaming is the
+  one operation that has to repair every inbound reference, because `id` is the only link target
+  there is.
+- **`deleteEntity`** does the same walk in reverse: the file and its logo go, then every relation,
+  membership, employer and project owner pointing at it is scrubbed. No soft delete.
+- **`setParticipants`** is a diff, not a replace. Given the _entire_ intended roster it adds a
+  membership for anyone new, updates a role only if it actually changed, removes the membership for
+  anyone dropped — and writes only the people whose entry differs, compared by re-encoding.
 
-`VaultWriter.rename(kind:from:to:)` is the most involved single method in the vault layer,
-because renaming is the one operation that has to repair every inbound reference, not just the
-renamed file itself:
+`resolvePlaceholder` composes two of these: fill in a placeholder's real identity, then rename to
+the slug that identity implies, so "meeting the head of AA" ends as one coherent file move rather
+than a stale underscore-prefixed filename sitting beside a real name.
 
-1. Reject if `newID` already exists or `oldID` doesn't.
-2. Re-encode the entity under its new id, write it, delete the old file.
-3. Move the logo file across (clobbering any stray debris already at the destination).
-4. Walk every person and rewrite matching `relations[].to.id` / `organization?.id` /
-   `projects[].to.id`, whichever applies to the renamed kind.
-5. `repointMeetings` walks every meeting and rewrites `attendees[].id` / `organization?.id` /
-   `project?.id` the same way (split into its own method to stay under the project's
-   cyclomatic-complexity budget). Meetings need no *inbound* repointing of their own, since
-   nothing points at a meeting.
+`assertSafeID` is the trust boundary. Ids arrive from the client, so a separator or a `..` here
+would be a path traversal out of the vault.
 
-`ImageSquarer` normalizes every logo to a 512×512 PNG regardless of source format or aspect
-ratio: load via `NSImage(contentsOf:)`, draw into a 512×512 `NSBitmapImageRep` with an explicit
-`.size` (avoiding an implicit Retina scale-factor mismatch), **center-crop and scale in one
-`draw` call** rather than two passes, so a wide wordmark loses its ends but nothing is ever
-double-resampled. `NSImage`/ImageIO alone cover PNG/JPEG/HEIC/WebP/AVIF/TIFF/GIF/BMP/ICO/SVG;
-no third-party image library is in the dependency table for a reason.
+`server/index.ts` is a path switch over `node:http`. `/api/*` is the vault;
+`/assets/<dir>/<id>.png` serves a logo straight off disk; everything else is `dist/`, or Vite in
+middleware mode when `MAILLAGE_DEV` is set — which is why development and production are the same
+one process on the same one port, with no proxy and no CORS. It binds to `127.0.0.1` and
+authenticates nothing, because nothing else can reach it.
 
-## Store layer
+## Client
 
-`Sources/MaillageCore/Store/`
+`src/vault/store.tsx` holds the snapshot, the backlink index, the employer grouping and a set per
+kind of which ids have logos, all `useMemo`'d off the snapshot. Every mutation runs through one
+`apply` helper: call the API, take the fresh snapshot, or surface why it did not happen.
 
-`VaultStore` is a `@MainActor @Observable` object and the only thing in the app that calls
-`VaultReader`/`VaultWriter`. Its published state is deliberately small: `snapshot`
-(the four `[EntityID: T]` dictionaries `VaultReader` produced), `backlinkIndex` and `logoIDs`
-(both derived, rebuilt from `snapshot` and the `assets/` folder respectively, never stored on
-disk), and `lastError` for UI display. A private `logoImages` cache holds decoded `NSImage`s
-but is deliberately kept *outside* `@Observable` storage: filling it during a view's render
-body would otherwise risk a SwiftUI re-render loop; views instead watch `logoIDs`, which only
-changes when a logo is actually added or removed.
+`src/vault/derived.ts` is every query the views make, as pure functions — `allPeople`,
+`membersOfOrganization`, `participantsOfProject`, `peopleGroupedByOrganization`,
+`usedRelationLabels`, and the rest. Nothing here is cached, and the sort orders are load-bearing:
+a group's index in `peopleGroupedByOrganization` **is** its cluster colour, so a person's hue means
+the same thing in the network graph as it does in the bubbles.
 
-Every read the views do goes through a small, purely-derived query surface:
-`allPeople/allOrganizations/allProjects/allMeetings`, `members(ofOrganization:)`,
-`participants(ofProject:)` (roster + role together, what `ProjectRosterView` reads directly),
-`peopleGroupedByOrganization()` (feeds the bubbles graph, unaffiliated people bucketed last),
-`meetings(withPerson:/inOrganization:/onProject:)`, and `usedRelationLabels`/`usedProjectRoles`
-(vocabulary for autocomplete, with no config file: just "whatever's already in the vault").
+`CenterPane` switches on the selection alone, with no mode picker, because each selection is a
+different question — see the table in [CLAUDE.md](CLAUDE.md). Selection itself is one `{kind, id}`
+reference living in `App`, mirrored into `location.hash`, so a reload and the browser's own back
+button both land where you were. It carries the kind because ids only collide _across_ kinds:
+`people/acme.md` and `projects/acme.md` can both exist.
 
-Every write goes through the same shape: build/mutate a value, call `writer.write(_:)`, store
-the result back into the matching `snapshot` dictionary, `rebuildBacklinks()`. The one method
-worth calling out specifically is `setParticipants(ofProject:to:)`, because it's a diff, not a
-replace: given the *entire* intended roster, it adds a `ProjectMembership` for anyone new,
-updates a role in place only if it actually changed, removes the membership for anyone dropped,
-and only the people whose entry actually changed get written to disk. `resolvePlaceholder`
-composes two of these primitives: it fills in a placeholder's real identity, then (if the
-resulting display name produces a different slug than the `_`-prefixed placeholder id) calls
-`renameEntity`, so "meeting the head of AA" ends with one coherent file move, not a stale
-underscore-prefixed filename sitting next to a real name.
+## The graphs
 
-`MeetingRecorder` is intentionally its own `@Observable` object, owned by `RootView` (not by
-`VaultStore`), because a recording outlives whatever sheet opened it and has a real state
-machine `VaultStore`'s call-and-return methods don't need:
+`src/graph/` is arithmetic, deliberately. There is no graph library in the stack table because a
+force layout settles somewhere slightly different on every load, and "Acme is the big one in the
+middle" has to stay true between loads to be worth reading. Every function here is pure and tested
+without a browser.
 
-```
-             start()              stop()             transcript written        summary written
-[idle] ─────────────────► [recording] ─────────► [transcribing] ─────────────► [summarising] ─────────► [done]
-   │                                                     │
-   │ capture failed to start                             │ both tracks failed
-   └─────────────────────────────────────────────────────┴───────────────────► [failed(message)]
-```
+### `geometry.ts`
 
-It never talks to `VaultReader`/`VaultWriter` directly: every state change is a
-`store.createMeeting`/`store.update(meeting)` call, same as any other part of the app.
+`ringRadii` computes how large a ring can be in a given pane, treating the margins reserved for
+labels as _caps_ (`min(desired, dimension × 0.18)`) rather than fixed reserves, so a narrow window
+shrinks its margins before it shrinks the ring below a floor. It returns two radii, not one: a pane
+is wider than it is tall, and a circle inscribed in a 16:9 pane leaves a third of the width empty
+on each side while crowding every label into the middle third.
 
-## Views layer
+`onEllipse` places a point with angle 0 straight up and increasing clockwise, so labels read around
+the ring the way numbers read around a clock face. `controlPoint` offsets a quadratic curve's
+control point perpendicular to its chord by a share of its length. `trimmed` shortens an edge so it
+meets a node's rim rather than vanishing underneath it. `arrowhead` builds its triangle from the
+_curve's_ tangent at the tip, not the straight chord between the endpoints, so an arrowhead on a
+bowed edge actually points along the curve.
 
-`Sources/MaillageCore/Views/`
+### `network.ts` — traversal
 
-`RootView` hosts a `NavigationSplitView`: `SidebarView` on one side, `CenterPane` on the other.
-There's no third "detail" column. An earlier version had one, purely duplicating the subject's
-name beside the graph, so that metadata moved into the center pane's own collapsible header
-instead. `CenterPane` picks its content from what's selected, because each selection is a
-genuinely different question:
+`traverse(snapshot, rootID, depth)` walks the relation graph breadth-first, treating relations as
+**undirected** for reachability — knowing someone is mutual even when only one file says so — while
+each edge keeps its own direction. It returns each node's hop number and **every edge among the
+people reached**, siblings included.
 
-| Selection | View | Because |
-|---|---|---|
-| Nothing | `OrganizationBubblesView` | "How is the whole network organized by employer?" |
-| An organization | `OrganizationBoardView` | "What is this company working on, and who's on it?" |
-| A person | `EgoGraphView` | "Who does this person relate to?" |
-| A project | `ProjectRosterView` | "Who's staffed on this, and in what role?" |
-| A meeting | `MeetingView` | "What was said, and what was decided?" |
+That last part is what the old one-hop ego graph could not do. It drew only spokes, so two
+neighbours who knew each other looked exactly like two who did not, and a cluster, a triangle or a
+bridge between two parts of a network was invisible. Edges joining the same pair are numbered
+(`ordinal`, `siblings`) so the layout can bow them apart instead of stacking them.
 
-The two graphs (bubbles, ego) and the two lists (board, roster) are laid out, never simulated:
-a force-directed layout settles somewhere slightly different on every launch, and "Acme is the
-big circle in the middle" has to stay true between launches to be worth reading. `MeetingView`
-is the odd one out, scrolling a plain top-to-bottom column, since a conversation has no layout
-to preserve beyond the order things were said in.
+A dangling relation target — a `[[…]]` with no file — is not walked to. A self-relation produces
+neither a node nor an edge. Past `MAX_NODES` the traversal stops adding and reports how many it
+left out, because a network drawing stops being a drawing long before it stops being complete.
 
-### Layout algorithms
+### `egoLayout.ts` — concentric rings
 
-`GraphGeometry.swift` holds primitives shared by both graphs: `ringRadius(in:horizontal:
-vertical:floor:)` computes how large a ring can be in a given pane size, treating the margins
-reserved for labels as caps (`min(desired, dimension * 0.18)`) rather than fixed reserves, so a
-narrow window shrinks the margins before it shrinks the ring below `floor`. `onCircle(center:
-radius:angle:)` places a point with angle 0 straight up and increasing clockwise, so labels read
-around the ring the way numbers read around a clock face. `trimmed(from:to:gap:)` shortens an
-edge's endpoints by each node's `radius + gap` so lines touch the rim rather than vanishing
-under the node. `arrowhead(at:approaching:)` builds its triangle from the *curve's* tangent at
-the tip, not the straight chord between endpoints, so an arrowhead on a bowed edge actually
-points along the curve.
+1. The subject sits at the pane's centre.
+2. Each hop gets its own ring. The outermost lands on `ringRadii`, so **at depth 1 this reduces to
+   exactly the single ring the app has always drawn**. Inner rings are spaced from a floor of 45%
+   rather than from zero: dividing the radius evenly squeezes the first ring — usually the busiest
+   — into a third of the space while the outermost sits nearly empty.
+3. Within a ring, nodes are ordered by (employer cluster index, display name, id), so colleagues sit
+   adjacent and the order never changes between loads, then placed evenly at `2π·i/count`.
+4. Node radius falls off with hop, so how far out someone is reads without counting rings.
+5. Where more than one relation joins the same pair, each edge is bowed apart from its siblings by
+   `pairSpread × (ordinal − (count−1)/2) × 2`. The sign is flipped for an edge stored in the
+   reversed orientation: a perpendicular offset is measured from `from` towards `to`, so the two
+   halves of a mutual relation — written as a→b and b→a — would otherwise bow to the same side and
+   land back on top of each other. That was a real bug, and the tests caught it.
+6. Each edge's label sits at `t = 0.62` along its own curve, not at the midpoint. Every spoke's true
+   midpoint is the same distance from the subject, so at 0.5 the labels all land on one small circle
+   and pile onto each other.
 
-**`BubblePacking`** (`OrganizationBubblesView.swift`) turns `peopleGroupedByOrganization()`
-into circle positions:
+### `bubblePacking.ts` — the overview
 
-1. Each group's radius is `min(minRadius + 26·√(headcount − 1), maxRadius)`
-   (`minRadius = 44`, `maxRadius = 150`). Square-root growth ties *area*, not radius, to
-   headcount; doubling the radius would otherwise imply 4× the headcount.
-2. Groups are sorted biggest-first (ties broken by name), with the "no organization" bucket
-   always placed last regardless of size, so the single biggest circle claims the center.
-3. Each subsequent circle is placed by a **deterministic spiral sweep**: starting at a distance
-   just clearing the first-placed circle, sweep 90 angles around it; if none of them clear every
-   already-placed circle by `radius + other.radius + gap`, step the distance out by 3pt and
-   sweep again, up to the loosest possible packing (all circles in a line). No physics, no
-   relaxation, no randomness: identical input always produces an identical layout, which is
-   the whole point.
-4. The finished cluster of circles is fit to the pane: compute its bounding box, scale by
-   `min(availableWidth/boxWidth, availableHeight/boxHeight, 1.35)` (capped so a vault with one
-   company doesn't balloon to fill the window), and center it.
+1. Each group's radius is `min(44 + 26·√(headcount − 1), 150)`. Square-root growth ties _area_, not
+   radius, to headcount; doubling the radius would otherwise imply 4× the people when it is 4× the
+   ink.
+2. Groups are sorted biggest-first (ties by name), with the "no employer" bucket always placed last
+   regardless of size, so the largest actual company claims the centre and a bucket that is not a
+   company never becomes the subject of the picture.
+3. Each subsequent circle is placed by a **deterministic spiral sweep**: starting at a distance just
+   clearing the first-placed circle, sweep 90 angles; if none of them clear every already-placed
+   circle by `radius + other.radius + gap`, step the distance out by 3pt and sweep again. The
+   loosest possible packing is every circle in a line, so it always terminates. No physics, no
+   relaxation, no randomness: identical input always produces an identical layout, which is the
+   whole point.
+4. The finished cluster is fitted to the pane — bounding box, scale capped at 1.35 so a vault with
+   one company doesn't balloon to fill the window, centred.
 
-**`EgoLayout`** (`EgoGraphView.swift`) places one person's direct relations as spokes:
+## Interaction in the network view
 
-1. The subject sits fixed at the pane's center (`subjectRadius = 30`); the ring radius comes
-   from the same `ringRadius` helper (`horizontal = 140, vertical = 84, floor = 90`).
-2. Every neighbour reachable by *any* relation (inbound or outbound) is deduped to one node,
-   then sorted by employer-cluster position, then name, then id, so colleagues cluster
-   together and the order never changes between launches.
-3. Nodes are placed evenly around the ring at `angle = 2π·i/count` (`neighbourRadius = 24`).
-4. Where more than one relation connects the same pair (a mutual relation, or several labeled
-   relations between the same two people), each edge's curve is bowed apart from its siblings:
-   `bow = pairSpread · (ordinal − (count−1)/2) · 2` (`pairSpread = 0.16`), and the control point
-   for the curve is the midpoint offset perpendicular to the straight line by `bow ×
-   lineLength`. Each edge's label sits at half that same offset, so it reads near its curve
-   without sitting directly on top of it.
+Depth changes the graph. Everything else — the relation-label legend, the employer legend, the
+search box, hover — changes only what is **lit**, never where anything sits. Moving the picture
+while someone is reading it costs them the picture.
 
-### Design system
+Labels are shown for every edge below a small threshold and, above it, only for what is lit, since
+past a dozen edges a full set of labels is a wall of overlapping words rather than information.
 
-`Design/Theme.swift` is a namespace of tokens ported from Obsidian's own CSS variables. No
-view is allowed to write a literal color, radius, spacing, or font size. Colors resolve via
-`adaptive(dark:light:)`, an `NSColor` dynamic provider, so light/dark never branches at the call
-site. Each `EntityKind` gets a fixed hue (person purple, organization blue, project amber,
-meeting green, chosen as the one hue free of the other three); a separate seven-color
-`clusterPalette` (used only to mean "which employer" inside the two graphs) deliberately
-excludes purple, since a cluster that looked the same as the selection accent would read as a
-lie.
+An edge is drawn dashed when it points _at_ the current subject, meaning the relation is written on
+the other person's file. That is not decoration: it says which file to open in order to change it.
 
-`Design/Components/` holds the reusable primitives, one file per primitive, two of which encode
-real gotchas worth knowing before touching a view:
-
-- **`clickableCursor()`** exists because AppKit only swaps the pointer over a view with a
-  tracking area, and `.buttonStyle(.plain)` installs none: every plain button in the app would
-  otherwise show a plain arrow. It's applied by every clickable control in `Design/Components/`
-  by construction, and explicitly passed `false` on a control that's only *sometimes*
-  clickable (a disabled button, an action-less `Pill`), since a hand cursor over a dead control
-  promises a click that does nothing.
-- **Modifier ordering around `.position(...)`**: `.position()` returns a view sized to its
-  *entire parent*, drawing its child at one point inside that full-size view. Attaching
-  `.onHover`/`.onTapGesture`/`.contentShape` *after* `.position()` therefore claims the whole
-  pane, not just the visual node, and because the last view in a `ZStack` wins that claim,
-  every node except the one drawn last would go dead. Both graphs attach every interactive
-  modifier *before* `.position()` for exactly this reason.
-
-`EntityAvatar` is the one component standing for an entity everywhere: a stored logo if one
-exists, else a hollow outline for an unresolved placeholder, else the kind's SF Symbol on a
-disc in the kind's hue. `EntityLink` (avatar + name, underlined on hover) is what a `Pill` used
-to be for a person before logos existed. `Pill` itself is now reserved for things that aren't
-entities: relation labels, and removable tokens in the editors.
-
-## Meeting recording & the MLX pipeline
-
-`Sources/MaillageCore/Audio/`, plus the ASR/LLM code alongside `Store/MeetingRecorder.swift`.
-
-This is the newest and least externally documented part of the app, so it gets the most detail
-here. The short version: **capture is real-time, transcription and summarization are batch**:
-nothing about turning audio into a transcript happens live, despite the live-sample plumbing
-described below existing in the capture layer.
-
-### Capture
-
-Two independent recorders converge on the same format (16kHz mono 16-bit PCM, via
-`PCMConverter`) and are coordinated by `AudioCaptureSession`:
-
-- **`SystemAudioTap`** wraps a Core Audio process tap: `CATapDescription
-  (monoGlobalTapButExcludeProcesses:)` excludes maillage's own process (resolved via
-  `kAudioHardwarePropertyTranslatePIDToProcessObject`) so the app never records its own output,
-  wrapped in a private aggregate device and read via an `AudioDeviceCreateIOProcIDWithBlock`
-  callback on Core Audio's real-time thread.
-- **`MicrophoneRecorder`** is the ordinary half: `AVAudioEngine.inputNode.installTap(onBus:)`.
-- **`AudioCaptureSession.start(microphoneURL:systemAudioURL:)`** starts system audio *first*:
-  the tap/aggregate-device setup is measurably slower to spin up than `AVAudioEngine.start()`,
-  so starting the slow one first keeps the two tracks' true start times close together. If
-  either half fails, the other is torn back down, so a recording never silently captures only
-  one track.
-- Both recorders also feed an `AsyncStream<[Float]>` of raw samples, consumed today only by
-  `RecordingIndicatorPanel`'s live spectrogram HUD, a floating, non-activating `NSPanel` so the
-  "is it actually capturing" indicator stays visible even when maillage isn't the frontmost
-  window. This plumbing was originally built for a live streaming-transcription design that was
-  later reverted (see History below); it survives only because the spectrogram still needs a
-  live feed, and transcription itself no longer consumes it.
-
-Audio lands at `.maillage/recordings/<meeting-id>/{mic,system}.wav` and is deleted as soon as
-its transcript is safely written (see step 5 below); a crash between those two moments is
-caught on the next app launch by `VaultStore.sweepOrphanedRecordings()`, which deletes any
-leftover recording directory whose meeting already has a non-empty transcript.
-
-### Transcription: speech-swift (Qwen3-ASR + Silero VAD)
-
-`speech-swift`'s `StreamingASR` (Qwen3-ASR, 0.6B parameters, 4-bit MLX, guided by Silero VAD)
-runs **once per finished WAV file, after Stop**, not live, despite the API's name. Silero VAD
-walks the whole file first; only voiced spans reach the ASR model, and any continuous voiced
-span longer than 10 seconds is force-split. Language is passed as `nil` on every call, which
-makes Qwen3-ASR auto-detect language *per VAD-bounded segment*, finer-grained than "detect
-once for the whole meeting," and the mechanism this pipeline actually relies on for
-code-switching support. There is no confidence score to gate hallucinated output on (the
-model's own `TranscriptionResult.confidence` is always `0.0`), so the VAD gate is the only
-defense against no-speech hallucination. The source code itself flags this as unverified
-against real recorded audio, not assumed safe. Both models are bundled into the app at build
-time (`Scripts/fetch-asr-model.sh`, from `aufklarer/Qwen3-ASR-0.6B-MLX-4bit` and
-`aufklarer/Silero-VAD-v6.2.1-MLX`), never fetched at runtime.
-
-### Cleanup and summarization: mlx-swift-lm (Qwen2.5-1.5B-Instruct)
-
-Both tracks' transcripts are merged by timestamp (`TranscriptMerger`, stable sort,
-mic-before-system on a tie, no speaker labels, just chronological order), then one shared
-`Qwen2.5-1.5B-Instruct` model (loaded once via `mlx-swift-lm`, and used strictly sequentially
-for the two passes below, since loading it twice would just re-read ~840MB of weights for no
-benefit) does two separate jobs:
-
-- **Cleanup** (`LocalLLMTranscriptCleaner`) is map-only over 25-segment windows: each window is
-  re-prompted to strip hallucinated/nonsensical fragments while preserving wording and the
-  original `(mm:ss) text` line format. A plausibility check rejects a response that lost more
-  than half its segments or produced a timestamp past the window's own last one, treating that
-  as "the model did something else entirely," and falls back to the **original, uncleaned**
-  segments for that window. Cleanup can degrade; it can never destroy data.
-- **Summarization** (`LocalLLMSummarizer`) is true map-reduce over 50-segment windows: each
-  window gets its own partial markdown summary, and if there's more than one window, a second
-  LLM call reduces the partials into one final summary. Unlike the original design's
-  `@Generable struct MeetingSummary` (a `FoundationModels` structured-output type), this model
-  just writes markdown text directly with no schema validation at all. MLX has no equivalent
-  guarantee, and the app leans on `MarkdownUI` to render whatever comes back rather than parsing
-  it into fields. A window that throws is dropped; only every window failing surfaces as an
-  error, since there's no sensible "unchanged" fallback for a summary the way there is for
-  cleanup.
-
-Both prompts (`.maillage/prompts/cleanup.md`, `.maillage/prompts/summary.md`) are ordinary,
-vault-editable markdown files, seeded from a built-in default the first time a meeting needs
-one, so tuning either prompt is a text edit, not a code change. `swift-transformers`'s actual
-role in all of this is narrow: `AutoTokenizer.from(modelFolder:)` loads the tokenizer straight
-off the bundled model directory, entirely locally. Nothing about it talks to the Hugging Face
-Hub despite the loader macro's name.
-
-### End-to-end flow
-
-```
- 1. User            -> MeetingRecorder      : start(title, org, project, attendees)
- 2. MeetingRecorder -> VaultStore           : createMeeting
- 3. MeetingRecorder -> AudioCaptureSession  : start(mic, systemAudio)
-                                               state = recording
-
- 4. User            -> MeetingRecorder      : stop()
- 5. MeetingRecorder -> AudioCaptureSession  : stop()  ->  elapsed duration
- 6. MeetingRecorder -> VaultStore           : update(meeting.duration)
-                                               state = transcribing (stop() returns
-                                               immediately; the rest runs in the background)
-
- 7. MeetingRecorder -> speech-swift ASR     : transcribe(mic.wav)      \  concurrent
-    MeetingRecorder -> speech-swift ASR     : transcribe(system.wav)   /
-                                            <- segments, from one or both tracks
-                                               (only both tracks failing is fatal;
-                                                one failing degrades gracefully)
-
- 8. MeetingRecorder merges segments by timestamp
- 9. MeetingRecorder detects language (NLLanguageRecognizer, on the merged text)
-10. MeetingRecorder -> mlx-swift-lm         : clean(merged, language)
-                                            <- cleaned segments (or the original,
-                                               uncleaned segments, on failure)
-11. MeetingRecorder -> VaultStore           : write transcript into meeting.body
-12. MeetingRecorder deletes the recording directory
-                                               state = summarising
-
-13. MeetingRecorder -> mlx-swift-lm         : summarize(merged, language)
-                                            <- markdown summary
-14. MeetingRecorder -> VaultStore           : write summary preamble into meeting.body
-                                               state = done
-```
-
-Language detection runs on the merged **text**, once, after transcription: a departure from
-detecting language on raw audio before decoding, made possible because per-segment detection
-already happened inside the ASR step above.
-
-### History and open questions
-
-The pipeline arrived at its current shape after real churn, not by design from day one:
-WhisperKit + on-device `FoundationModels` summarization → add FluidAudio alongside WhisperKit →
-add a `Voiceprint` model and speaker tags → tap live PCM off both tracks (building toward a
-live pipeline) → fully replace WhisperKit with **live** FluidAudio transcription, diarization,
-and speaker resolution → and finally, in the commit at `HEAD`, rip all of that back out in
-favor of the **batch** `speech-swift` + `mlx-swift-lm` pipeline described above. No FluidAudio,
-WhisperKit, `Voiceprint`, or diarization code remains anywhere in the current source tree.
-
-Things worth a contributor's attention before relying on this pipeline further:
-
-- **No vocabulary or name-biasing mechanism exists.** The original design's plan to bias the
-  decoder with attendee/org/project names from the vault (so "Marie Dupont" transcribes
-  correctly) didn't survive the switch to Qwen3-ASR. Proper-noun accuracy depends entirely on
-  the raw model today.
-- **Hallucination and code-switching behavior are self-flagged as unverified** in
-  `LocalASRTranscriber`'s own comments: real-audio testing, not just unit tests, is still
-  needed to confirm both.
-- **`Package.swift`'s `.macOS(.v26)` floor is now an open question.** It was raised for
-  `FoundationModels`, which has since been removed entirely; whether anything else in the app
-  still needs macOS 26 has not been investigated.
-- **`TranscriptChunker.swift`'s doc comment references a `TokenTimingGrouper` type that no
-  longer exists** anywhere in the source tree, a leftover from the WhisperKit era that wasn't
-  cleaned up when the ASR backend changed.
-- **No speaker identification exists anywhere.** This was deliberate, not an oversight: it's
-  the ending state of the arc above. `Meeting.attendees` is a flat, hand-maintained list;
-  `TranscriptSegment` carries no speaker field; the transcript view groups lines into
-  paragraphs purely by silence gap. Attributing a line to "mic track" vs. "system track" was
-  considered and rejected as a guess dressed up as a fact.
+Pan and zoom are the SVG `viewBox` and about thirty lines. Clicking a node re-roots the graph on
+them and pushes a breadcrumb, so following a chain is exploration rather than losing your place.
 
 ## Where to go next
 
-- [CLAUDE.md](CLAUDE.md): build systems, CI pipeline, releasing, the vault file format, and
+- [CLAUDE.md](CLAUDE.md): running the app, the CI pipeline, releasing, the vault file format, and
   the invariant rules the test suite enforces.
-- [docs/superpowers/specs/2026-08-13-meeting-recording-design.md](docs/superpowers/specs/2026-08-13-meeting-recording-design.md)
-  is the original meeting-recording design. Treat it as **historical**: the shipped pipeline
-  diverged from it on several major points (WhisperKit → speech-swift, `FoundationModels` →
-  mlx-swift-lm, and the speaker-identification feature it assumed never shipped at all); see
-  History and open questions above.
+- The test suite is the other half of this document. `shared/frontmatter.test.ts` is the format
+  contract, `server/vault.test.ts` is the mutation contract, and `src/graph/graph.test.ts` is the
+  layout contract.

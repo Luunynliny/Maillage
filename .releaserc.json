@@ -2,24 +2,21 @@
   "branches": ["main"],
   "tagFormat": "v${version}",
   "plugins": [
-    "@semantic-release/commit-analyzer",
-    "@semantic-release/release-notes-generator",
     [
-      "@semantic-release/exec",
+      "@semantic-release/commit-analyzer",
       {
-        "generateNotesCmd": "./Scripts/release-appendix.sh",
-        "prepareCmd": "./Scripts/stamp-version.sh dist/Maillage.app ${nextRelease.version} && ./Scripts/make-dmg.sh dist/Maillage.app ${nextRelease.version}"
+        "preset": "conventionalcommits"
+      }
+    ],
+    [
+      "@semantic-release/release-notes-generator",
+      {
+        "preset": "conventionalcommits"
       }
     ],
     [
       "@semantic-release/github",
       {
-        "assets": [
-          {
-            "path": "dist/Maillage-*.dmg",
-            "label": "Maillage ${nextRelease.version} (macOS, universal)"
-          }
-        ],
         "successComment": false,
         "failComment": false
       }
