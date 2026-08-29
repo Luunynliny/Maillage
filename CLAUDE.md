@@ -129,6 +129,17 @@ The bump comes from the commit type: `fix:` → patch, `feat:` → minor, `feat!
 `refactor:`) releases **nothing** — which is correct, and also the most common reason a merge
 lands and no release appears.
 
+**`.releaserc.json` must keep `"preset": "conventionalcommits"` on both the analyzer and the
+notes generator.** semantic-release defaults to the `angular` preset, whose parser predates the
+`!` breaking-change shorthand — and it does not merely ignore the `!`, it fails to parse the
+header at all. So under the default, `feat!: …` is not a major release, and not a minor one
+either: it is **no release**, silently, on a merge that looked correct all the way through.
+`commitlint`'s `config-conventional` accepts `!` happily, so the two tools disagree without a
+word between them, and the gate that would have caught it is the one job that cannot run on the
+commit that matters. This bit exactly once, on the v1.0.0 PR. Keep
+`conventional-changelog-conventionalcommits` a direct devDependency for the same reason: it was
+present only as a hoisted transitive dependency, which npm is free to move.
+
 Preview any of this before merging with `npm run release:dry`.
 
 The repository settings this depends on are already set, and all three matter:
