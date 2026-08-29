@@ -3,28 +3,12 @@ import Testing
 
 @testable import MaillageCore
 
-/// Each test gets a throwaway vault directory under the system temp folder, matching
-/// ``VaultStoreTests``'s own helper — kept private to this file rather than shared, the same
-/// way ``EntityLogoTests`` has its own copy.
-@MainActor
-private func makeStore() throws -> (store: VaultStore, root: URL) {
-    let root = URL(fileURLWithPath: NSTemporaryDirectory())
-        .appendingPathComponent("maillage-meeting-tests-\(UUID().uuidString)", isDirectory: true)
-    let store = VaultStore(location: VaultLocation(root: root))
-    store.load()
-    return (store, root)
-}
-
-private func cleanUp(_ root: URL) {
-    try? FileManager.default.removeItem(at: root)
-}
-
 @MainActor
 @Suite("Vault store — meetings")
 struct VaultStoreMeetingTests {
     @Test("Creates a meeting, id-prefixed with its date so files sort chronologically")
     func createsMeeting() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-meeting-tests")
         defer { cleanUp(root) }
 
         let day = try #require(CalendarDay("2026-08-13"))
@@ -37,7 +21,7 @@ struct VaultStoreMeetingTests {
 
     @Test("A person's meeting history is derived from every meeting that lists them")
     func meetingHistoryIsDerived() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-meeting-tests")
         defer { cleanUp(root) }
 
         let marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
@@ -60,7 +44,7 @@ struct VaultStoreMeetingTests {
 
     @Test("Meetings are found by organization and by project")
     func meetingsByOrganizationAndProject() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-meeting-tests")
         defer { cleanUp(root) }
 
         let acme = try #require(store.createOrganization(name: "Acme Corp"))
@@ -75,7 +59,7 @@ struct VaultStoreMeetingTests {
 
     @Test("Deleting a person removes them from every meeting's attendees, without deleting it")
     func deletingPersonScrubsAttendees() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-meeting-tests")
         defer { cleanUp(root) }
 
         let marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
@@ -92,7 +76,7 @@ struct VaultStoreMeetingTests {
 
     @Test("Deleting an organization clears a meeting's organization link, not the meeting")
     func deletingOrganizationClearsLink() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-meeting-tests")
         defer { cleanUp(root) }
 
         let acme = try #require(store.createOrganization(name: "Acme Corp"))
@@ -107,7 +91,7 @@ struct VaultStoreMeetingTests {
 
     @Test("Deleting a project clears a meeting's project link, not the meeting")
     func deletingProjectClearsLink() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-meeting-tests")
         defer { cleanUp(root) }
 
         let maillage = try #require(store.createProject(name: "Maillage"))
@@ -122,7 +106,7 @@ struct VaultStoreMeetingTests {
 
     @Test("Renaming a person rewrites them in every meeting's attendees")
     func renamingPersonRewritesAttendees() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-meeting-tests")
         defer { cleanUp(root) }
 
         let marie = try #require(store.createPerson(firstname: "Marie", lastname: "Dupont"))
@@ -137,7 +121,7 @@ struct VaultStoreMeetingTests {
 
     @Test("Renaming an organization or project rewrites a meeting's links")
     func renamingOrganizationAndProjectRewritesLinks() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-meeting-tests")
         defer { cleanUp(root) }
 
         let acme = try #require(store.createOrganization(name: "Acme Corp"))
@@ -158,7 +142,7 @@ struct VaultStoreMeetingTests {
 
     @Test("Renaming a meeting moves its file and keeps its content")
     func renamingMeetingMovesFile() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-meeting-tests")
         defer { cleanUp(root) }
 
         let meeting = try #require(store.createMeeting(title: "Sync"))
@@ -181,7 +165,7 @@ struct VaultStoreMeetingTests {
 
     @Test("Meetings appear in allEntities and are found by id")
     func meetingsAreGenericEntities() throws {
-        let (store, root) = try makeStore()
+        let (store, root) = try makeStore(prefix: "maillage-meeting-tests")
         defer { cleanUp(root) }
 
         let meeting = try #require(store.createMeeting(title: "Sync"))
