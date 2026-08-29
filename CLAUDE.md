@@ -136,9 +136,18 @@ header at all. So under the default, `feat!: …` is not a major release, and no
 either: it is **no release**, silently, on a merge that looked correct all the way through.
 `commitlint`'s `config-conventional` accepts `!` happily, so the two tools disagree without a
 word between them, and the gate that would have caught it is the one job that cannot run on the
-commit that matters. This bit exactly once, on the v1.0.0 PR. Keep
-`conventional-changelog-conventionalcommits` a direct devDependency for the same reason: it was
-present only as a hoisted transitive dependency, which npm is free to move.
+commit that matters.
+
+**And `conventional-changelog-conventionalcommits` must stay pinned on the `8.x` line**, as a
+direct devDependency rather than a hoisted transitive one. `release-notes-generator@14` is built
+on the v8 writer; hand it a v9 or v10 preset and the _analyzer_ still computes the right bump
+while the _writer_ silently emits nothing. That is how v1.0.0 shipped with a version heading and
+an empty body under it.
+
+Both of these failed quietly, one after the other, on the same release. `release.test.ts` runs
+the real `.releaserc.json` through both plugins and asserts what each title form produces —
+including that anything which releases at all also gets notes written under it. It fails on both
+of the bugs above. Do not delete it to make a dependency bump go green.
 
 Preview any of this before merging with `npm run release:dry`.
 
