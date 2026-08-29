@@ -115,14 +115,8 @@ public struct RootView: View {
                 OrganizationEditor(existing: org) { selection = $0 }
             case .project(let project):
                 ProjectEditor(existing: project) { selection = $0 }
-            case .meeting:
-                // No `MeetingEditor` yet, matching `.newMeeting` above — attendees are set
-                // while recording, and nothing else on a meeting is edited in-app so far.
-                DismissibleMessage(
-                    title: "Meetings aren't edited here",
-                    message:
-                        "Set attendees while recording. Everything else can be edited by hand "
-                        + "in the vault file for now.")
+            case .meeting(let meeting):
+                MeetingEditor(existing: meeting) { selection = $0 }
             case nil:
                 missingEntitySheet
             }
